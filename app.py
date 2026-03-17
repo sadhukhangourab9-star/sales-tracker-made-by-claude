@@ -194,7 +194,9 @@ def get_variants():
     if not model_id: return jsonify([])
     
     v_ws = SHEET.worksheet('variants')
-    variants = [r['variant_name'] for r in v_ws.get_all_records() if r['model_id'] == model_id]
+    # RETURN AS OBJECTS WITH COSTING, NOT JUST STRINGS
+    variants = [{'variant_name': r['variant_name'], 'costing': r.get('costing', '')} 
+                for r in v_ws.get_all_records() if r['model_id'] == model_id]
     return jsonify(variants)
 
 @app.route('/api/variants/by-model/<int:model_id>', methods=['GET'])
@@ -209,7 +211,8 @@ def add_variant():
     data = request.json
     ws = SHEET.worksheet('variants')
     new_id = get_next_id(ws)
-    ws.append_row([new_id, data.get('model_id'), data.get('variant_name', '')])
+    # ADD COSTING TO THE ROW DATA
+    ws.append_row([new_id, data.get('model_id'), data.get('variant_name', ''), data.get('costing', '')])
     return jsonify({'success': True})
 
 @app.route('/api/variants/<int:variant_id>', methods=['DELETE'])
