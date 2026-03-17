@@ -78,6 +78,10 @@ def get_cards():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('cards')
     cards = ws.get_all_records()
+    for c in cards:
+        # Hide apostrophe from the frontend display
+        if str(c.get('last_digits', '')).startswith("'"):
+            c['last_digits'] = str(c['last_digits'])[1:]
     return jsonify(list(reversed(cards)))
 
 @app.route('/api/cards', methods=['POST'])
@@ -105,10 +109,17 @@ def delete_card(card_id):
 @app.route('/api/card-lookup')
 def card_lookup():
     digits = request.args.get('digits', '').strip()
+    # Ignore apostrophe if user accidentally typed it
+    if digits.startswith("'"): digits = digits[1:]
+    
     if not SHEET: return jsonify({'found': False})
     ws = SHEET.worksheet('cards')
     for row in ws.get_all_records():
-        if str(row.get('last_digits')) == digits:
+        db_digits = str(row.get('last_digits', ''))
+        # Ignore apostrophe in the database when searching
+        if db_digits.startswith("'"): db_digits = db_digits[1:]
+        
+        if db_digits == digits:
             return jsonify({'card_type': row.get('card_type'), 'found': True})
     return jsonify({'found': False})
 
@@ -237,6 +248,13 @@ def get_main_orders():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('main_orders')
     orders = ws.get_all_records()
+    for o in orders:
+        # Hide apostrophe from card digits
+        if str(o.get('last_digits', '')).startswith("'"):
+            o['last_digits'] = str(o['last_digits'])[1:]
+        # Hide apostrophe from account numbers
+        if str(o.get('account', '')).startswith("'"):
+            o['account'] = str(o['account'])[1:]
     return jsonify(list(reversed(orders)))
 
 @app.route('/api/main-orders', methods=['POST'])
@@ -359,7 +377,12 @@ def export_main_orders():
 def get_secondary_orders():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('secondary_orders')
-    return jsonify(list(reversed(ws.get_all_records())))
+    orders = ws.get_all_records()
+    for o in orders:
+        # Hide apostrophe from card digits
+        if str(o.get('last_digits', '')).startswith("'"):
+            o['last_digits'] = str(o['last_digits'])[1:]
+    return jsonify(list(reversed(orders)))
 
 @app.route('/api/secondary-orders', methods=['POST'])
 def add_secondary_order():
