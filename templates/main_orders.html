@@ -1,0 +1,478 @@
+{% extends 'base.html' %}
+{% set active = 'main' %}
+{% block title %}Main Orders — OrderTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Main Orders</div>
+    <div class="page-subtitle">Track all online platform orders with card & delivery details</div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <div class="stat-pill"><strong id="totalCount">0</strong> Orders</div>
+    <div class="stat-pill">Total: <strong id="totalCost">₹0</strong></div>
+  </div>
+</div>
+
+<!-- ADD FORM TOGGLE -->
+<button class="toggle-form-btn" onclick="toggleForm()">
+  <i class="bi bi-plus-circle"></i> <span id="formToggleText">Add New Order</span>
+</button>
+
+<!-- ADD FORM -->
+<div class="card-panel" id="addFormPanel" style="display:none;">
+  <div class="card-panel-title"><i class="bi bi-plus-lg"></i> New Main Order</div>
+  <div class="row g-3">
+    <div class="col-md-2">
+      <label class="form-label">Last Digits *</label>
+      <input type="text" id="f_digits" class="form-control" placeholder="e.g. 4521" maxlength="5"
+             oninput="onDigitsInput(this.value)"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Card Type</label>
+      <input type="text" id="f_card_type" class="form-control" readonly placeholder="Auto-filled"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Platform *</label>
+      <select id="f_platform" class="form-select" onchange="onPlatformChange(this.value,'f_account')">
+        <option value="">Select Platform</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Account</label>
+      <select id="f_account" class="form-select">
+        <option value="">Select Account</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Order Name *</label>
+      <input type="text" id="f_order_name" class="form-control" placeholder="Order #"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Model *</label>
+      <input type="text" id="f_model" class="form-control" placeholder="e.g. iPhone 15" list="modelList"
+             oninput="onModelInput(this.value,'f_variant')"/>
+      <datalist id="modelList"></datalist>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Variant</label>
+      <select id="f_variant" class="form-select">
+        <option value="">Select Variant</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Costing (₹)</label>
+      <input type="number" id="f_costing" class="form-control" placeholder="Amount" step="0.01"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Delivery Date</label>
+      <input type="date" id="f_delivery_date" class="form-control"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Date & Time</label>
+      <input type="text" id="f_created_at" class="form-control" readonly/>
+    </div>
+    <div class="col-12 d-flex gap-2 mt-2">
+      <button class="btn-primary-custom" onclick="submitOrder()">
+        <i class="bi bi-check-lg"></i> Save Order
+      </button>
+      <button class="btn-outline-custom" onclick="clearForm()">
+        <i class="bi bi-x-lg"></i> Clear
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <div class="search-wrap">
+    <i class="bi bi-search"></i>
+    <input type="text" class="search-input" id="searchInput" placeholder="Search orders…" oninput="filterTable()"/>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">
+      <i class="bi bi-trash3"></i> Delete Selected (<span id="selCount">0</span>)
+    </button>
+    <button class="btn-outline-custom" onclick="exportOrders('csv')">
+      <i class="bi bi-filetype-csv"></i> CSV
+    </button>
+    <button class="btn-outline-custom" onclick="exportOrders('excel')">
+      <i class="bi bi-file-earmark-excel"></i> Excel
+    </button>
+  </div>
+</div>
+
+<!-- TABLE -->
+<div class="card-panel" style="padding:0;overflow:hidden;">
+  <div class="data-table-wrap">
+    <table class="data-table" id="mainTable">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"/></th>
+          <th>#</th>
+          <th>Card Type</th>
+          <th>Last Digits</th>
+          <th>Platform</th>
+          <th>Account</th>
+          <th>Order Name</th>
+          <th>Model</th>
+          <th>Variant</th>
+          <th>Costing</th>
+          <th>Delivery Date</th>
+          <th>Created At</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="mainTableBody">
+        <tr><td colspan="13"><div class="empty-state"><i class="bi bi-inbox"></i><p>No orders yet. Add your first order above.</p></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Order</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="e_id"/>
+        <div class="row g-3">
+          <div class="col-md-2">
+            <label class="form-label">Last Digits</label>
+            <input type="text" id="e_digits" class="form-control" maxlength="5"
+                   oninput="onDigitsInput(this.value,'e_card_type')"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Card Type</label>
+            <input type="text" id="e_card_type" class="form-control" readonly/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Platform</label>
+            <select id="e_platform" class="form-select" onchange="onPlatformChange(this.value,'e_account')">
+              <option value="">Select</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Account</label>
+            <select id="e_account" class="form-select"><option value="">Select</option></select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Order Name</label>
+            <input type="text" id="e_order_name" class="form-control"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Model</label>
+            <input type="text" id="e_model" class="form-control" list="eModelList"
+                   oninput="onModelInput(this.value,'e_variant')"/>
+            <datalist id="eModelList"></datalist>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Variant</label>
+            <select id="e_variant" class="form-select"><option value="">Select</option></select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Costing (₹)</label>
+            <input type="number" id="e_costing" class="form-control" step="0.01"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Delivery Date</label>
+            <input type="date" id="e_delivery_date" class="form-control"/>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-primary-custom" onclick="saveEdit()"><i class="bi bi-check-lg"></i> Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allOrders = [];
+let modelTimer = null;
+const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  // Set today's date & current time
+  const now = new Date();
+  document.getElementById('f_delivery_date').value = now.toISOString().split('T')[0];
+  document.getElementById('f_created_at').value = now.toLocaleString('en-IN');
+
+  // Load platforms into dropdowns
+  const platforms = await api('/api/platform-names');
+  ['f_platform','e_platform'].forEach(id => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '<option value="">Select Platform</option>';
+    platforms.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = p;
+      sel.appendChild(opt);
+    });
+  });
+
+  // Load models into datalists
+  const models = await api('/api/models');
+  ['modelList','eModelList'].forEach(id => {
+    const dl = document.getElementById(id);
+    dl.innerHTML = '';
+    models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.model_name;
+      dl.appendChild(opt);
+    });
+  });
+
+  // Load orders
+  await loadOrders();
+}
+
+async function loadOrders() {
+  allOrders = await api('/api/main-orders');
+  renderTable(allOrders);
+  updateStats();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderTable(orders) {
+  const body = document.getElementById('mainTableBody');
+  if (!orders.length) {
+    body.innerHTML = '<tr><td colspan="13"><div class="empty-state"><i class="bi bi-inbox"></i><p>No orders found.</p></div></td></tr>';
+    return;
+  }
+  body.innerHTML = orders.map(o => `
+    <tr data-id="${o.id}" class="">
+      <td><input type="checkbox" class="row-check" value="${o.id}" onchange="onCheckChange()"/></td>
+      <td style="color:var(--muted);font-size:12px;">${o.id}</td>
+      <td>${cardBadge(o.card_type)}</td>
+      <td><code style="color:var(--accent2);font-size:12px;">•••• ${o.last_digits||'—'}</code></td>
+      <td>${o.platform||'—'}</td>
+      <td style="color:var(--muted)">${o.account||'—'}</td>
+      <td style="font-weight:500">${o.order_name||'—'}</td>
+      <td>${o.model||'—'}</td>
+      <td style="color:var(--muted)">${o.variant||'—'}</td>
+      <td style="color:var(--green);font-weight:600">${formatCost(o.costing)}</td>
+      <td style="color:var(--muted)">${o.delivery_date||'—'}</td>
+      <td style="color:var(--muted);font-size:12px;">${o.created_at||'—'}</td>
+      <td>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})">
+            <i class="bi bi-pencil"></i>
+          </button>
+          <button class="btn-danger-custom" style="padding:4px 9px;" onclick="deleteOrder(${o.id})">
+            <i class="bi bi-trash3"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function updateStats() {
+  document.getElementById('totalCount').textContent = allOrders.length;
+  const total = allOrders.reduce((s, o) => s + (parseFloat(o.costing)||0), 0);
+  document.getElementById('totalCost').textContent = '₹' + total.toLocaleString('en-IN');
+}
+
+// ── Form ──────────────────────────────────────────────────────────────────────
+function toggleForm() {
+  const panel = document.getElementById('addFormPanel');
+  const btn = document.getElementById('formToggleText');
+  const visible = panel.style.display !== 'none';
+  panel.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? 'Add New Order' : 'Hide Form';
+}
+
+function clearForm() {
+  ['f_digits','f_card_type','f_order_name','f_model','f_costing'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f_platform').value = '';
+  document.getElementById('f_account').innerHTML = '<option value="">Select Account</option>';
+  document.getElementById('f_variant').innerHTML = '<option value="">Select Variant</option>';
+  document.getElementById('f_delivery_date').value = new Date().toISOString().split('T')[0];
+}
+
+let digitTimer = null;
+function onDigitsInput(val, targetId='f_card_type') {
+  clearTimeout(digitTimer);
+  if (val.length >= 4) {
+    digitTimer = setTimeout(() => lookupCard(val, document.getElementById(targetId)), 500);
+  } else {
+    document.getElementById(targetId).value = '';
+  }
+}
+
+async function onPlatformChange(platform, accountId) {
+  if (!platform) return;
+  await lookupPlatformAccounts(platform, document.getElementById(accountId));
+}
+
+function onModelInput(val, variantId) {
+  clearTimeout(modelTimer);
+  if (val.trim()) {
+    modelTimer = setTimeout(() => lookupVariants(val.trim(), document.getElementById(variantId)), 600);
+  }
+}
+
+async function submitOrder() {
+  const payload = {
+    last_digits: document.getElementById('f_digits').value.trim(),
+    card_type:   document.getElementById('f_card_type').value.trim(),
+    platform:    document.getElementById('f_platform').value,
+    account:     document.getElementById('f_account').value,
+    order_name:  document.getElementById('f_order_name').value.trim(),
+    model:       document.getElementById('f_model').value.trim(),
+    variant:     document.getElementById('f_variant').value,
+    costing:     document.getElementById('f_costing').value || null,
+    delivery_date: document.getElementById('f_delivery_date').value,
+  };
+  if (!payload.last_digits || !payload.platform || !payload.order_name || !payload.model) {
+    showToast('Please fill required fields: Last Digits, Platform, Order Name, Model', 'error');
+    return;
+  }
+  const res = await api('/api/main-orders', 'POST', payload);
+  if (res.error) { showToast(res.error, 'error'); return; }
+  allOrders.unshift(res);
+  renderTable(allOrders);
+  updateStats();
+  clearForm();
+  showToast('Order saved successfully!');
+}
+
+// ── Edit ──────────────────────────────────────────────────────────────────────
+async function openEdit(id) {
+  const o = allOrders.find(x => x.id === id);
+  if (!o) return;
+  document.getElementById('e_id').value = o.id;
+  document.getElementById('e_digits').value = o.last_digits || '';
+  document.getElementById('e_card_type').value = o.card_type || '';
+  document.getElementById('e_order_name').value = o.order_name || '';
+  document.getElementById('e_model').value = o.model || '';
+  document.getElementById('e_costing').value = o.costing || '';
+  document.getElementById('e_delivery_date').value = o.delivery_date || '';
+
+  // Load platforms
+  const platforms = await api('/api/platform-names');
+  const ePlat = document.getElementById('e_platform');
+  ePlat.innerHTML = '<option value="">Select Platform</option>';
+  platforms.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = p;
+    if (p === o.platform) opt.selected = true;
+    ePlat.appendChild(opt);
+  });
+
+  // Load accounts
+  if (o.platform) {
+    const accounts = await api(`/api/platform-lookup?platform=${encodeURIComponent(o.platform)}`);
+    const eAcc = document.getElementById('e_account');
+    eAcc.innerHTML = '<option value="">Select Account</option>';
+    accounts.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = a;
+      if (a === o.account) opt.selected = true;
+      eAcc.appendChild(opt);
+    });
+  }
+
+  // Load variants
+  if (o.model) {
+    const variants = await api(`/api/variants?model=${encodeURIComponent(o.model)}`);
+    const eVar = document.getElementById('e_variant');
+    eVar.innerHTML = '<option value="">Select Variant</option>';
+    variants.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = v;
+      if (v === o.variant) opt.selected = true;
+      eVar.appendChild(opt);
+    });
+  }
+
+  editModal.show();
+}
+
+async function saveEdit() {
+  const id = document.getElementById('e_id').value;
+  const payload = {
+    last_digits:   document.getElementById('e_digits').value.trim(),
+    card_type:     document.getElementById('e_card_type').value.trim(),
+    platform:      document.getElementById('e_platform').value,
+    account:       document.getElementById('e_account').value,
+    order_name:    document.getElementById('e_order_name').value.trim(),
+    model:         document.getElementById('e_model').value.trim(),
+    variant:       document.getElementById('e_variant').value,
+    costing:       document.getElementById('e_costing').value || null,
+    delivery_date: document.getElementById('e_delivery_date').value,
+  };
+  const res = await api(`/api/main-orders/${id}`, 'PUT', payload);
+  if (res.error) { showToast(res.error, 'error'); return; }
+  const idx = allOrders.findIndex(x => x.id === res.id);
+  if (idx !== -1) allOrders[idx] = res;
+  renderTable(allOrders);
+  updateStats();
+  editModal.hide();
+  showToast('Order updated!');
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+async function deleteOrder(id) {
+  if (!confirm('Delete this order?')) return;
+  const res = await api(`/api/main-orders/${id}`, 'DELETE');
+  if (res.success) {
+    allOrders = allOrders.filter(o => o.id !== id);
+    renderTable(allOrders);
+    updateStats();
+    showToast('Order deleted.');
+  }
+}
+
+function onCheckChange() {
+  const checks = document.querySelectorAll('.row-check:checked');
+  const btn = document.getElementById('bulkDeleteBtn');
+  document.getElementById('selCount').textContent = checks.length;
+  btn.style.display = checks.length ? 'inline-flex' : 'none';
+}
+
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.row-check').forEach(c => { c.checked = cb.checked; });
+  onCheckChange();
+}
+
+async function bulkDelete() {
+  const ids = [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} selected orders?`)) return;
+  const res = await api('/api/main-orders/bulk-delete', 'POST', {ids});
+  if (res.success) {
+    allOrders = allOrders.filter(o => !ids.includes(o.id));
+    renderTable(allOrders);
+    updateStats();
+    document.getElementById('selectAll').checked = false;
+    document.getElementById('bulkDeleteBtn').style.display = 'none';
+    showToast(`${res.deleted} orders deleted.`);
+  }
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+function filterTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const filtered = allOrders.filter(o =>
+    Object.values(o).some(v => String(v||'').toLowerCase().includes(q))
+  );
+  renderTable(filtered);
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+function exportOrders(fmt) {
+  window.location.href = `/api/main-orders/export?format=${fmt}`;
+}
+
+init();
+</script>
+{% endblock %}

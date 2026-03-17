@@ -1,0 +1,320 @@
+{% extends 'base.html' %}
+{% set active = 'settings' %}
+{% block title %}Settings — OrderTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Settings</div>
+    <div class="page-subtitle">Manage your cards, platforms and mobile models/variants</div>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  <!-- ── CARDS ─────────────────────────────────────────────────────────── -->
+  <div class="col-lg-4">
+    <div class="card-panel" style="height:100%;">
+      <div class="card-panel-title"><i class="bi bi-credit-card-2-front"></i> Cards</div>
+
+      <!-- Add card form -->
+      <div class="row g-2 mb-3">
+        <div class="col-7">
+          <label class="form-label">Last 4–5 Digits</label>
+          <input type="text" id="card_digits" class="form-control" placeholder="e.g. 4521" maxlength="5"/>
+        </div>
+        <div class="col-5">
+          <label class="form-label">Card Type</label>
+          <select id="card_type" class="form-select">
+            <option value="">Select</option>
+            <option>Visa</option>
+            <option>Mastercard</option>
+            <option>Amex</option>
+            <option>Rupay</option>
+            <option>Discover</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="col-12 mt-1">
+          <button class="btn-primary-custom w-100" onclick="addCard()">
+            <i class="bi bi-plus-lg"></i> Add Card
+          </button>
+        </div>
+      </div>
+
+      <!-- Cards list -->
+      <div id="cardsList" style="max-height:380px;overflow-y:auto;">
+        <div class="empty-state" style="padding:30px 10px;"><i class="bi bi-credit-card"></i><p>No cards added</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PLATFORMS ──────────────────────────────────────────────────────── -->
+  <div class="col-lg-4">
+    <div class="card-panel" style="height:100%;">
+      <div class="card-panel-title"><i class="bi bi-shop"></i> Platforms & Accounts</div>
+
+      <!-- Add platform form -->
+      <div class="row g-2 mb-3">
+        <div class="col-6">
+          <label class="form-label">Platform Name</label>
+          <input type="text" id="plat_name" class="form-control" placeholder="e.g. Amazon"/>
+        </div>
+        <div class="col-6">
+          <label class="form-label">Account Name</label>
+          <input type="text" id="plat_account" class="form-control" placeholder="e.g. seller@email.com"/>
+        </div>
+        <div class="col-12 mt-1">
+          <button class="btn-primary-custom w-100" onclick="addPlatform()">
+            <i class="bi bi-plus-lg"></i> Add Platform
+          </button>
+        </div>
+      </div>
+
+      <!-- Platforms list -->
+      <div id="platformsList" style="max-height:380px;overflow-y:auto;">
+        <div class="empty-state" style="padding:30px 10px;"><i class="bi bi-shop"></i><p>No platforms added</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODELS & VARIANTS ──────────────────────────────────────────────── -->
+  <div class="col-lg-4">
+    <div class="card-panel" style="height:100%;">
+      <div class="card-panel-title"><i class="bi bi-phone"></i> Models & Variants</div>
+
+      <!-- Add model form -->
+      <div class="row g-2 mb-2">
+        <div class="col-12">
+          <label class="form-label">Model Name</label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="model_name" class="form-control" placeholder="e.g. iPhone 15 Pro"/>
+            <button class="btn-primary-custom" style="white-space:nowrap;" onclick="addModel()">
+              <i class="bi bi-plus-lg"></i> Add
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add variant form -->
+      <div class="row g-2 mb-3">
+        <div class="col-7">
+          <label class="form-label">Add Variant to Model</label>
+          <select id="variant_model_id" class="form-select">
+            <option value="">Select Model</option>
+          </select>
+        </div>
+        <div class="col-5">
+          <label class="form-label">Variant Name</label>
+          <div style="display:flex;gap:6px;align-items:flex-end;">
+            <input type="text" id="variant_name" class="form-control" placeholder="e.g. 256GB Black"/>
+          </div>
+        </div>
+        <div class="col-12 mt-1">
+          <button class="btn-success-custom w-100" onclick="addVariant()">
+            <i class="bi bi-plus-circle"></i> Add Variant
+          </button>
+        </div>
+      </div>
+
+      <!-- Models & variants list -->
+      <div id="modelsList" style="max-height:320px;overflow-y:auto;">
+        <div class="empty-state" style="padding:30px 10px;"><i class="bi bi-phone"></i><p>No models added</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allModels = [];
+
+async function init() {
+  await loadCards();
+  await loadPlatforms();
+  await loadModels();
+}
+
+// ── CARDS ─────────────────────────────────────────────────────────────────────
+async function loadCards() {
+  const cards = await api('/api/cards');
+  const list = document.getElementById('cardsList');
+  if (!cards.length) {
+    list.innerHTML = '<div class="empty-state" style="padding:30px 10px;"><i class="bi bi-credit-card"></i><p>No cards added</p></div>';
+    return;
+  }
+  list.innerHTML = cards.map(c => `
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                padding:10px 12px;background:var(--navy3);border-radius:8px;margin-bottom:8px;">
+      <div>
+        ${cardBadge(c.card_type)}
+        <code style="color:var(--accent2);font-size:13px;margin-left:8px;">•••• ${c.last_digits}</code>
+      </div>
+      <button class="btn-danger-custom" style="padding:3px 8px;font-size:11px;" onclick="deleteCard(${c.id})">
+        <i class="bi bi-trash3"></i>
+      </button>
+    </div>
+  `).join('');
+}
+
+async function addCard() {
+  const digits = document.getElementById('card_digits').value.trim();
+  const type   = document.getElementById('card_type').value;
+  if (!digits || !type) { showToast('Fill both fields', 'error'); return; }
+  const res = await api('/api/cards', 'POST', {card_type: type, last_digits: digits});
+  if (res.error) { showToast(res.error, 'error'); return; }
+  document.getElementById('card_digits').value = '';
+  document.getElementById('card_type').value = '';
+  showToast('Card added!');
+  loadCards();
+}
+
+async function deleteCard(id) {
+  if (!confirm('Remove this card?')) return;
+  await api(`/api/cards/${id}`, 'DELETE');
+  showToast('Card removed.');
+  loadCards();
+}
+
+// ── PLATFORMS ─────────────────────────────────────────────────────────────────
+async function loadPlatforms() {
+  const plats = await api('/api/platforms');
+  const list = document.getElementById('platformsList');
+  if (!plats.length) {
+    list.innerHTML = '<div class="empty-state" style="padding:30px 10px;"><i class="bi bi-shop"></i><p>No platforms added</p></div>';
+    return;
+  }
+  // Group by platform name
+  const grouped = {};
+  plats.forEach(p => {
+    if (!grouped[p.platform_name]) grouped[p.platform_name] = [];
+    grouped[p.platform_name].push(p);
+  });
+
+  list.innerHTML = Object.entries(grouped).map(([name, entries]) => `
+    <div style="background:var(--navy3);border-radius:8px;margin-bottom:10px;overflow:hidden;">
+      <div style="padding:10px 12px;border-bottom:1px solid var(--border);
+                  font-size:13px;font-weight:600;color:var(--accent2);">
+        <i class="bi bi-shop"></i> ${name}
+      </div>
+      ${entries.map(e => `
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="font-size:13px;color:var(--muted);">${e.account_name}</span>
+          <button class="btn-danger-custom" style="padding:2px 7px;font-size:11px;" onclick="deletePlatform(${e.id})">
+            <i class="bi bi-trash3"></i>
+          </button>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+async function addPlatform() {
+  const name    = document.getElementById('plat_name').value.trim();
+  const account = document.getElementById('plat_account').value.trim();
+  if (!name || !account) { showToast('Fill both fields', 'error'); return; }
+  const res = await api('/api/platforms', 'POST', {platform_name: name, account_name: account});
+  if (res.error) { showToast(res.error, 'error'); return; }
+  document.getElementById('plat_name').value = '';
+  document.getElementById('plat_account').value = '';
+  showToast('Platform added!');
+  loadPlatforms();
+}
+
+async function deletePlatform(id) {
+  if (!confirm('Remove this platform/account?')) return;
+  await api(`/api/platforms/${id}`, 'DELETE');
+  showToast('Removed.');
+  loadPlatforms();
+}
+
+// ── MODELS & VARIANTS ─────────────────────────────────────────────────────────
+async function loadModels() {
+  allModels = await api('/api/models');
+  renderModels();
+  // Populate variant model selector
+  const sel = document.getElementById('variant_model_id');
+  sel.innerHTML = '<option value="">Select Model</option>';
+  allModels.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.model_name;
+    sel.appendChild(opt);
+  });
+}
+
+async function renderModels() {
+  const list = document.getElementById('modelsList');
+  if (!allModels.length) {
+    list.innerHTML = '<div class="empty-state" style="padding:30px 10px;"><i class="bi bi-phone"></i><p>No models added</p></div>';
+    return;
+  }
+  // Load variants for each model
+  const items = await Promise.all(allModels.map(async m => {
+    const variants = await api(`/api/variants/by-model/${m.id}`);
+    return {model: m, variants};
+  }));
+  list.innerHTML = items.map(({model, variants}) => `
+    <div style="background:var(--navy3);border-radius:8px;margin-bottom:10px;overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  padding:10px 12px;border-bottom:1px solid var(--border);">
+        <span style="font-size:13px;font-weight:600;color:var(--text);">
+          <i class="bi bi-phone" style="color:var(--accent2);margin-right:6px;"></i>${model.model_name}
+        </span>
+        <button class="btn-danger-custom" style="padding:2px 7px;font-size:11px;" onclick="deleteModel(${model.id})">
+          <i class="bi bi-trash3"></i> Model
+        </button>
+      </div>
+      ${variants.length ? variants.map(v => `
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding:7px 12px 7px 28px;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="font-size:12px;color:var(--muted);">↳ ${v.variant_name}</span>
+          <button class="btn-outline-custom" style="padding:2px 6px;font-size:10px;" onclick="deleteVariant(${v.id})">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+      `).join('') : `<div style="padding:8px 28px;font-size:12px;color:var(--muted);">No variants yet</div>`}
+    </div>
+  `).join('');
+}
+
+async function addModel() {
+  const name = document.getElementById('model_name').value.trim();
+  if (!name) { showToast('Enter model name', 'error'); return; }
+  const res = await api('/api/models', 'POST', {model_name: name});
+  if (res.error) { showToast(res.error, 'error'); return; }
+  document.getElementById('model_name').value = '';
+  showToast('Model added!');
+  await loadModels();
+}
+
+async function addVariant() {
+  const model_id = document.getElementById('variant_model_id').value;
+  const name     = document.getElementById('variant_name').value.trim();
+  if (!model_id || !name) { showToast('Select model and enter variant name', 'error'); return; }
+  const res = await api('/api/variants', 'POST', {model_id: parseInt(model_id), variant_name: name});
+  if (res.error) { showToast(res.error, 'error'); return; }
+  document.getElementById('variant_name').value = '';
+  showToast('Variant added!');
+  await renderModels();
+}
+
+async function deleteModel(id) {
+  if (!confirm('Delete this model and ALL its variants?')) return;
+  await api(`/api/models/${id}`, 'DELETE');
+  showToast('Model deleted.');
+  await loadModels();
+}
+
+async function deleteVariant(id) {
+  if (!confirm('Delete this variant?')) return;
+  await api(`/api/variants/${id}`, 'DELETE');
+  showToast('Variant deleted.');
+  await renderModels();
+}
+
+init();
+</script>
+{% endblock %}
