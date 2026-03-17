@@ -1,384 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>{% block title %}Order Tracker{% endblock %}</title>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}OrderTrack{% endblock %}</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
-    :root {
-      --navy:    #0f1c2e;
-      --navy2:   #1a2d45;
-      --navy3:   #243c5a;
-      --accent:  #3b9ddd;
-      --accent2: #5bb8f5;
-      --green:   #2ecc8f;
-      --amber:   #f5a623;
-      --red:     #e74c3c;
-      --text:    #e8edf3;
-      --muted:   #8fa3bc;
-      --border:  rgba(255,255,255,0.08);
-      --card-bg: rgba(26,45,69,0.7);
-      --input-bg:#0f1c2e;
-    }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--navy);
-      color: var(--text);
-      min-height: 100vh;
-      display: flex;
-    }
-    /* ── Sidebar ── */
-    .sidebar {
-      width: 240px;
-      min-height: 100vh;
-      background: var(--navy2);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      position: fixed;
-      top: 0; left: 0;
-      z-index: 100;
-    }
-    .sidebar-brand {
-      padding: 24px 20px 20px;
-      border-bottom: 1px solid var(--border);
-    }
-    .sidebar-brand .logo-icon {
-      width: 36px; height: 36px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px; margin-bottom: 10px;
-    }
-    .sidebar-brand h1 {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 15px; font-weight: 700;
-      color: var(--text); letter-spacing: 0.3px;
-    }
-    .sidebar-brand p {
-      font-size: 11px; color: var(--muted); margin-top: 2px;
-    }
-    .sidebar-nav { padding: 16px 12px; flex: 1; }
-    .nav-label {
-      font-size: 10px; font-weight: 600;
-      color: var(--muted); letter-spacing: 1px;
-      text-transform: uppercase;
-      padding: 0 8px; margin-bottom: 8px; margin-top: 16px;
-    }
-    .nav-link {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px; border-radius: 8px;
-      color: var(--muted); font-size: 14px; font-weight: 500;
-      text-decoration: none; transition: all 0.18s ease;
-      margin-bottom: 2px;
-    }
-    .nav-link i { font-size: 16px; }
-    .nav-link:hover  { background: var(--navy3); color: var(--text); }
-    .nav-link.active { background: linear-gradient(135deg, rgba(59,157,221,0.2), rgba(91,184,245,0.1));
-                       color: var(--accent2); border: 1px solid rgba(59,157,221,0.25); }
-    .sidebar-footer {
-      padding: 16px; border-top: 1px solid var(--border);
-      font-size: 11px; color: var(--muted); text-align: center;
-    }
-    /* ── Main ── */
-    .main-content {
-      margin-left: 240px;
-      flex: 1;
-      min-height: 100vh;
-      padding: 28px 32px;
-    }
-    /* ── Page header ── */
-    .page-header {
-      display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 24px;
-    }
-    .page-title {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 22px; font-weight: 700; color: var(--text);
-    }
-    .page-subtitle { font-size: 13px; color: var(--muted); margin-top: 2px; }
-    /* ── Card ── */
-    .card-panel {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 24px;
-      margin-bottom: 20px;
-      backdrop-filter: blur(10px);
-    }
-    .card-panel-title {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 14px; font-weight: 600;
-      color: var(--accent2); margin-bottom: 18px;
-      display: flex; align-items: center; gap: 8px;
-    }
-    /* ── Form controls ── */
-    .form-label { font-size: 12px; font-weight: 600; color: var(--muted);
-                  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-    .form-control, .form-select {
-      background: var(--input-bg) !important;
-      border: 1px solid var(--border) !important;
-      color: var(--text) !important;
-      border-radius: 8px; font-size: 14px;
-      padding: 9px 12px;
-      transition: border-color 0.18s;
-    }
-    .form-control:focus, .form-select:focus {
-      border-color: var(--accent) !important;
-      box-shadow: 0 0 0 3px rgba(59,157,221,0.12) !important;
-      outline: none;
-    }
-    .form-control::placeholder { color: #4d6680; }
-    .form-control[readonly] { color: var(--accent2) !important; cursor: default; }
-    option { background: var(--navy2); color: var(--text); }
-    /* ── Buttons ── */
-    .btn-primary-custom {
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      border: none; color: #fff;
-      padding: 9px 20px; border-radius: 8px;
-      font-size: 13px; font-weight: 600;
-      cursor: pointer; transition: opacity 0.18s, transform 0.1s;
-      display: inline-flex; align-items: center; gap: 6px;
-    }
-    .btn-primary-custom:hover { opacity: 0.88; transform: translateY(-1px); }
-    .btn-success-custom {
-      background: linear-gradient(135deg, var(--green), #25a97a);
-      border: none; color: #fff;
-      padding: 7px 14px; border-radius: 7px;
-      font-size: 12px; font-weight: 600; cursor: pointer;
-      transition: opacity 0.18s; display: inline-flex; align-items: center; gap: 5px;
-    }
-    .btn-danger-custom {
-      background: linear-gradient(135deg, var(--red), #c0392b);
-      border: none; color: #fff;
-      padding: 7px 14px; border-radius: 7px;
-      font-size: 12px; font-weight: 600; cursor: pointer;
-      transition: opacity 0.18s; display: inline-flex; align-items: center; gap: 5px;
-    }
-    .btn-outline-custom {
-      background: transparent; border: 1px solid var(--border);
-      color: var(--muted); padding: 7px 14px; border-radius: 7px;
-      font-size: 12px; font-weight: 600; cursor: pointer;
-      transition: all 0.18s; display: inline-flex; align-items: center; gap: 5px;
-    }
-    .btn-outline-custom:hover { border-color: var(--accent); color: var(--accent); }
-    .btn-success-custom:hover, .btn-danger-custom:hover { opacity: 0.85; }
-    /* ── Table ── */
-    .data-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
-    .data-table {
-      width: 100%; border-collapse: collapse; font-size: 13px;
-    }
-    .data-table thead th {
-      background: var(--navy3);
-      color: var(--muted); font-size: 11px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.6px;
-      padding: 12px 14px; border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-    .data-table tbody tr {
-      border-bottom: 1px solid var(--border);
-      transition: background 0.15s;
-    }
-    .data-table tbody tr:last-child { border-bottom: none; }
-    .data-table tbody tr:hover { background: rgba(59,157,221,0.04); }
-    .data-table tbody td {
-      padding: 11px 14px; color: var(--text); vertical-align: middle;
-      white-space: nowrap;
-    }
-    .data-table tbody tr.selected { background: rgba(59,157,221,0.08); }
-    /* ── Badges ── */
-    .badge-card {
-      display: inline-flex; align-items: center; gap: 4px;
-      padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600;
-    }
-    .badge-visa    { background: rgba(46,204,143,0.12); color: var(--green); border: 1px solid rgba(46,204,143,0.25); }
-    .badge-master  { background: rgba(245,166,35,0.12); color: var(--amber); border: 1px solid rgba(245,166,35,0.25); }
-    .badge-amex    { background: rgba(59,157,221,0.12); color: var(--accent2); border: 1px solid rgba(59,157,221,0.25); }
-    .badge-default { background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid var(--border); }
-    /* ── Toolbar ── */
-    .toolbar {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      margin-bottom: 16px;
-    }
-    .toolbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-    .search-input {
-      background: var(--input-bg); border: 1px solid var(--border);
-      color: var(--text); border-radius: 8px; padding: 7px 12px 7px 36px;
-      font-size: 13px; width: 220px;
-    }
-    .search-wrap { position: relative; }
-    .search-wrap i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-                     color: var(--muted); font-size: 14px; }
-    /* ── Toast ── */
-    .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; }
-    .toast-msg {
-      background: var(--navy3); border: 1px solid var(--border);
-      color: var(--text); padding: 12px 18px; border-radius: 10px;
-      font-size: 13px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-      margin-top: 8px; animation: slideIn 0.3s ease;
-      display: flex; align-items: center; gap: 8px;
-    }
-    .toast-msg.success { border-left: 3px solid var(--green); }
-    .toast-msg.error   { border-left: 3px solid var(--red); }
-    @keyframes slideIn { from { transform: translateX(60px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    /* ── Modal ── */
-    .modal-content {
-      background: var(--navy2) !important;
-      border: 1px solid var(--border) !important;
-      border-radius: 14px !important;
-      color: var(--text) !important;
-    }
-    .modal-header {
-      border-bottom: 1px solid var(--border) !important;
-      padding: 20px 24px !important;
-    }
-    .modal-footer { border-top: 1px solid var(--border) !important; padding: 16px 24px !important; }
-    .modal-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; }
-    .btn-close { filter: invert(1); }
-    /* ── Stats ── */
-    .stat-pill {
-      background: var(--navy3); border: 1px solid var(--border);
-      border-radius: 8px; padding: 8px 16px;
-      font-size: 12px; color: var(--muted);
-      display: inline-flex; align-items: center; gap: 6px;
-    }
-    .stat-pill strong { color: var(--text); font-size: 15px; }
-    /* ── Checkbox ── */
-    input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
-    /* ── Datalist ── */
-    datalist option { background: var(--navy2); color: var(--text); }
-    /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: var(--navy); }
-    ::-webkit-scrollbar-thumb { background: var(--navy3); border-radius: 3px; }
-    /* ── Toggle form ── */
-    .toggle-form-btn {
-      background: transparent; border: 1px dashed var(--border);
-      color: var(--muted); padding: 10px; border-radius: 10px;
-      width: 100%; text-align: center; cursor: pointer;
-      font-size: 13px; transition: all 0.18s; margin-bottom: 16px;
-    }
-    .toggle-form-btn:hover { border-color: var(--accent); color: var(--accent); }
-    /* ── Empty state ── */
-    .empty-state {
-      text-align: center; padding: 60px 20px; color: var(--muted);
-    }
-    .empty-state i { font-size: 42px; margin-bottom: 12px; display: block; opacity: 0.4; }
-    .empty-state p { font-size: 14px; }
-    /* ── Responsive ── */
-    @media (max-width: 768px) {
-      .sidebar { width: 100%; min-height: auto; position: relative; flex-direction: row; flex-wrap: wrap; }
-      .main-content { margin-left: 0; padding: 16px; }
-    }
+    :root { --navy: #0f1c2e; --navy2: #1a2d45; --accent2: #5bb8f5; --text: #e8edf3; --muted: #8fa3bc; }
+    body { background: var(--navy); color: var(--text); font-family: 'DM Sans', sans-serif; }
+    .card-panel { background: var(--navy2); border-radius: 12px; padding: 20px; border: 1px solid rgba(255,255,255,0.05); }
+    .list-item { background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); }
+    .btn-icon { background: none; border: none; color: var(--muted); cursor: pointer; transition: 0.2s; }
+    .btn-icon:hover { color: #fff; }
+    .badge-card { padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .bg-sbi { background: #003399; } .bg-hdfc { background: #ed232a; } .bg-icici { background: #f37021; }
   </style>
 </head>
 <body>
-
-<!-- SIDEBAR -->
-<nav class="sidebar">
-  <div class="sidebar-brand">
-    <div class="logo-icon">📦</div>
-    <h1>OrderTrack</h1>
-    <p>Mobile Sales Manager</p>
-  </div>
-  <div class="sidebar-nav">
-    <div class="nav-label">Orders</div>
-    <a href="/" class="nav-link {% if active=='main' %}active{% endif %}">
-      <i class="bi bi-journal-text"></i> Main Orders
-    </a>
-    <a href="/secondary" class="nav-link {% if active=='secondary' %}active{% endif %}">
-      <i class="bi bi-journals"></i> Secondary Orders
-    </a>
-    <div class="nav-label">Config</div>
-    <a href="/settings" class="nav-link {% if active=='settings' %}active{% endif %}">
-      <i class="bi bi-gear"></i> Settings
-    </a>
-  </div>
-  <div class="sidebar-footer">
-    <div>OrderTrack v1.0</div>
-  </div>
-</nav>
-
-<!-- MAIN -->
-<main class="main-content">
+<div class="container py-4">
+  <nav class="mb-4">
+    <a href="/" class="btn btn-sm {% if active == 'main' %}btn-primary{% else %}btn-outline-light{% endif %}">Main Orders</a>
+    <a href="/secondary" class="btn btn-sm {% if active == 'secondary' %}btn-primary{% else %}btn-outline-light{% endif %}">Secondary</a>
+    <a href="/settings" class="btn btn-sm {% if active == 'settings' %}btn-primary{% else %}btn-outline-light{% endif %}">Settings</a>
+  </nav>
   {% block content %}{% endblock %}
-</main>
+</div>
 
-<!-- TOAST CONTAINER -->
-<div class="toast-container" id="toastContainer"></div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
 <script>
-  // Global toast function
-  function showToast(msg, type='success') {
-    const c = document.getElementById('toastContainer');
-    const t = document.createElement('div');
-    t.className = `toast-msg ${type}`;
-    t.innerHTML = `<i class="bi bi-${type==='success'?'check-circle':'exclamation-circle'}"></i> ${msg}`;
-    c.appendChild(t);
-    setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(60px)'; t.style.transition='all 0.3s'; setTimeout(()=>t.remove(),300); }, 3000);
-  }
-
-  // Global API helper
   async function api(url, method='GET', body=null) {
-    const opts = { method, headers: {'Content-Type':'application/json'} };
+    const opts = { method, headers: {'Content-Type': 'application/json'} };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(url, opts);
     return res.json();
   }
-
-  // Card lookup helper
-  async function lookupCard(digits, targetInput) {
-    if (!digits || digits.length < 4) { targetInput.value = ''; return; }
-    const data = await api(`/api/card-lookup?digits=${encodeURIComponent(digits)}`);
-    targetInput.value = data.found ? data.card_type : '';
-    if (!data.found && digits.length >= 4) showToast('Card digits not found in settings', 'error');
+  function cardBadge(type) {
+    const t = (type || 'OTHER').toUpperCase();
+    let cls = 'bg-secondary';
+    if (['SBI','HDFC','ICICI','AXIS'].includes(t)) cls = 'bg-primary';
+    if (t === 'ONECARD') cls = 'bg-dark';
+    return `<span class="badge-card ${cls}">${t}</span>`;
   }
-
-  // Platform lookup helper
-  async function lookupPlatformAccounts(platform, accountSelect) {
-    const accounts = await api(`/api/platform-lookup?platform=${encodeURIComponent(platform)}`);
-    accountSelect.innerHTML = '<option value="">Select Account</option>';
-    accounts.forEach(a => {
-      const opt = document.createElement('option');
-      opt.value = opt.textContent = a;
-      accountSelect.appendChild(opt);
-    });
-  }
-
-  // Variant lookup helper
-  async function lookupVariants(modelName, variantSelect) {
-    variantSelect.innerHTML = '<option value="">Loading...</option>';
-    const variants = await api(`/api/variants?model=${encodeURIComponent(modelName)}`);
-    variantSelect.innerHTML = '<option value="">Select Variant</option>';
-    variants.forEach(v => {
-      const opt = document.createElement('option');
-      opt.value = opt.textContent = v;
-      variantSelect.appendChild(opt);
-    });
-  }
-
-  // Format currency
-  function formatCost(v) { return v != null ? '₹' + parseFloat(v).toLocaleString('en-IN') : '—'; }
-
-  // Card badge
-function cardBadge(type) {
-  if (!type) return '<span class="badge-card badge-default">—</span>';
-  const val = type.toUpperCase();
-  let cls = 'badge-default';
-  
-  // Specific styling for banks
-  if (['SBI', 'HDFC', 'ICICI', 'IDFC'].includes(val)) cls = 'badge-visa';
-  else if (['AXIS', 'KOTAK', 'RBL', 'YES'].includes(val)) cls = 'badge-master';
-  else if (['ONECARD', 'FEDERAL', 'BOB', 'INDUSIND'].includes(val)) cls = 'badge-amex';
-  
-  return `<span class="badge-card ${cls}">${val}</span>`;
-}
+  function formatCost(v) { return '₹' + parseFloat(v || 0).toLocaleString('en-IN'); }
+  function showToast(m) { alert(m); } // Simple alert for reliability
 </script>
-{% block scripts %}{% endblock %}
 </body>
 </html>
