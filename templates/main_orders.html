@@ -54,9 +54,9 @@
              oninput="onModelInput(this.value,'f_variant')"/>
       <datalist id="modelList"></datalist>
     </div>
-    <div class="col-md-2">
+  <div class="col-md-2">
       <label class="form-label">8. Variant</label>
-      <select id="f_variant" class="form-select">
+      <select id="f_variant" class="form-select" onchange="onVariantChange(this, 'f_costing')">
         <option value="">Select Variant</option>
       </select>
     </div>
@@ -163,9 +163,9 @@
                    oninput="onModelInput(this.value,'e_variant')"/>
             <datalist id="eModelList"></datalist>
           </div>
-          <div class="col-md-2">
+         <div class="col-md-2">
             <label class="form-label">Variant</label>
-            <select id="e_variant" class="form-select"><option value="">Select</option></select>
+            <select id="e_variant" class="form-select" onchange="onVariantChange(this, 'e_costing')"><option value="">Select</option></select>
           </div>
           <div class="col-md-2">
             <label class="form-label">Delivery Date</label>
@@ -222,6 +222,14 @@ async function init() {
       dl.appendChild(opt);
     });
   });
+
+  // Auto-fill costing when variant is selected
+function onVariantChange(selectElem, costingInputId) {
+  const selectedOpt = selectElem.options[selectElem.selectedIndex];
+  if (selectedOpt && selectedOpt.dataset.costing) {
+    document.getElementById(costingInputId).value = selectedOpt.dataset.costing;
+  }
+}
 
   // Load orders
   await loadOrders();
