@@ -14,216 +14,176 @@
   </div>
 </div>
 
-<!-- FORM TOGGLE -->
 <button class="toggle-form-btn" onclick="toggleForm()">
   <i class="bi bi-plus-circle"></i> <span id="formToggleText">Add New Secondary Order</span>
 </button>
 
-<!-- ADD FORM -->
 <div class="card-panel" id="addFormPanel" style="display:none;">
   <div class="card-panel-title"><i class="bi bi-plus-lg"></i> New Secondary Order</div>
   <div class="row g-3">
     <div class="col-md-2">
       <label class="form-label">Last Digits *</label>
-      <input type="text" id="f_digits" class="form-control" placeholder="e.g. 4521" maxlength="5"
-             oninput="onDigitsInput(this.value)"/>
+      <input type="text" id="f_digits" class="form-control" placeholder="e.g. 4521" maxlength="5" oninput="onDigitsInput(this.value)"/>
     </div>
     <div class="col-md-2">
       <label class="form-label">Card Type</label>
-      <input type="text" id="f_card_type" class="form-control" readonly placeholder="Auto-filled"/>
+      <input type="text" id="f_card_type" class="form-control" readonly tabindex="-1" style="background:var(--navy); opacity:0.8;"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Platform *</label>
-      <select id="f_platform" class="form-select">
-        <option value="">Select Platform</option>
-      </select>
+      <label class="form-label">Platform</label>
+      <input list="plat_list" id="f_platform" class="form-control" placeholder="Search..."/>
+      <datalist id="plat_list"></datalist>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Model *</label>
-      <input type="text" id="f_model" class="form-control" placeholder="e.g. Samsung S24" list="modelList"
-             oninput="onModelInput(this.value,'f_variant')"/>
-      <datalist id="modelList"></datalist>
+      <label class="form-label">Model</label>
+      <input list="model_list" id="f_model" class="form-control" placeholder="Search..." onchange="onModelChange(this.value)"/>
+      <datalist id="model_list"></datalist>
     </div>
     <div class="col-md-2">
       <label class="form-label">Variant</label>
-      <select id="f_variant" class="form-select">
-        <option value="">Select Variant</option>
-      </select>
+      <select id="f_variant" class="form-select"></select>
     </div>
     <div class="col-md-2">
       <label class="form-label">Costing (₹)</label>
-      <input type="number" id="f_costing" class="form-control" placeholder="Amount" step="0.01"/>
+      <input type="number" id="f_costing" class="form-control" placeholder="0"/>
     </div>
-    <div class="col-12 d-flex gap-2 mt-2">
-      <button class="btn-primary-custom" onclick="submitOrder()">
-        <i class="bi bi-check-lg"></i> Save Order
-      </button>
-      <button class="btn-outline-custom" onclick="clearForm()">
-        <i class="bi bi-x-lg"></i> Clear
-      </button>
+    <div class="col-12 d-flex justify-content-end">
+      <button class="btn btn-primary px-4" onclick="saveOrder()">Save Order</button>
     </div>
   </div>
 </div>
 
-<!-- TOOLBAR -->
-<div class="toolbar">
-  <div class="search-wrap">
-    <i class="bi bi-search"></i>
-    <input type="text" class="search-input" id="searchInput" placeholder="Search orders…" oninput="filterTable()"/>
+<div class="card-panel mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-3">
+      <div class="search-box">
+        <i class="bi bi-search"></i>
+        <input type="text" id="searchInput" placeholder="Search..." onkeyup="filterTable()">
+      </div>
+      <button id="bulkDeleteBtn" class="btn btn-danger btn-sm" style="display:none;" onclick="bulkDelete()">
+        <i class="bi bi-trash"></i> Delete Selected (<span id="selCount">0</span>)
+      </button>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" onclick="exportOrders('csv')">CSV</button>
+      <button class="btn btn-outline-secondary btn-sm" onclick="exportOrders('xlsx')">Excel</button>
+    </div>
   </div>
-  <div class="toolbar-right">
-    <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">
-      <i class="bi bi-trash3"></i> Delete Selected (<span id="selCount">0</span>)
-    </button>
-    <button class="btn-outline-custom" onclick="exportOrders('csv')">
-      <i class="bi bi-filetype-csv"></i> CSV
-    </button>
-    <button class="btn-outline-custom" onclick="exportOrders('excel')">
-      <i class="bi bi-file-earmark-excel"></i> Excel
-    </button>
-  </div>
-</div>
 
-<!-- TABLE -->
-<div class="card-panel" style="padding:0;overflow:hidden;">
-  <div class="data-table-wrap">
-    <table class="data-table" id="secTable">
+  <div class="table-responsive">
+    <table class="table custom-table">
       <thead>
         <tr>
-          <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"/></th>
-          <th>#</th>
-          <th>Card Type</th>
-          <th>Last Digits</th>
+          <th style="width:40px;"><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
+          <th>Card</th>
           <th>Platform</th>
-          <th>Model</th>
-          <th>Variant</th>
+          <th>Mobile Details</th>
           <th>Costing</th>
-          <th>Created At</th>
-          <th>Actions</th>
+          <th>Date</th>
+          <th style="width:80px;">Action</th>
         </tr>
       </thead>
-      <tbody id="secTableBody">
-        <tr><td colspan="10"><div class="empty-state"><i class="bi bi-inbox"></i><p>No secondary orders yet.</p></div></td></tr>
-      </tbody>
+      <tbody id="ordersBody"></tbody>
     </table>
   </div>
 </div>
 
-<!-- EDIT MODAL -->
 <div class="modal fade" id="editModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Secondary Order</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-navy border-secondary text-white">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title">Edit Secondary Order</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <input type="hidden" id="e_id"/>
+        <input type="hidden" id="edit_id">
         <div class="row g-3">
-          <div class="col-md-3">
+          <div class="col-md-6">
             <label class="form-label">Last Digits</label>
-            <input type="text" id="e_digits" class="form-control" maxlength="5"
-                   oninput="onDigitsInput(this.value,'e_card_type')"/>
+            <input type="text" id="edit_last_digits" class="form-control">
           </div>
-          <div class="col-md-3">
-            <label class="form-label">Card Type</label>
-            <input type="text" id="e_card_type" class="form-control" readonly/>
+          <div class="col-md-6">
+            <label class="form-label">Bank Name</label>
+            <select id="edit_card_type" class="form-select">
+              <option value="">Select</option>
+              <option>SBI</option><option>ICICI</option><option>AXIS</option>
+              <option>BOB</option><option>FEDERAL</option><option>HDFC</option>
+              <option>IDFC</option><option>INDUSIND</option><option>KOTAK</option>
+              <option>RBL</option><option>YES</option><option>ONECARD</option>
+            </select>
           </div>
-          <div class="col-md-3">
+          <div class="col-md-12">
             <label class="form-label">Platform</label>
-            <select id="e_platform" class="form-select"><option value="">Select</option></select>
+            <input type="text" id="edit_platform" class="form-control">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-6">
             <label class="form-label">Model</label>
-            <input type="text" id="e_model" class="form-control" list="eModelList"
-                   oninput="onModelInput(this.value,'e_variant')"/>
-            <datalist id="eModelList"></datalist>
+            <input type="text" id="edit_model" class="form-control">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-6">
             <label class="form-label">Variant</label>
-            <select id="e_variant" class="form-select"><option value="">Select</option></select>
+            <input type="text" id="edit_variant" class="form-control">
           </div>
-          <div class="col-md-3">
-            <label class="form-label">Costing (₹)</label>
-            <input type="number" id="e_costing" class="form-control" step="0.01"/>
+          <div class="col-md-12">
+            <label class="form-label">Costing</label>
+            <input type="number" id="edit_costing" class="form-control">
           </div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn-primary-custom" onclick="saveEdit()"><i class="bi bi-check-lg"></i> Save Changes</button>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="updateOrder()">Save Changes</button>
       </div>
     </div>
   </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
 <script>
 let allOrders = [];
-let modelTimer = null;
-let digitTimer = null;
-const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+let cardsRef = [];
 
 async function init() {
-  // Load platforms
-  const platforms = await api('/api/platform-names');
-  ['f_platform','e_platform'].forEach(id => {
-    const sel = document.getElementById(id);
-    sel.innerHTML = '<option value="">Select Platform</option>';
-    platforms.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = opt.textContent = p;
-      sel.appendChild(opt);
-    });
-  });
+  const [orders, cards, plats, models] = await Promise.all([
+    api('/api/secondary-orders'), api('/api/cards'), api('/api/platforms'), api('/api/models')
+  ]);
+  allOrders = orders;
+  cardsRef = cards;
+  
+  const pList = document.getElementById('plat_list');
+  const uniquePlats = [...new Set(plats.map(p => p.platform_name))];
+  pList.innerHTML = uniquePlats.map(p => `<option value="${p}">`).join('');
 
-  // Load models
-  const models = await api('/api/models');
-  ['modelList','eModelList'].forEach(id => {
-    const dl = document.getElementById(id);
-    dl.innerHTML = '';
-    models.forEach(m => {
-      const opt = document.createElement('option');
-      opt.value = m.model_name;
-      dl.appendChild(opt);
-    });
-  });
+  const mList = document.getElementById('model_list');
+  mList.innerHTML = models.map(m => `<option value="${m.model_name}">`).join('');
 
-  await loadOrders();
-}
-
-async function loadOrders() {
-  allOrders = await api('/api/secondary-orders');
   renderTable(allOrders);
   updateStats();
 }
 
-function renderTable(orders) {
-  const body = document.getElementById('secTableBody');
-  if (!orders.length) {
-    body.innerHTML = '<tr><td colspan="10"><div class="empty-state"><i class="bi bi-inbox"></i><p>No orders found.</p></div></td></tr>';
+function renderTable(data) {
+  const tbody = document.getElementById('ordersBody');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No orders found</td></tr>';
     return;
   }
-  body.innerHTML = orders.map(o => `
-    <tr data-id="${o.id}">
-      <td><input type="checkbox" class="row-check" value="${o.id}" onchange="onCheckChange()"/></td>
-      <td style="color:var(--muted);font-size:12px;">${o.id}</td>
-      <td>${cardBadge(o.card_type)}</td>
-      <td><code style="color:var(--accent2);font-size:12px;">•••• ${o.last_digits||'—'}</code></td>
-      <td>${o.platform||'—'}</td>
-      <td style="font-weight:500">${o.model||'—'}</td>
-      <td style="color:var(--muted)">${o.variant||'—'}</td>
-      <td style="color:var(--green);font-weight:600">${formatCost(o.costing)}</td>
-      <td style="color:var(--muted);font-size:12px;">${o.created_at||'—'}</td>
+  tbody.innerHTML = data.map(o => `
+    <tr>
+      <td><input type="checkbox" class="row-check" value="${o.id}" onclick="onCheckChange()"></td>
       <td>
-        <div style="display:flex;gap:6px;">
-          <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})">
-            <i class="bi bi-pencil"></i>
-          </button>
-          <button class="btn-danger-custom" style="padding:4px 9px;" onclick="deleteOrder(${o.id})">
-            <i class="bi bi-trash3"></i>
-          </button>
+        <div style="font-weight:600;">${o.last_digits || '—'}</div>
+        ${cardBadge(o.card_type)}
+      </td>
+      <td><div style="font-weight:500;">${o.platform || '—'}</div></td>
+      <td>
+        <div style="font-weight:500;color:var(--accent2);">${o.model || '—'}</div>
+        <div style="font-size:12px;color:var(--muted);">${o.variant || '—'}</div>
+      </td>
+      <td style="font-weight:600;">${formatCost(o.costing)}</td>
+      <td><div style="font-size:13px;">${o.created_at ? o.created_at.split(' ')[0] : '—'}</div></td>
+      <td>
+        <div class="d-flex gap-1">
+          <button class="btn-icon" onclick="openEdit(${o.id})"><i class="bi bi-pencil-square"></i></button>
+          <button class="btn-icon text-danger" onclick="deleteOrder(${o.id})"><i class="bi bi-trash"></i></button>
         </div>
       </td>
     </tr>
@@ -232,126 +192,85 @@ function renderTable(orders) {
 
 function updateStats() {
   document.getElementById('totalCount').textContent = allOrders.length;
-  const total = allOrders.reduce((s, o) => s + (parseFloat(o.costing)||0), 0);
-  document.getElementById('totalCost').textContent = '₹' + total.toLocaleString('en-IN');
+  const total = allOrders.reduce((sum, o) => sum + (parseFloat(o.costing) || 0), 0);
+  document.getElementById('totalCost').textContent = formatCost(total);
 }
 
-function toggleForm() {
-  const panel = document.getElementById('addFormPanel');
-  const btn = document.getElementById('formToggleText');
-  const visible = panel.style.display !== 'none';
-  panel.style.display = visible ? 'none' : 'block';
-  btn.textContent = visible ? 'Add New Secondary Order' : 'Hide Form';
+function onDigitsInput(val) {
+  const card = cardsRef.find(c => c.last_digits === val);
+  document.getElementById('f_card_type').value = card ? card.card_type : '';
 }
 
-function clearForm() {
-  ['f_digits','f_card_type','f_model','f_costing'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('f_platform').value = '';
-  document.getElementById('f_variant').innerHTML = '<option value="">Select Variant</option>';
+async function onModelChange(val) {
+  await lookupVariants(val, document.getElementById('f_variant'));
 }
 
-function onDigitsInput(val, targetId='f_card_type') {
-  clearTimeout(digitTimer);
-  if (val.length >= 4) {
-    digitTimer = setTimeout(() => lookupCard(val, document.getElementById(targetId)), 500);
-  } else {
-    document.getElementById(targetId).value = '';
-  }
-}
-
-function onModelInput(val, variantId) {
-  clearTimeout(modelTimer);
-  if (val.trim()) {
-    modelTimer = setTimeout(() => lookupVariants(val.trim(), document.getElementById(variantId)), 600);
-  }
-}
-
-async function submitOrder() {
+async function saveOrder() {
   const payload = {
     last_digits: document.getElementById('f_digits').value.trim(),
-    card_type:   document.getElementById('f_card_type').value.trim(),
-    platform:    document.getElementById('f_platform').value,
-    model:       document.getElementById('f_model').value.trim(),
-    variant:     document.getElementById('f_variant').value,
-    costing:     document.getElementById('f_costing').value || null,
+    card_type: document.getElementById('f_card_type').value,
+    platform: document.getElementById('f_platform').value.trim(),
+    model: document.getElementById('f_model').value.trim(),
+    variant: document.getElementById('f_variant').value,
+    costing: document.getElementById('f_costing').value
   };
-  if (!payload.last_digits || !payload.platform || !payload.model) {
-    showToast('Please fill: Last Digits, Platform, Model', 'error'); return;
-  }
+  if(!payload.last_digits) return showToast('Last digits required', 'error');
   const res = await api('/api/secondary-orders', 'POST', payload);
-  if (res.error) { showToast(res.error, 'error'); return; }
   allOrders.unshift(res);
   renderTable(allOrders);
   updateStats();
-  clearForm();
-  showToast('Secondary order saved!');
+  toggleForm();
+  showToast('Order saved!');
+  ['f_digits','f_card_type','f_platform','f_model','f_costing'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f_variant').innerHTML = '';
 }
 
-async function openEdit(id) {
+function openEdit(id) {
   const o = allOrders.find(x => x.id === id);
   if (!o) return;
-  document.getElementById('e_id').value = o.id;
-  document.getElementById('e_digits').value = o.last_digits || '';
-  document.getElementById('e_card_type').value = o.card_type || '';
-  document.getElementById('e_model').value = o.model || '';
-  document.getElementById('e_costing').value = o.costing || '';
-
-  // Platforms
-  const platforms = await api('/api/platform-names');
-  const ePlat = document.getElementById('e_platform');
-  ePlat.innerHTML = '<option value="">Select Platform</option>';
-  platforms.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = opt.textContent = p;
-    if (p === o.platform) opt.selected = true;
-    ePlat.appendChild(opt);
-  });
-
-  // Variants
-  if (o.model) {
-    const variants = await api(`/api/variants?model=${encodeURIComponent(o.model)}`);
-    const eVar = document.getElementById('e_variant');
-    eVar.innerHTML = '<option value="">Select Variant</option>';
-    variants.forEach(v => {
-      const opt = document.createElement('option');
-      opt.value = opt.textContent = v;
-      if (v === o.variant) opt.selected = true;
-      eVar.appendChild(opt);
-    });
-  }
-
-  editModal.show();
+  document.getElementById('edit_id').value = o.id;
+  document.getElementById('edit_last_digits').value = o.last_digits || '';
+  document.getElementById('edit_card_type').value = o.card_type || '';
+  document.getElementById('edit_platform').value = o.platform || '';
+  document.getElementById('edit_model').value = o.model || '';
+  document.getElementById('edit_variant').value = o.variant || '';
+  document.getElementById('edit_costing').value = o.costing || '';
+  new bootstrap.Modal(document.getElementById('editModal')).show();
 }
 
-async function saveEdit() {
-  const id = document.getElementById('e_id').value;
+async function updateOrder() {
+  const id = document.getElementById('edit_id').value;
   const payload = {
-    last_digits: document.getElementById('e_digits').value.trim(),
-    card_type:   document.getElementById('e_card_type').value.trim(),
-    platform:    document.getElementById('e_platform').value,
-    model:       document.getElementById('e_model').value.trim(),
-    variant:     document.getElementById('e_variant').value,
-    costing:     document.getElementById('e_costing').value || null,
+    last_digits: document.getElementById('edit_last_digits').value,
+    card_type: document.getElementById('edit_card_type').value,
+    platform: document.getElementById('edit_platform').value,
+    model: document.getElementById('edit_model').value,
+    variant: document.getElementById('edit_variant').value,
+    costing: document.getElementById('edit_costing').value
   };
   const res = await api(`/api/secondary-orders/${id}`, 'PUT', payload);
-  if (res.error) { showToast(res.error, 'error'); return; }
-  const idx = allOrders.findIndex(x => x.id === res.id);
-  if (idx !== -1) allOrders[idx] = res;
+  const idx = allOrders.findIndex(o => o.id == id);
+  allOrders[idx] = res;
   renderTable(allOrders);
   updateStats();
-  editModal.hide();
-  showToast('Order updated!');
+  bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+  showToast('Order updated');
 }
 
 async function deleteOrder(id) {
   if (!confirm('Delete this order?')) return;
-  const res = await api(`/api/secondary-orders/${id}`, 'DELETE');
-  if (res.success) {
-    allOrders = allOrders.filter(o => o.id !== id);
-    renderTable(allOrders);
-    updateStats();
-    showToast('Order deleted.');
-  }
+  await api(`/api/secondary-orders/${id}`, 'DELETE');
+  allOrders = allOrders.filter(o => o.id !== id);
+  renderTable(allOrders);
+  updateStats();
+  showToast('Order deleted');
+}
+
+function toggleForm() {
+  const p = document.getElementById('addFormPanel');
+  const isHidden = p.style.display === 'none';
+  p.style.display = isHidden ? 'block' : 'none';
+  document.getElementById('formToggleText').textContent = isHidden ? 'Cancel' : 'Add New Secondary Order';
 }
 
 function onCheckChange() {
@@ -368,7 +287,6 @@ function toggleSelectAll(cb) {
 
 async function bulkDelete() {
   const ids = [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
-  if (!ids.length) return;
   if (!confirm(`Delete ${ids.length} selected orders?`)) return;
   const res = await api('/api/secondary-orders/bulk-delete', 'POST', {ids});
   if (res.success) {
@@ -376,23 +294,21 @@ async function bulkDelete() {
     renderTable(allOrders);
     updateStats();
     document.getElementById('selectAll').checked = false;
-    document.getElementById('bulkDeleteBtn').style.display = 'none';
-    showToast(`${res.deleted} orders deleted.`);
+    onCheckChange();
+    showToast(`${res.deleted} orders deleted`);
   }
 }
 
 function filterTable() {
   const q = document.getElementById('searchInput').value.toLowerCase();
-  const filtered = allOrders.filter(o =>
-    Object.values(o).some(v => String(v||'').toLowerCase().includes(q))
-  );
+  const filtered = allOrders.filter(o => Object.values(o).some(v => String(v||'').toLowerCase().includes(q)));
   renderTable(filtered);
 }
 
 function exportOrders(fmt) {
-  window.location.href = `/api/secondary-orders/export?format=${fmt}`;
+  window.location.href = `/api/export/secondary?format=${fmt}`;
 }
 
-init();
+window.onload = init;
 </script>
 {% endblock %}
