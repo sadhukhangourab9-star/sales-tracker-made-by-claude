@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: order-tracker
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app --bind 0.0.0.0:$PORT --workers 2"
+    envVars:
+      - key: DATABASE_PATH
+        value: /var/data/orders.db
+    disk:
+      name: order-data
+      mountPath: /var/data
+      sizeGB: 1
