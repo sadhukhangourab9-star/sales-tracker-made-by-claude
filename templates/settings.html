@@ -23,25 +23,17 @@
           <label class="form-label">Bank Name</label>
           <select id="card_type" class="form-select">
             <option value="">Select</option>
-            <option>SBI</option>
-            <option>ICICI</option>
-            <option>AXIS</option>
-            <option>BOB</option>
-            <option>FEDERAL</option>
-            <option>HDFC</option>
-            <option>IDFC</option>
-            <option>INDUSIND</option>
-            <option>KOTAK</option>
-            <option>RBL</option>
-            <option>YES</option>
-            <option>ONECARD</option>
+            <option>SBI</option><option>ICICI</option><option>AXIS</option>
+            <option>BOB</option><option>FEDERAL</option><option>HDFC</option>
+            <option>IDFC</option><option>INDUSIND</option><option>KOTAK</option>
+            <option>RBL</option><option>YES</option><option>ONECARD</option>
           </select>
         </div>
         <div class="col-12 mt-2">
           <button class="btn btn-primary w-100" onclick="addCard()">Add Card</button>
         </div>
       </div>
-      <div id="cardsList"></div>
+      <div id="cardsList" class="list-container"></div>
     </div>
   </div>
 
@@ -57,7 +49,7 @@
           <button class="btn btn-primary w-100" onclick="addPlatform()">Add Platform</button>
         </div>
       </div>
-      <div id="platsList"></div>
+      <div id="platsList" class="list-container"></div>
     </div>
   </div>
 
@@ -79,16 +71,21 @@
           <button class="btn btn-primary" onclick="addVariant()">Add</button>
         </div>
       </div>
-      <div id="modelsList"></div>
+      <div id="modelsList" class="list-container"></div>
     </div>
   </div>
 </div>
 
 <script>
+// Load all data on startup
+window.onload = () => { loadCards(); loadPlatforms(); loadModels(); };
+
 async function loadCards() {
   const cards = await api('/api/cards');
-  document.getElementById('cardsList').innerHTML = cards.map(c => `
-    <div class="list-item">
+  const container = document.getElementById('cardsList');
+  if (!cards.length) { container.innerHTML = '<div class="text-muted p-2">No cards added.</div>'; return; }
+  container.innerHTML = cards.map(c => `
+    <div class="list-item d-flex justify-content-between align-items-center border-bottom py-2">
       <div>
         <div style="font-weight:600;">${c.last_digits}</div>
         <div style="font-size:12px;color:var(--muted);">${c.card_type}</div>
@@ -100,7 +97,7 @@ async function loadCards() {
 
 async function addCard() {
   const digits = document.getElementById('card_digits').value.trim();
-  const type   = document.getElementById('card_type').value;
+  const type = document.getElementById('card_type').value;
   if (!digits || !type) { showToast('Enter digits and select bank', 'error'); return; }
   await api('/api/cards', 'POST', {last_digits: digits, card_type: type});
   document.getElementById('card_digits').value = '';
@@ -118,11 +115,11 @@ async function deleteCard(id) {
 
 async function loadPlatforms() {
   const plats = await api('/api/platforms');
-  document.getElementById('platsList').innerHTML = plats.map(p => `
-    <div class="list-item">
-      <div>
-        <div style="font-weight:600;">${p.platform_name}</div>
-      </div>
+  const container = document.getElementById('platsList');
+  if (!plats.length) { container.innerHTML = '<div class="text-muted p-2">No platforms added.</div>'; return; }
+  container.innerHTML = plats.map(p => `
+    <div class="list-item d-flex justify-content-between align-items-center border-bottom py-2">
+      <div style="font-weight:600;">${p.platform_name}</div>
       <button class="btn-icon text-danger" onclick="deletePlatform(${p.id})"><i class="bi bi-trash"></i></button>
     </div>
   `).join('');
@@ -131,7 +128,6 @@ async function loadPlatforms() {
 async function addPlatform() {
   const name = document.getElementById('plat_name').value.trim();
   if (!name) { showToast('Enter platform name', 'error'); return; }
-  // We send an empty string for account_name to satisfy the backend API
   await api('/api/platforms', 'POST', {platform_name: name, account_name: ""});
   document.getElementById('plat_name').value = '';
   showToast('Platform added!');
@@ -148,25 +144,30 @@ async function deletePlatform(id) {
 async function loadModels() {
   const models = await api('/api/models');
   const sel = document.getElementById('variant_model_id');
-  sel.innerHTML = '<option value="">Select Model</option>' + 
+  sel.innerHTML = '<option value="">Select Model to add variant</option>' + 
     models.map(m => `<option value="${m.id}">${m.model_name}</option>`).join('');
   renderModels();
 }
 
 async function renderModels() {
   const data = await api('/api/models-with-variants');
-  document.getElementById('modelsList').innerHTML = data.map(m => `
-    <div class="model-group">
-      <div class="model-header">
-        <span>${m.model_name}</span>
+  const container = document.getElementById('modelsList');
+  if (!data.length) { container.innerHTML = '<div class="text-muted p-2">No models added.</div>'; return; }
+  
+  container.innerHTML = data.map(m => `
+    <div class="model-group mb-3 border p-2 rounded">
+      <div class="model-header d-flex justify-content-between align-items-center mb-2">
+        <span style="font-weight:700; color:var(--accent2);">${m.model_name}</span>
         <button class="btn-icon text-danger" onclick="deleteModel(${m.id})"><i class="bi bi-trash"></i></button>
       </div>
-      ${m.variants.length ? m.variants.map(v => `
-        <div class="variant-item">
-          <span>${v.variant_name}</span>
-          <button class="btn-icon text-danger" style="font-size:10px;" onclick="deleteVariant(${v.id})"><i class="bi bi-x-lg"></i></button>
-        </div>
-      `).join('') : `<div style="padding:8px 28px;font-size:12px;color:var(--muted);\">No variants yet</div>`}
+      <div class="variants-list ms-3">
+        ${m.variants.length ? m.variants.map(v => `
+          <div class="variant-item d-flex justify-content-between align-items-center border-top py-1">
+            <span style="font-size:14px;">${v.variant_name}</span>
+            <button class="btn-icon text-danger" style="font-size:12px;" onclick="deleteVariant(${v.id})"><i class="bi bi-x"></i></button>
+          </div>
+        `).join('') : `<div style="font-size:12px;color:var(--muted);">No variants</div>`}
+      </div>
     </div>
   `).join('');
 }
@@ -178,33 +179,31 @@ async function addModel() {
   if (res.error) { showToast(res.error, 'error'); return; }
   document.getElementById('model_name').value = '';
   showToast('Model added!');
-  await loadModels();
+  loadModels();
 }
 
 async function addVariant() {
   const model_id = document.getElementById('variant_model_id').value;
-  const name     = document.getElementById('variant_name').value.trim();
+  const name = document.getElementById('variant_name').value.trim();
   if (!model_id || !name) { showToast('Select model and enter variant name', 'error'); return; }
   const res = await api('/api/variants', 'POST', {model_id: parseInt(model_id), variant_name: name});
   if (res.error) { showToast(res.error, 'error'); return; }
   document.getElementById('variant_name').value = '';
   showToast('Variant added!');
-  await renderModels();
+  renderModels();
 }
 
 async function deleteModel(id) {
   if (!confirm('Delete this model and ALL its variants?')) return;
   await api(`/api/models/${id}`, 'DELETE');
   showToast('Model deleted.');
-  await loadModels();
+  loadModels();
 }
 
 async function deleteVariant(id) {
   await api(`/api/variants/${id}`, 'DELETE');
   showToast('Variant deleted.');
-  await renderModels();
+  renderModels();
 }
-
-window.onload = () => { loadCards(); loadPlatforms(); loadModels(); };
 </script>
 {% endblock %}
