@@ -85,9 +85,14 @@ def add_card():
     data = request.json
     ws = SHEET.worksheet('cards')
     new_id = get_next_id(ws)
-    ws.append_row([new_id, data.get('card_type', ''), data.get('last_digits', '')])
+    
+    # TRICK: Add apostrophe to force Google Sheets to keep leading zeros
+    last_digits = str(data.get('last_digits', ''))
+    save_digits = f"'{last_digits}" if last_digits else ""
+    
+    ws.append_row([new_id, data.get('card_type', ''), save_digits])
     return jsonify({'success': True})
-
+    
 @app.route('/api/cards/<int:card_id>', methods=['DELETE'])
 def delete_card(card_id):
     ws = SHEET.worksheet('cards')
@@ -241,13 +246,23 @@ def add_main_order():
     ws = SHEET.worksheet('main_orders')
     new_id = get_next_id(ws)
     
+    last_digits = str(data.get('last_digits', ''))
+    save_digits = f"'{last_digits}" if last_digits else ""
+    
+    account = str(data.get('account', ''))
+    save_account = f"'{account}" if account.isdigit() else account
+    
     row_data = [
-        new_id, data.get('card_type', ''), data.get('last_digits', ''),
-        data.get('platform', ''), data.get('account', ''), data.get('order_name', ''),
+        new_id, data.get('card_type', ''), save_digits,
+        data.get('platform', ''), save_account, data.get('order_name', ''),
         data.get('model', ''), data.get('variant', ''), float(data.get('costing') or 0),
         data.get('delivery_date', ''), now
     ]
     ws.append_row(row_data)
+    
+    # Strip the apostrophe before sending it back to the frontend immediately
+    row_data[2] = last_digits
+    row_data[4] = account
     headers = ws.row_values(1)
     return jsonify(dict(zip(headers, row_data)))
 
@@ -260,13 +275,23 @@ def update_main_order(order_id):
     
     if original:
         row_idx = records.index(original) + 2
+        
+        last_digits = str(data.get('last_digits', ''))
+        save_digits = f"'{last_digits}" if last_digits else ""
+        
+        account = str(data.get('account', ''))
+        save_account = f"'{account}" if account.isdigit() else account
+        
         row_data = [
-            order_id, data.get('card_type', ''), data.get('last_digits', ''),
-            data.get('platform', ''), data.get('account', ''), data.get('order_name', ''),
+            order_id, data.get('card_type', ''), save_digits,
+            data.get('platform', ''), save_account, data.get('order_name', ''),
             data.get('model', ''), data.get('variant', ''), float(data.get('costing') or 0),
             data.get('delivery_date', ''), original.get('created_at', '')
         ]
         ws.update(f'A{row_idx}:K{row_idx}', [row_data])
+        
+        row_data[2] = last_digits
+        row_data[4] = account
         headers = ws.row_values(1)
         return jsonify(dict(zip(headers, row_data)))
     return jsonify({'error': 'Not found'}), 404
@@ -343,12 +368,17 @@ def add_secondary_order():
     ws = SHEET.worksheet('secondary_orders')
     new_id = get_next_id(ws)
     
+    last_digits = str(data.get('last_digits', ''))
+    save_digits = f"'{last_digits}" if last_digits else ""
+    
     row_data = [
-        new_id, data.get('card_type', ''), data.get('last_digits', ''),
+        new_id, data.get('card_type', ''), save_digits,
         data.get('platform', ''), data.get('model', ''), data.get('variant', ''), 
         float(data.get('costing') or 0), now
     ]
     ws.append_row(row_data)
+    
+    row_data[2] = last_digits
     headers = ws.row_values(1)
     return jsonify(dict(zip(headers, row_data)))
 
@@ -361,12 +391,18 @@ def update_secondary_order(order_id):
     
     if original:
         row_idx = records.index(original) + 2
+        
+        last_digits = str(data.get('last_digits', ''))
+        save_digits = f"'{last_digits}" if last_digits else ""
+        
         row_data = [
-            order_id, data.get('card_type', ''), data.get('last_digits', ''),
+            order_id, data.get('card_type', ''), save_digits,
             data.get('platform', ''), data.get('model', ''), data.get('variant', ''), 
             float(data.get('costing') or 0), original.get('created_at', '')
         ]
         ws.update(f'A{row_idx}:H{row_idx}', [row_data])
+        
+        row_data[2] = last_digits
         headers = ws.row_values(1)
         return jsonify(dict(zip(headers, row_data)))
     return jsonify({'error': 'Not found'}), 404
