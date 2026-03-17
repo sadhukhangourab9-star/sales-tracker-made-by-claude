@@ -366,15 +366,18 @@
   function formatCost(v) { return v != null ? '₹' + parseFloat(v).toLocaleString('en-IN') : '—'; }
 
   // Card badge
-  function cardBadge(type) {
-    if (!type) return '<span class="badge-card badge-default">—</span>';
-    const lc = type.toLowerCase();
-    let cls = 'badge-default';
-    if (lc.includes('visa')) cls = 'badge-visa';
-    else if (lc.includes('master')) cls = 'badge-master';
-    else if (lc.includes('amex') || lc.includes('american')) cls = 'badge-amex';
-    return `<span class="badge-card ${cls}">${type}</span>`;
-  }
+function cardBadge(type) {
+  if (!type) return '<span class="badge-card badge-default">—</span>';
+  const val = type.toUpperCase();
+  let cls = 'badge-default';
+  
+  // Specific styling for banks
+  if (['SBI', 'HDFC', 'ICICI', 'IDFC'].includes(val)) cls = 'badge-visa';
+  else if (['AXIS', 'KOTAK', 'RBL', 'YES'].includes(val)) cls = 'badge-master';
+  else if (['ONECARD', 'FEDERAL', 'BOB', 'INDUSIND'].includes(val)) cls = 'badge-amex';
+  
+  return `<span class="badge-card ${cls}">${val}</span>`;
+}
 </script>
 {% block scripts %}{% endblock %}
 </body>
