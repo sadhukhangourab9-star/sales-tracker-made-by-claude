@@ -62,12 +62,25 @@
           <button class="btn btn-primary" onclick="addModel()">Add</button>
         </div>
       </div>
-      <div class="mb-3 pt-2 border-top">
-        <label class="form-label">Add Variant</label>
-        <select id="variant_model_id" class="form-select mb-2"></select>
-        <div class="input-group">
-          <input type="text" id="variant_name" class="form-control" placeholder="128GB Blue"/>
-          <button class="btn btn-primary" onclick="addVariant()">Add</button>
+<div class="row g-2 mb-3">
+        <div class="col-4">
+          <label class="form-label">Model</label>
+          <select id="variant_model_id" class="form-select">
+            <option value="">Select Model</option>
+          </select>
+        </div>
+        <div class="col-5">
+          <label class="form-label">Variant Name</label>
+          <input type="text" id="variant_name" class="form-control" placeholder="e.g. 256GB Black"/>
+        </div>
+        <div class="col-3">
+          <label class="form-label">Cost (₹)</label>
+          <input type="number" id="variant_costing" class="form-control" placeholder="0.00"/>
+        </div>
+        <div class="col-12 mt-1">
+          <button class="btn-success-custom w-100" onclick="addVariant()">
+            <i class="bi bi-plus-circle"></i> Add Variant
+          </button>
         </div>
       </div>
       <div id="modelsList"></div>
@@ -157,12 +170,23 @@ async function addModel() {
 }
 
 async function addVariant() {
-  const mid = document.getElementById('variant_model_id').value;
-  const name = document.getElementById('variant_name').value.trim();
-  if (!mid || !name) return;
-  await api('/api/variants', 'POST', {model_id: parseInt(mid), variant_name: name});
+  const model_id = document.getElementById('variant_model_id').value;
+  const name     = document.getElementById('variant_name').value.trim();
+  const costing  = document.getElementById('variant_costing').value; // Get cost
+  if (!model_id || !name) { showToast('Select model and enter variant name', 'error'); return; }
+  
+  // Send costing to backend
+  const res = await api('/api/variants', 'POST', {
+      model_id: parseInt(model_id), 
+      variant_name: name,
+      costing: costing
+  });
+  
+  if (res.error) { showToast(res.error, 'error'); return; }
   document.getElementById('variant_name').value = '';
-  renderModels();
+  document.getElementById('variant_costing').value = '';
+  showToast('Variant added!');
+  await renderModels();
 }
 
 async function deleteModel(id) { if(confirm('Delete model?')) { await api('/api/models/'+id, 'DELETE'); loadModels(); } }
