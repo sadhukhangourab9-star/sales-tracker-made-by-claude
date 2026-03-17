@@ -195,7 +195,8 @@ const editModal = new bootstrap.Modal(document.getElementById('editModal'));
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   const now = new Date();
-  document.getElementById('f_delivery_date').value = now.toISOString().split('T')[0];
+  // CHANGED: Leave delivery date blank by default
+  document.getElementById('f_delivery_date').value = ''; 
   document.getElementById('f_created_at').value = now.toLocaleString('en-IN');
 
   const platforms = await api('/api/platform-names');
@@ -282,7 +283,8 @@ function clearForm() {
   ['f_digits','f_bank','f_account','f_order_name','f_model','f_costing'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('f_platform').value = '';
   document.getElementById('f_variant').innerHTML = '<option value="">Select Variant</option>';
-  document.getElementById('f_delivery_date').value = new Date().toISOString().split('T')[0];
+  // CHANGED: Reset delivery date to blank
+  document.getElementById('f_delivery_date').value = ''; 
   document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN'); 
 }
 
