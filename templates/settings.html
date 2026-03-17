@@ -49,13 +49,9 @@
     <div class="card-panel" style="height:100%;">
       <div class="card-panel-title"><i class="bi bi-shop"></i> Platforms</div>
       <div class="row g-2 mb-3">
-        <div class="col-6">
-          <label class="form-label">Platform</label>
-          <input type="text" id="plat_name" class="form-control" placeholder="Amazon"/>
-        </div>
-        <div class="col-6">
-          <label class="form-label">Account</label>
-          <input type="text" id="plat_acc" class="form-control" placeholder="User1"/>
+        <div class="col-12">
+          <label class="form-label">Platform Name</label>
+          <input type="text" id="plat_name" class="form-control" placeholder="e.g. Amazon"/>
         </div>
         <div class="col-12 mt-2">
           <button class="btn btn-primary w-100" onclick="addPlatform()">Add Platform</button>
@@ -126,7 +122,6 @@ async function loadPlatforms() {
     <div class="list-item">
       <div>
         <div style="font-weight:600;">${p.platform_name}</div>
-        <div style="font-size:12px;color:var(--muted);">${p.account_name}</div>
       </div>
       <button class="btn-icon text-danger" onclick="deletePlatform(${p.id})"><i class="bi bi-trash"></i></button>
     </div>
@@ -135,11 +130,10 @@ async function loadPlatforms() {
 
 async function addPlatform() {
   const name = document.getElementById('plat_name').value.trim();
-  const acc  = document.getElementById('plat_acc').value.trim();
-  if (!name || !acc) { showToast('Enter both fields', 'error'); return; }
-  await api('/api/platforms', 'POST', {platform_name: name, account_name: acc});
+  if (!name) { showToast('Enter platform name', 'error'); return; }
+  // We send an empty string for account_name to satisfy the backend API
+  await api('/api/platforms', 'POST', {platform_name: name, account_name: ""});
   document.getElementById('plat_name').value = '';
-  document.getElementById('plat_acc').value = '';
   showToast('Platform added!');
   loadPlatforms();
 }
