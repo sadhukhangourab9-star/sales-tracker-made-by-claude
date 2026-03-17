@@ -194,12 +194,10 @@ const editModal = new bootstrap.Modal(document.getElementById('editModal'));
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-  // Set today's date & current time automatically
   const now = new Date();
   document.getElementById('f_delivery_date').value = now.toISOString().split('T')[0];
   document.getElementById('f_created_at').value = now.toLocaleString('en-IN');
 
-  // Load platforms into dropdowns
   const platforms = await api('/api/platform-names');
   ['f_platform','e_platform'].forEach(id => {
     const sel = document.getElementById(id);
@@ -211,7 +209,6 @@ async function init() {
     });
   });
 
-  // Load models into datalists
   const models = await api('/api/models');
   ['modelList','eModelList'].forEach(id => {
     const dl = document.getElementById(id);
@@ -223,15 +220,6 @@ async function init() {
     });
   });
 
-  // Auto-fill costing when variant is selected
-function onVariantChange(selectElem, costingInputId) {
-  const selectedOpt = selectElem.options[selectElem.selectedIndex];
-  if (selectedOpt && selectedOpt.dataset.costing) {
-    document.getElementById(costingInputId).value = selectedOpt.dataset.costing;
-  }
-}
-
-  // Load orders
   await loadOrders();
 }
 
@@ -248,7 +236,6 @@ function renderTable(orders) {
     body.innerHTML = '<tr><td colspan="12"><div class="empty-state"><i class="bi bi-inbox"></i><p>No orders found.</p></div></td></tr>';
     return;
   }
-  // Reordered table matching the 1-10 list
   body.innerHTML = orders.map(o => `
     <tr data-id="${o.id}">
       <td><input type="checkbox" class="row-check" value="${o.id}" onchange="onCheckChange()"/></td>
@@ -296,7 +283,7 @@ function clearForm() {
   document.getElementById('f_platform').value = '';
   document.getElementById('f_variant').innerHTML = '<option value="">Select Variant</option>';
   document.getElementById('f_delivery_date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN'); // Reset auto time
+  document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN'); 
 }
 
 let digitTimer = null;
@@ -316,12 +303,23 @@ function onModelInput(val, variantId) {
   }
 }
 
+// NEW: Auto-fill costing when variant is selected
+function onVariantChange(selectElem, costingInputId) {
+  const selectedOpt = selectElem.options[selectElem.selectedIndex];
+  if (selectedOpt && selectedOpt.hasAttribute('data-costing')) {
+    const cost = selectedOpt.getAttribute('data-costing');
+    if (cost !== '') {
+        document.getElementById(costingInputId).value = cost;
+    }
+  }
+}
+
 async function submitOrder() {
   const payload = {
     last_digits:   document.getElementById('f_digits').value.trim(),
-    card_type:     document.getElementById('f_bank').value.trim(), // Sent as card_type to match DB
+    card_type:     document.getElementById('f_bank').value.trim(), 
     platform:      document.getElementById('f_platform').value,
-    account:       document.getElementById('f_account').value.trim(), // Now a manual text field
+    account:       document.getElementById('f_account').value.trim(), 
     order_name:    document.getElementById('f_order_name').value.trim(),
     model:         document.getElementById('f_model').value.trim(),
     variant:       document.getElementById('f_variant').value,
@@ -347,14 +345,13 @@ async function openEdit(id) {
   if (!o) return;
   document.getElementById('e_id').value = o.id;
   document.getElementById('e_digits').value = o.last_digits || '';
-  document.getElementById('e_bank').value = o.card_type || ''; // Mapped from DB
-  document.getElementById('e_account').value = o.account || ''; // Now manual text
+  document.getElementById('e_bank').value = o.card_type || ''; 
+  document.getElementById('e_account').value = o.account || ''; 
   document.getElementById('e_order_name').value = o.order_name || '';
   document.getElementById('e_model').value = o.model || '';
   document.getElementById('e_delivery_date').value = o.delivery_date || '';
   document.getElementById('e_costing').value = o.costing || '';
 
-  // Load platforms
   const platforms = await api('/api/platform-names');
   const ePlat = document.getElementById('e_platform');
   ePlat.innerHTML = '<option value="">Select Platform</option>';
@@ -365,15 +362,21 @@ async function openEdit(id) {
     ePlat.appendChild(opt);
   });
 
-  // Load variants
+  // UPDATED: Handle object format for variants in edit modal
   if (o.model) {
     const variants = await api(`/api/variants?model=${encodeURIComponent(o.model)}`);
     const eVar = document.getElementById('e_variant');
     eVar.innerHTML = '<option value="">Select Variant</option>';
     variants.forEach(v => {
       const opt = document.createElement('option');
-      opt.value = opt.textContent = v;
-      if (v === o.variant) opt.selected = true;
+      const vName = typeof v === 'object' ? v.variant_name : v;
+      const vCost = typeof v === 'object' ? (v.costing || '') : '';
+      
+      opt.value = vName;
+      opt.textContent = vName;
+      opt.setAttribute('data-costing', vCost);
+      
+      if (vName === o.variant) opt.selected = true;
       eVar.appendChild(opt);
     });
   }
@@ -404,7 +407,6 @@ async function saveEdit() {
   showToast('Order updated!');
 }
 
-// ── Delete, Checkbox & Export functions remain unchanged ───────────────
 async function deleteOrder(id) {
   if (!confirm('Delete this order?')) return;
   const res = await api(`/api/main-orders/${id}`, 'DELETE');
