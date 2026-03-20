@@ -370,6 +370,35 @@ def export_main_orders():
             writer.writerow([o.get('id'), o.get('card_type'), o.get('last_digits'), o.get('platform'), o.get('account'), o.get('order_name'), o.get('model'), o.get('variant'), o.get('costing'), o.get('delivery_date'), o.get('created_at')])
         return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/csv', as_attachment=True, download_name='main_orders.csv')
 
+# ── Secondary Order Names API ─────────────────────────────────────────────────
+
+@app.route('/api/sec-order-names', methods=['GET'])
+def get_sec_order_names():
+    if not SHEET: return jsonify([])
+    try:
+        ws = SHEET.worksheet('sec_order_names')
+        return jsonify(ws.get_all_records())
+    except gspread.exceptions.WorksheetNotFound:
+        return jsonify([])
+
+@app.route('/api/sec-order-names', methods=['POST'])
+def add_sec_order_name():
+    data = request.json
+    ws = SHEET.worksheet('sec_order_names')
+    new_id = get_next_id(ws)
+    ws.append_row([new_id, data.get('name', '')])
+    return jsonify({'success': True})
+
+@app.route('/api/sec-order-names/<int:name_id>', methods=['DELETE'])
+def delete_sec_order_name(name_id):
+    ws = SHEET.worksheet('sec_order_names')
+    try:
+        cell = ws.find(str(name_id), in_column=1)
+        ws.delete_rows(cell.row)
+    except Exception: pass
+    return jsonify({'success': True})
+    
+# ── Secondary Orders API ──────────────────────────────────────────────────────
 
 # ── Secondary Orders API ──────────────────────────────────────────────────────
 
@@ -379,7 +408,6 @@ def get_secondary_orders():
     ws = SHEET.worksheet('secondary_orders')
     orders = ws.get_all_records()
     for o in orders:
-        # Hide apostrophe from card digits
         if str(o.get('last_digits', '')).startswith("'"):
             o['last_digits'] = str(o['last_digits'])[1:]
     return jsonify(list(reversed(orders)))
@@ -396,8 +424,9 @@ def add_secondary_order():
     
     row_data = [
         new_id, data.get('card_type', ''), save_digits,
-        data.get('platform', ''), data.get('model', ''), data.get('variant', ''), 
-        float(data.get('costing') or 0), now
+        data.get('platform', ''), data.get('order_name', ''), 
+        data.get('model', ''), data.get('variant', ''), 
+        data.get('delivery_date', ''), float(data.get('costing') or 0), now
     ]
     ws.append_row(row_data)
     
@@ -420,10 +449,12 @@ def update_secondary_order(order_id):
         
         row_data = [
             order_id, data.get('card_type', ''), save_digits,
-            data.get('platform', ''), data.get('model', ''), data.get('variant', ''), 
-            float(data.get('costing') or 0), original.get('created_at', '')
+            data.get('platform', ''), data.get('order_name', ''), 
+            data.get('model', ''), data.get('variant', ''), 
+            data.get('delivery_date', ''), float(data.get('costing') or 0), original.get('created_at', '')
         ]
-        ws.update(f'A{row_idx}:H{row_idx}', [row_data])
+        # Notice we update columns A through J now
+        ws.update(f'A{row_idx}:J{row_idx}', [row_data]) 
         
         row_data[2] = last_digits
         headers = ws.row_values(1)
@@ -456,7 +487,8 @@ def export_secondary_orders():
     fmt = request.args.get('format', 'csv')
     ws = SHEET.worksheet('secondary_orders')
     orders = list(reversed(ws.get_all_records()))
-    headers = ['ID', 'Card Type', 'Last Digits', 'Platform', 'Model', 'Variant', 'Costing', 'Created At']
+    # Updated headers to match new format
+    headers = ['ID', 'Card Type', 'Last Digits', 'Platform', 'Order Name', 'Model', 'Variant', 'Delivery Date', 'Costing', 'Created At']
 
     if fmt == 'excel':
         wb = openpyxl.Workbook()
@@ -470,7 +502,7 @@ def export_secondary_orders():
             cell.font = hfont
         
         for rn, o in enumerate(orders, 2):
-            vals = [o.get('id'), o.get('card_type'), o.get('last_digits'), o.get('platform'), o.get('model'), o.get('variant'), o.get('costing'), o.get('created_at')]
+            vals = [o.get('id'), o.get('card_type'), str(o.get('last_digits', '')).replace("'", ""), o.get('platform'), o.get('order_name'), o.get('model'), o.get('variant'), o.get('delivery_date'), o.get('costing'), o.get('created_at')]
             for cn, v in enumerate(vals, 1):
                 ws_excel.cell(row=rn, column=cn, value=v)
                 
@@ -483,9 +515,5 @@ def export_secondary_orders():
         writer = csv.writer(output)
         writer.writerow(headers)
         for o in orders:
-            writer.writerow([o.get('id'), o.get('card_type'), o.get('last_digits'), o.get('platform'), o.get('model'), o.get('variant'), o.get('costing'), o.get('created_at')])
+            writer.writerow([o.get('id'), o.get('card_type'), str(o.get('last_digits', '')).replace("'", ""), o.get('platform'), o.get('order_name'), o.get('model'), o.get('variant'), o.get('delivery_date'), o.get('costing'), o.get('created_at')])
         return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/csv', as_attachment=True, download_name='secondary_orders.csv')
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
