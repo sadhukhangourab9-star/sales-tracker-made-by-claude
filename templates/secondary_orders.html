@@ -6,11 +6,11 @@
 <div class="page-header">
   <div>
     <div class="page-title">Secondary Orders</div>
-    <div class="page-subtitle">Track supplementary order entries by card, platform & model</div>
+    <div class="page-subtitle">Track supplementary order entries with financial and batch details</div>
   </div>
   <div style="display:flex;gap:10px;align-items:center;">
     <div class="stat-pill"><strong id="totalCount">0</strong> Orders</div>
-    <div class="stat-pill">Total: <strong id="totalCost">₹0</strong></div>
+    <div class="stat-pill" id="totalCost" style="color:var(--text);font-weight:600;">Spend: ₹0 | Profit: ₹0</div>
   </div>
 </div>
 
@@ -27,8 +27,7 @@
     </div>
     <div class="col-md-2">
       <label class="form-label">2. Card Number *</label>
-      <input type="text" id="f_digits" class="form-control" placeholder="Last 4-5 digits" maxlength="5"
-             oninput="onDigitsInput(this.value, 'f_bank')"/>
+      <input type="text" id="f_digits" class="form-control" placeholder="Last 4-5 digits" maxlength="5" oninput="onDigitsInput(this.value, 'f_bank')"/>
     </div>
     <div class="col-md-2">
       <label class="form-label">3. Bank</label>
@@ -36,27 +35,20 @@
     </div>
     <div class="col-md-2">
       <label class="form-label">4. Platform *</label>
-      <select id="f_platform" class="form-select">
-        <option value="">Select Platform</option>
-      </select>
+      <select id="f_platform" class="form-select"><option value="">Select Platform</option></select>
     </div>
     <div class="col-md-2">
       <label class="form-label">5. Order Name *</label>
-      <select id="f_order_name" class="form-select">
-        <option value="">Select Order Name</option>
-      </select>
+      <select id="f_order_name" class="form-select"><option value="">Select Order Name</option></select>
     </div>
     <div class="col-md-2">
       <label class="form-label">6. Model *</label>
-      <input type="text" id="f_model" class="form-control" placeholder="e.g. iPhone 15" list="modelList"
-             oninput="onModelInput(this.value,'f_variant')"/>
+      <input type="text" id="f_model" class="form-control" placeholder="e.g. iPhone 15" list="modelList" oninput="onModelInput(this.value,'f_variant')"/>
       <datalist id="modelList"></datalist>
     </div>
     <div class="col-md-2">
       <label class="form-label">7. Variant</label>
-      <select id="f_variant" class="form-select" onchange="onVariantChange(this, 'f_costing')">
-        <option value="">Select Variant</option>
-      </select>
+      <select id="f_variant" class="form-select" onchange="onVariantChange(this, 'f_costing')"><option value="">Select Variant</option></select>
     </div>
     <div class="col-md-2">
       <label class="form-label">8. Delivery Date</label>
@@ -66,6 +58,14 @@
       <label class="form-label">9. Costing (₹)</label>
       <input type="number" id="f_costing" class="form-control" placeholder="Amount" step="0.01"/>
     </div>
+    <div class="col-md-2">
+      <label class="form-label">10. Selling Price (₹)</label>
+      <input type="number" id="f_selling_price" class="form-control" placeholder="Optional" step="0.01"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">11. Sale Batch</label>
+      <input type="text" id="f_sale_batch" class="form-control" value="Current Sale" placeholder="e.g. Sale 1"/>
+    </div>
 
     <div class="col-12 d-flex gap-2 mt-2">
       <button class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Order</button>
@@ -74,14 +74,23 @@
   </div>
 </div>
 
-<div class="toolbar">
-  <div class="search-wrap">
-    <i class="bi bi-search"></i>
-    <input type="text" class="search-input" id="searchInput" placeholder="Search orders…" oninput="filterTable()"/>
+<div class="toolbar" style="display:flex; justify-content:space-between; align-items:center;">
+  <div style="display:flex; gap:10px; align-items:center;">
+    <div class="search-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search orders…" oninput="filterTable()"/>
+    </div>
+    <select id="filterSale" class="form-select" style="width:160px;" onchange="filterTable()">
+      <option value="ALL">All Sales</option>
+    </select>
   </div>
+  
   <div class="toolbar-right">
+    <button class="btn-success-custom" id="bulkSaleBtn" onclick="promptBulkSale()" style="display:none;">
+      <i class="bi bi-tags"></i> Assign Sale
+    </button>
     <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">
-      <i class="bi bi-trash3"></i> Delete Selected (<span id="selCount">0</span>)
+      <i class="bi bi-trash3"></i> Delete (<span id="selCount">0</span>)
     </button>
     <button class="btn-outline-custom" onclick="exportOrders('csv')"><i class="bi bi-filetype-csv"></i> CSV</button>
     <button class="btn-outline-custom" onclick="exportOrders('excel')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
@@ -94,6 +103,7 @@
       <thead>
         <tr>
           <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"/></th>
+          <th>Batch</th>
           <th>Order Date</th>
           <th>Card #</th>
           <th>Bank</th>
@@ -103,13 +113,22 @@
           <th>Variant</th>
           <th>Delivery Date</th>
           <th>Costing</th>
+          <th>Sale Price</th>
+          <th>Profit</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody id="secTableBody">
-        <tr><td colspan="11"><div class="empty-state"><i class="bi bi-inbox"></i><p>No secondary orders yet.</p></div></td></tr>
+        <tr><td colspan="14"><div class="empty-state"><i class="bi bi-inbox"></i><p>Loading orders...</p></div></td></tr>
       </tbody>
     </table>
+  </div>
+  <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px; border-top:1px solid var(--border);">
+    <span id="pageInfo" style="color:var(--muted); font-size:12px; font-weight:600;">0 - 0 of 0</span>
+    <div style="display:flex; gap:8px;">
+      <button id="btnPrev" onclick="changePage(-1)" class="btn-outline-custom" disabled>Previous</button>
+      <button id="btnNext" onclick="changePage(1)" class="btn-outline-custom" disabled>Next</button>
+    </div>
   </div>
 </div>
 
@@ -156,6 +175,14 @@
             <label class="form-label">Costing (₹)</label>
             <input type="number" id="e_costing" class="form-control" step="0.01"/>
           </div>
+          <div class="col-md-3">
+            <label class="form-label">Selling Price (₹)</label>
+            <input type="number" id="e_selling_price" class="form-control" step="0.01"/>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Sale Batch</label>
+            <input type="text" id="e_sale_batch" class="form-control"/>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -170,13 +197,16 @@
 {% block scripts %}
 <script>
 let allOrders = [];
+let filteredOrders = [];
+let currentPage = 1;
+const PAGE_SIZE = 50;
 let modelTimer = null;
 const editModal = new bootstrap.Modal(document.getElementById('editModal'));
 
+// ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-  const now = new Date();
   document.getElementById('f_delivery_date').value = '';
-  document.getElementById('f_created_at').value = now.toLocaleString('en-IN');
+  document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
 
   const platforms = await api('/api/platform-names');
   ['f_platform','e_platform'].forEach(id => {
@@ -192,7 +222,6 @@ async function init() {
     models.forEach(m => { const opt = document.createElement('option'); opt.value = m.model_name; dl.appendChild(opt); });
   });
 
-  // Load Secondary Order Names into dropdowns
   const secNames = await api('/api/sec-order-names');
   ['f_order_name','e_order_name'].forEach(id => {
     const sel = document.getElementById(id);
@@ -205,17 +234,37 @@ async function init() {
 
 async function loadOrders() {
   allOrders = await api('/api/secondary-orders');
-  renderTable(allOrders);
-  updateStats();
+  populateSaleFilter();
+  filterTable();
 }
 
-function renderTable(orders) {
+// ── Pagination & Rendering ────────────────────────────────────────────────────
+function renderTable() {
   const body = document.getElementById('secTableBody');
-  if (!orders.length) { body.innerHTML = '<tr><td colspan="11"><div class="empty-state"><i class="bi bi-inbox"></i><p>No orders found.</p></div></td></tr>'; return; }
-  body.innerHTML = orders.map(o => `
+  if (!filteredOrders.length) { 
+    body.innerHTML = '<tr><td colspan="14"><div class="empty-state"><i class="bi bi-inbox"></i><p>No secondary orders found.</p></div></td></tr>'; 
+    document.getElementById('pageInfo').textContent = '0 - 0 of 0';
+    document.getElementById('btnPrev').disabled = true;
+    document.getElementById('btnNext').disabled = true;
+    return; 
+  }
+  
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const end = Math.min(start + PAGE_SIZE, filteredOrders.length);
+  const pageData = filteredOrders.slice(start, end);
+  
+  document.getElementById('pageInfo').textContent = `${start + 1} - ${end} of ${filteredOrders.length}`;
+  document.getElementById('btnPrev').disabled = currentPage === 1;
+  document.getElementById('btnNext').disabled = end >= filteredOrders.length;
+
+  body.innerHTML = pageData.map(o => {
+    const pColor = o.profit >= 0 ? 'var(--green)' : 'var(--red)';
+    const dateStr = (o.created_at || '—').split(' ')[0];
+    return `
     <tr data-id="${o.id}">
       <td><input type="checkbox" class="row-check" value="${o.id}" onchange="onCheckChange()"/></td>
-      <td style="color:var(--muted);font-size:12px;">${o.created_at||'—'}</td>
+      <td><span class="badge-card" style="background:var(--navy);border:1px solid var(--border)">${o.sale_batch||'Current Sale'}</span></td>
+      <td style="color:var(--muted);font-size:12px;">${dateStr}</td>
       <td><code style="color:var(--accent2);font-size:12px;">•••• ${o.last_digits||'—'}</code></td>
       <td>${cardBadge(o.card_type)}</td>
       <td>${o.platform||'—'}</td>
@@ -223,23 +272,60 @@ function renderTable(orders) {
       <td>${o.model||'—'}</td>
       <td style="color:var(--muted)">${o.variant||'—'}</td>
       <td style="color:var(--muted)">${o.delivery_date||'—'}</td>
-      <td style="color:var(--green);font-weight:600">${formatCost(o.costing)}</td>
+      <td style="color:var(--muted)">${formatCost(o.costing)}</td>
+      <td style="color:var(--text);font-weight:600">${formatCost(o.selling_price)}</td>
+      <td style="color:${pColor};font-weight:600">${formatCost(o.profit)}</td>
       <td>
         <div style="display:flex;gap:6px;">
           <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})"><i class="bi bi-pencil"></i></button>
-          <button class="btn-danger-custom" style="padding:4px 9px;" onclick="deleteOrder(${o.id})"><i class="bi bi-trash3"></i></button>
         </div>
       </td>
     </tr>
-  `).join('');
+  `}).join('');
+}
+
+function changePage(dir) {
+  currentPage += dir;
+  renderTable();
 }
 
 function updateStats() {
-  document.getElementById('totalCount').textContent = allOrders.length;
-  const total = allOrders.reduce((s, o) => s + (parseFloat(o.costing)||0), 0);
-  document.getElementById('totalCost').textContent = '₹' + total.toLocaleString('en-IN');
+  document.getElementById('totalCount').textContent = filteredOrders.length;
+  const totalCost = filteredOrders.reduce((s, o) => s + (parseFloat(o.costing)||0), 0);
+  const totalProfit = filteredOrders.reduce((s, o) => s + (parseFloat(o.profit)||0), 0);
+  document.getElementById('totalCost').innerHTML = `<span style="color:var(--muted)">Spend:</span> ${formatCost(totalCost)} <span style="color:var(--muted);margin-left:8px;">Profit:</span> <span style="color:var(--green)">${formatCost(totalProfit)}</span>`;
 }
 
+// ── Search & Filters ──────────────────────────────────────────────────────────
+function populateSaleFilter() {
+  const sales = [...new Set(allOrders.map(o => o.sale_batch || 'Current Sale'))].sort();
+  const sel = document.getElementById('filterSale');
+  const currentVal = sel.value;
+  
+  sel.innerHTML = '<option value="ALL">All Sales</option>';
+  sales.forEach(s => { 
+    const opt = document.createElement('option'); opt.value = s; opt.textContent = s; sel.appendChild(opt); 
+  });
+  
+  if ([...sel.options].some(o => o.value === currentVal)) { sel.value = currentVal; }
+}
+
+function filterTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const saleFilter = document.getElementById('filterSale').value;
+  
+  filteredOrders = allOrders.filter(o => {
+    const matchesSearch = Object.values(o).some(v => String(v||'').toLowerCase().includes(q));
+    const matchesSale = (saleFilter === 'ALL') || ((o.sale_batch || 'Current Sale') === saleFilter);
+    return matchesSearch && matchesSale;
+  });
+  
+  currentPage = 1; 
+  renderTable();
+  updateStats();
+}
+
+// ── Form ──────────────────────────────────────────────────────────────────────
 function toggleForm() {
   const panel = document.getElementById('addFormPanel');
   const btn = document.getElementById('formToggleText');
@@ -249,10 +335,11 @@ function toggleForm() {
 }
 
 function clearForm() {
-  ['f_digits','f_bank','f_model','f_costing'].forEach(id => document.getElementById(id).value = '');
+  ['f_digits','f_bank','f_model','f_costing','f_selling_price'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('f_platform').value = '';
   document.getElementById('f_order_name').value = '';
   document.getElementById('f_variant').innerHTML = '<option value="">Select Variant</option>';
+  document.getElementById('f_sale_batch').value = 'Current Sale';
   document.getElementById('f_delivery_date').value = '';
   document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN'); 
 }
@@ -287,6 +374,8 @@ async function submitOrder() {
     variant:       document.getElementById('f_variant').value,
     delivery_date: document.getElementById('f_delivery_date').value,
     costing:       document.getElementById('f_costing').value || null,
+    selling_price: document.getElementById('f_selling_price').value || null,
+    sale_batch:    document.getElementById('f_sale_batch').value.trim() || 'Current Sale'
   };
   if (!payload.last_digits || !payload.platform || !payload.order_name || !payload.model) {
     showToast('Fill required fields: Last Digits, Platform, Order Name, Model', 'error'); return;
@@ -294,7 +383,7 @@ async function submitOrder() {
   const res = await api('/api/secondary-orders', 'POST', payload);
   if (res.error) { showToast(res.error, 'error'); return; }
   allOrders.unshift(res);
-  renderTable(allOrders); updateStats(); clearForm(); showToast('Secondary order saved!');
+  populateSaleFilter(); filterTable(); clearForm(); showToast('Secondary order saved!');
 }
 
 async function openEdit(id) {
@@ -306,6 +395,8 @@ async function openEdit(id) {
   document.getElementById('e_model').value = o.model || '';
   document.getElementById('e_delivery_date').value = o.delivery_date || '';
   document.getElementById('e_costing').value = o.costing || '';
+  document.getElementById('e_selling_price').value = o.selling_price || '';
+  document.getElementById('e_sale_batch').value = o.sale_batch || 'Current Sale';
 
   const platforms = await api('/api/platform-names');
   const ePlat = document.getElementById('e_platform');
@@ -345,25 +436,31 @@ async function saveEdit() {
     variant:       document.getElementById('e_variant').value,
     delivery_date: document.getElementById('e_delivery_date').value,
     costing:       document.getElementById('e_costing').value || null,
+    selling_price: document.getElementById('e_selling_price').value || null,
+    sale_batch:    document.getElementById('e_sale_batch').value.trim() || 'Current Sale'
   };
   const res = await api(`/api/secondary-orders/${id}`, 'PUT', payload);
   if (res.error) { showToast(res.error, 'error'); return; }
   const idx = allOrders.findIndex(x => x.id === res.id);
   if (idx !== -1) allOrders[idx] = res;
-  renderTable(allOrders); updateStats(); editModal.hide(); showToast('Order updated!');
+  populateSaleFilter(); filterTable(); editModal.hide(); showToast('Order updated!');
 }
 
 async function deleteOrder(id) {
   if (!confirm('Delete this order?')) return;
   const res = await api(`/api/secondary-orders/${id}`, 'DELETE');
-  if (res.success) { allOrders = allOrders.filter(o => o.id !== id); renderTable(allOrders); updateStats(); showToast('Order deleted.'); }
+  if (res.success) { allOrders = allOrders.filter(o => o.id !== id); populateSaleFilter(); filterTable(); showToast('Order deleted.'); }
 }
 
 function onCheckChange() {
   const checks = document.querySelectorAll('.row-check:checked');
-  const btn = document.getElementById('bulkDeleteBtn');
+  const delBtn = document.getElementById('bulkDeleteBtn');
+  const saleBtn = document.getElementById('bulkSaleBtn');
   document.getElementById('selCount').textContent = checks.length;
-  btn.style.display = checks.length ? 'inline-flex' : 'none';
+  
+  const show = checks.length > 0;
+  delBtn.style.display = show ? 'inline-flex' : 'none';
+  saleBtn.style.display = show ? 'inline-flex' : 'none';
 }
 
 function toggleSelectAll(cb) { document.querySelectorAll('.row-check').forEach(c => { c.checked = cb.checked; }); onCheckChange(); }
@@ -372,13 +469,23 @@ async function bulkDelete() {
   const ids = [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
   if (!ids.length || !confirm(`Delete ${ids.length} selected orders?`)) return;
   const res = await api('/api/secondary-orders/bulk-delete', 'POST', {ids});
-  if (res.success) { allOrders = allOrders.filter(o => !ids.includes(o.id)); renderTable(allOrders); updateStats(); document.getElementById('selectAll').checked = false; document.getElementById('bulkDeleteBtn').style.display = 'none'; showToast(`${res.deleted} orders deleted.`); }
+  if (res.success) { allOrders = allOrders.filter(o => !ids.includes(o.id)); populateSaleFilter(); filterTable(); document.getElementById('selectAll').checked = false; onCheckChange(); showToast(`${res.deleted} orders deleted.`); }
 }
 
-function filterTable() {
-  const q = document.getElementById('searchInput').value.toLowerCase();
-  const filtered = allOrders.filter(o => Object.values(o).some(v => String(v||'').toLowerCase().includes(q)));
-  renderTable(filtered);
+async function promptBulkSale() {
+  const ids = [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
+  if (!ids.length) return;
+  
+  const newBatch = prompt(`Enter Sale Batch name for ${ids.length} orders (e.g. Sale 1, Current Sale):`, "Sale 1");
+  if (!newBatch) return;
+
+  const res = await api('/api/secondary-orders/bulk-update-sale', 'POST', {ids: ids, sale_batch: newBatch});
+  if (res.success) {
+    showToast(`Assigned ${ids.length} orders to ${newBatch}`);
+    await loadOrders(); 
+    document.getElementById('selectAll').checked = false;
+    onCheckChange();
+  }
 }
 
 function exportOrders(fmt) { window.location.href = `/api/secondary-orders/export?format=${fmt}`; }
