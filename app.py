@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file, Response
+from flask import Flask, render_template, request, jsonify, send_file
 import os
 import io
 import json
@@ -8,29 +8,8 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 import gspread
 from google.oauth2.service_account import Credentials
-from functools import wraps
 
 app = Flask(__name__)
-
-# ── Authentication Setup ──────────────────────────────────────────────────────
-APP_PASSWORD = os.environ.get('APP_PASSWORD', 'admin123')
-
-def check_auth(username, password):
-    return username == 'admin' and password == APP_PASSWORD
-
-def authenticate():
-    return Response(
-    'Please log in with username "admin" and your master password.', 401,
-    {'WWW-Authenticate': 'Basic realm="Login Required"'})
-
-def requires_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth = request.authorization
-        if not auth or not check_auth(auth.username, auth.password):
-            return authenticate()
-        return f(*args, **kwargs)
-    return decorated
 
 # ── Google Sheets Setup ───────────────────────────────────────────────────────
 SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'OrderTrack_DB')
@@ -54,22 +33,18 @@ def get_next_id(ws):
 
 # ── Page Routes ──────────────────────────────────────────────────────────────
 @app.route('/')
-@requires_auth
 def main_orders():
     return render_template('main_orders.html')
 
 @app.route('/secondary')
-@requires_auth
 def secondary_orders():
     return render_template('secondary_orders.html')
 
 @app.route('/settings')
-@requires_auth
 def settings():
     return render_template('settings.html')
 
 @app.route('/dashboard')
-@requires_auth
 def dashboard():
     return render_template('dashboard.html')
 
