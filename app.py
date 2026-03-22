@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, Response
 import os
 import io
 import json
@@ -8,13 +8,33 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 import gspread
 from google.oauth2.service_account import Credentials
+from functools import wraps
 
 app = Flask(__name__)
+
+# ── Authentication Setup ──────────────────────────────────────────────────────
+APP_PASSWORD = os.environ.get('APP_PASSWORD', 'admin123')
+
+def check_auth(username, password):
+    return username == 'admin' and password == APP_PASSWORD
+
+def authenticate():
+    return Response(
+    'Please log in with username "admin" and your master password.', 401,
+    {'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or not check_auth(auth.username, auth.password):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
 
 # ── Google Sheets Setup ───────────────────────────────────────────────────────
 SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'OrderTrack_DB')
 creds_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
-
 SHEET = None
 
 if creds_json:
@@ -26,30 +46,6 @@ if creds_json:
         SHEET = client.open(SHEET_NAME)
     except Exception as e:
         print(f"Failed to connect to Google Sheets: {e}")
-else:
-    print("WARNING: No GOOGLE_CREDENTIALS_JSON environment variable found.")
-
-def init_sheets():
-    if not SHEET: return
-    tabs = {
-        'cards': ['id', 'card_type', 'last_digits'],
-        'platforms': ['id', 'platform_name', 'account_name'],
-        'models': ['id', 'model_name'],
-        'variants': ['id', 'model_id', 'variant_name'],
-        'main_orders': ['id', 'card_type', 'last_digits', 'platform', 'account', 'order_name', 'model', 'variant', 'costing', 'delivery_date', 'created_at'],
-        'secondary_orders': ['id', 'card_type', 'last_digits', 'platform', 'model', 'variant', 'costing', 'created_at']
-    }
-    for title, headers in tabs.items():
-        try:
-            ws = SHEET.worksheet(title)
-            if not ws.row_values(1):
-                ws.append_row(headers)
-        except gspread.exceptions.WorksheetNotFound:
-            ws = SHEET.add_worksheet(title=title, rows=100, cols=20)
-            ws.append_row(headers)
-
-# Initialize tabs on startup
-init_sheets()
 
 def get_next_id(ws):
     records = ws.get_all_records()
@@ -57,18 +53,25 @@ def get_next_id(ws):
     return max([int(r.get('id', 0)) for r in records]) + 1
 
 # ── Page Routes ──────────────────────────────────────────────────────────────
-
 @app.route('/')
+@requires_auth
 def main_orders():
     return render_template('main_orders.html')
 
 @app.route('/secondary')
+@requires_auth
 def secondary_orders():
     return render_template('secondary_orders.html')
 
 @app.route('/settings')
+@requires_auth
 def settings():
     return render_template('settings.html')
+
+@app.route('/dashboard')
+@requires_auth
+def dashboard():
+    return render_template('dashboard.html')
 
 
 # ── Cards API ─────────────────────────────────────────────────────────────────
@@ -244,20 +247,20 @@ def delete_variant(variant_id):
 # ── Main Orders API ───────────────────────────────────────────────────────────
 
 @app.route('/api/main-orders', methods=['GET'])
+@requires_auth
 def get_main_orders():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('main_orders')
     orders = ws.get_all_records()
     for o in orders:
-        # Hide apostrophe from card digits
         if str(o.get('last_digits', '')).startswith("'"):
             o['last_digits'] = str(o['last_digits'])[1:]
-        # Hide apostrophe from account numbers
         if str(o.get('account', '')).startswith("'"):
             o['account'] = str(o['account'])[1:]
     return jsonify(list(reversed(orders)))
 
 @app.route('/api/main-orders', methods=['POST'])
+@requires_auth
 def add_main_order():
     data = request.json
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -266,25 +269,28 @@ def add_main_order():
     
     last_digits = str(data.get('last_digits', ''))
     save_digits = f"'{last_digits}" if last_digits else ""
-    
     account = str(data.get('account', ''))
     save_account = f"'{account}" if account.isdigit() else account
     
+    costing = float(data.get('costing') or 0)
+    selling_price = float(data.get('selling_price') or 0)
+    profit = selling_price - costing
+    sale_batch = data.get('sale_batch', 'Current Sale')
+    if not sale_batch.strip(): sale_batch = 'Current Sale'
+    
     row_data = [
-        new_id, data.get('card_type', ''), save_digits,
-        data.get('platform', ''), save_account, data.get('order_name', ''),
-        data.get('model', ''), data.get('variant', ''), float(data.get('costing') or 0),
-        data.get('delivery_date', ''), now
+        new_id, data.get('card_type', ''), save_digits, data.get('platform', ''), save_account, 
+        data.get('order_name', ''), data.get('model', ''), data.get('variant', ''), 
+        costing, selling_price, profit, data.get('delivery_date', ''), sale_batch, now
     ]
     ws.append_row(row_data)
-    
-    # Strip the apostrophe before sending it back to the frontend immediately
     row_data[2] = last_digits
     row_data[4] = account
     headers = ws.row_values(1)
     return jsonify(dict(zip(headers, row_data)))
 
 @app.route('/api/main-orders/<int:order_id>', methods=['PUT'])
+@requires_auth
 def update_main_order(order_id):
     data = request.json
     ws = SHEET.worksheet('main_orders')
@@ -293,20 +299,22 @@ def update_main_order(order_id):
     
     if original:
         row_idx = records.index(original) + 2
-        
         last_digits = str(data.get('last_digits', ''))
         save_digits = f"'{last_digits}" if last_digits else ""
-        
         account = str(data.get('account', ''))
         save_account = f"'{account}" if account.isdigit() else account
         
+        costing = float(data.get('costing') or 0)
+        selling_price = float(data.get('selling_price') or 0)
+        profit = selling_price - costing
+        sale_batch = data.get('sale_batch', 'Current Sale')
+        
         row_data = [
-            order_id, data.get('card_type', ''), save_digits,
-            data.get('platform', ''), save_account, data.get('order_name', ''),
-            data.get('model', ''), data.get('variant', ''), float(data.get('costing') or 0),
-            data.get('delivery_date', ''), original.get('created_at', '')
+            order_id, data.get('card_type', ''), save_digits, data.get('platform', ''), save_account, 
+            data.get('order_name', ''), data.get('model', ''), data.get('variant', ''), 
+            costing, selling_price, profit, data.get('delivery_date', ''), sale_batch, original.get('created_at', '')
         ]
-        ws.update(f'A{row_idx}:K{row_idx}', [row_data])
+        ws.update(f'A{row_idx}:N{row_idx}', [row_data])
         
         row_data[2] = last_digits
         row_data[4] = account
@@ -314,61 +322,27 @@ def update_main_order(order_id):
         return jsonify(dict(zip(headers, row_data)))
     return jsonify({'error': 'Not found'}), 404
 
-@app.route('/api/main-orders/<int:order_id>', methods=['DELETE'])
-def delete_main_order(order_id):
-    ws = SHEET.worksheet('main_orders')
-    try:
-        cell = ws.find(str(order_id), in_column=1)
-        ws.delete_rows(cell.row)
-    except Exception: pass
-    return jsonify({'success': True})
-
-@app.route('/api/main-orders/bulk-delete', methods=['POST'])
-def bulk_delete_main_orders():
-    ids = request.json.get('ids', [])
-    if not ids: return jsonify({'error': 'No IDs provided'}), 400
+@app.route('/api/main-orders/bulk-update-sale', methods=['POST'])
+@requires_auth
+def bulk_update_sale():
+    data = request.json
+    ids = data.get('ids', [])
+    new_batch = data.get('sale_batch', 'Current Sale')
+    if not ids: return jsonify({'success': False})
+    
     ws = SHEET.worksheet('main_orders')
     records = ws.get_all_records()
+    cells_to_update = []
     
-    rows_to_delete = [i + 2 for i, r in enumerate(records) if r['id'] in ids]
-    for r_idx in sorted(rows_to_delete, reverse=True):
-        ws.delete_rows(r_idx)
-    return jsonify({'success': True, 'deleted': len(ids)})
-
-@app.route('/api/main-orders/export')
-def export_main_orders():
-    fmt = request.args.get('format', 'csv')
-    ws = SHEET.worksheet('main_orders')
-    orders = list(reversed(ws.get_all_records()))
-    headers = ['ID', 'Card Type', 'Last Digits', 'Platform', 'Account', 'Order Name', 'Model', 'Variant', 'Costing', 'Delivery Date', 'Created At']
-
-    if fmt == 'excel':
-        wb = openpyxl.Workbook()
-        ws_excel = wb.active
-        ws_excel.title = 'Main Orders'
-        hfill = PatternFill(start_color='1E3A5F', end_color='1E3A5F', fill_type='solid')
-        hfont = Font(color='FFFFFF', bold=True)
-        for col, h in enumerate(headers, 1):
-            cell = ws_excel.cell(row=1, column=col, value=h)
-            cell.fill = hfill
-            cell.font = hfont
-        
-        for rn, o in enumerate(orders, 2):
-            vals = [o.get('id'), o.get('card_type'), o.get('last_digits'), o.get('platform'), o.get('account'), o.get('order_name'), o.get('model'), o.get('variant'), o.get('costing'), o.get('delivery_date'), o.get('created_at')]
-            for cn, v in enumerate(vals, 1):
-                ws_excel.cell(row=rn, column=cn, value=v)
-                
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
-        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='main_orders.xlsx')
-    else:
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(headers)
-        for o in orders:
-            writer.writerow([o.get('id'), o.get('card_type'), o.get('last_digits'), o.get('platform'), o.get('account'), o.get('order_name'), o.get('model'), o.get('variant'), o.get('costing'), o.get('delivery_date'), o.get('created_at')])
-        return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/csv', as_attachment=True, download_name='main_orders.csv')
+    for i, r in enumerate(records):
+        if r['id'] in ids:
+            row_idx = i + 2
+            # Column M is 13 (Sale Batch)
+            cells_to_update.append(gspread.Cell(row=row_idx, col=13, value=new_batch))
+            
+    if cells_to_update:
+        ws.update_cells(cells_to_update)
+    return jsonify({'success': True})
 
 # ── Secondary Order Names API ─────────────────────────────────────────────────
 
