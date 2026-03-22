@@ -3,15 +3,17 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <link rel="manifest" href="/static/manifest.json">
+  <title>{% block title %}Order Tracker{% endblock %}</title>
+  
+  <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0f1c2e">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>{% block title %}Order Tracker{% endblock %}</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  
   <style>
     :root {
       --navy:    #0f1c2e;
@@ -294,7 +296,6 @@
     <a href="/dashboard" class="nav-link {% if active=='dashboard' %}active{% endif %}">
       <i class="bi bi-graph-up-arrow"></i> Dashboard
     </a>
-
     <div class="nav-label">Orders</div>
     <a href="/" class="nav-link {% if active=='main' %}active{% endif %}">
       <i class="bi bi-journal-text"></i> Main Orders
@@ -357,7 +358,7 @@
     });
   }
 
-  // Variant lookup helper (UPDATED FOR COSTING)
+  // Variant lookup helper
   async function lookupVariants(modelName, variantSelect) {
     variantSelect.innerHTML = '<option value="">Loading...</option>';
     try {
@@ -365,13 +366,12 @@
       variantSelect.innerHTML = '<option value="">Select Variant</option>';
       variants.forEach(v => {
         const opt = document.createElement('option');
-        // This safely handles both the old and new data formats
         const vName = typeof v === 'object' ? v.variant_name : v;
         const vCost = typeof v === 'object' ? (v.costing || '') : '';
         
         opt.value = vName;
         opt.textContent = vName;
-        opt.setAttribute('data-costing', vCost); // Store the cost securely
+        opt.setAttribute('data-costing', vCost); 
         variantSelect.appendChild(opt);
       });
     } catch (e) {
@@ -393,13 +393,14 @@
     return `<span class="badge-card ${cls}">${type}</span>`;
   }
 </script>
-{% block scripts %}{% endblock %}
-  <script>
+
+<script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/static/sw.js');
+      navigator.serviceWorker.register('/sw.js');
     });
   }
 </script>
+{% block scripts %}{% endblock %}
 </body>
 </html>
