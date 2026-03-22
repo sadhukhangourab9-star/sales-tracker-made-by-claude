@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% set active = 'dashboard' %}
+{% block title %}Dashboard — OrderTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Financial Dashboard</div>
+    <div class="page-subtitle">Visual overview of your spending and profits</div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="card-panel text-center">
+      <h6 style="color:var(--muted);text-transform:uppercase;font-size:12px;">Total Spend (All Time)</h6>
+      <h3 id="statSpend" style="color:var(--accent2);font-family:'Space Grotesk',sans-serif;">₹0</h3>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-panel text-center">
+      <h6 style="color:var(--muted);text-transform:uppercase;font-size:12px;">Total Profit (All Time)</h6>
+      <h3 id="statProfit" style="color:var(--green);font-family:'Space Grotesk',sans-serif;">₹0</h3>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-panel text-center">
+      <h6 style="color:var(--muted);text-transform:uppercase;font-size:12px;">Top Card Used</h6>
+      <h3 id="statCard" style="color:var(--amber);font-family:'Space Grotesk',sans-serif;">—</h3>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card-panel">
+      <div class="card-panel-title"><i class="bi bi-bar-chart-fill"></i> Spend & Profit by Month</div>
+      <canvas id="monthlyChart" height="100"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card-panel">
+      <div class="card-panel-title"><i class="bi bi-credit-card-fill"></i> Card Utilization</div>
+      <canvas id="cardChart" height="220"></canvas>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+async function initDashboard() {
+  const orders = await api('/api/main-orders');
+  
+  let totalSpend = 0;
+  let totalProfit = 0;
+  const monthlyData = {};
+  const cardData = {};
+
+  orders.forEach(o => {
+    // Totals
+    totalSpend += (parseFloat(o.costing) || 0);
+    totalProfit += (parseFloat(o.profit) || 0);
+
+    // Monthly Logic (Using delivery_date or created_at)
+    const dateStr = o.delivery_date || o.created_at.split(' ')[0];
+    const month = dateStr.substring(0, 7); // YYYY-MM
+    if (month && month.length === 7) {
+        if (!monthlyData[month]) monthlyData[month] = { spend: 0, profit: 0 };
+        monthlyData[month].spend += (parseFloat(o.costing) || 0);
+        monthlyData[month].profit += (parseFloat(o.profit) || 0);
+    }
+
+    // Card Logic
+    if (o.last_digits) {
+        const cardKey = `${o.card_type} *${o.last_digits}`;
+        if (!cardData[cardKey]) cardData[cardKey] = 0;
+        cardData[cardKey] += (parseFloat(o.costing) || 0);
+    }
+  });
+
+  document.getElementById('statSpend').textContent = formatCost(totalSpend);
+  document.getElementById('statProfit').textContent = formatCost(totalProfit);
+
+  // Top Card
+  const topCard = Object.entries(cardData).sort((a, b) => b[1] - a[1])[0];
+  if (topCard) document.getElementById('statCard').textContent = topCard[0];
+
+  // Draw Monthly Chart
+  const months = Object.keys(monthlyData).sort();
+  new Chart(document.getElementById('monthlyChart'), {
+    type: 'bar',
+    data: {
+      labels: months,
+      datasets: [
+        { label: 'Spend (₹)', data: months.map(m => monthlyData[m].spend), backgroundColor: '#3b9ddd' },
+        { label: 'Profit (₹)', data: months.map(m => monthlyData[m].profit), backgroundColor: '#2ecc8f' }
+      ]
+    },
+    options: { plugins: { legend: { labels: { color: '#e8edf3' } } }, scales: { x: { ticks: { color: '#8fa3bc' } }, y: { ticks: { color: '#8fa3bc' } } } }
+  });
+
+  // Draw Card Chart
+  new Chart(document.getElementById('cardChart'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(cardData),
+      datasets: [{ data: Object.values(cardData), backgroundColor: ['#3b9ddd', '#2ecc8f', '#f5a623', '#e74c3c', '#9b59b6'] }]
+    },
+    options: { plugins: { legend: { position: 'bottom', labels: { color: '#e8edf3' } } }, cutout: '70%' }
+  });
+}
+initDashboard();
+</script>
+{% endblock %}
