@@ -3,30 +3,37 @@
 {% block title %}Dashboard — OrderTrack{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
   <div>
     <div class="page-title">Financial Dashboard</div>
-    <div class="page-subtitle">Visual overview of your spending and profits</div>
+    <div class="page-subtitle">Combined overview of Main & Secondary orders</div>
+  </div>
+  
+  <div style="display:flex; align-items:center; gap:10px;">
+    <label class="form-label" style="margin-bottom:0; color:var(--muted);">Filter by Sale:</label>
+    <select id="filterSale" class="form-select" style="width:200px; font-weight:600; color:var(--accent2);" onchange="renderDashboard()">
+      <option value="ALL">Loading...</option>
+    </select>
   </div>
 </div>
 
 <div class="row g-4 mb-4">
   <div class="col-md-4">
     <div class="card-panel text-center">
-      <h6 style="color:var(--muted);text-transform:uppercase;font-size:12px;">Total Spend (All Time)</h6>
+      <h6 id="spendLabel" style="color:var(--muted);text-transform:uppercase;font-size:12px;">Total Spend</h6>
       <h3 id="statSpend" style="color:var(--accent2);font-family:'Space Grotesk',sans-serif;">₹0</h3>
     </div>
   </div>
   <div class="col-md-4">
     <div class="card-panel text-center">
-      <h6 style="color:var(--muted);text-transform:uppercase;font-size:12px;">Total Profit (All Time)</h6>
+      <h6 id="profitLabel" style="color:var(--muted);text-transform:uppercase;font-size:12px;">Total Profit</h6>
       <h3 id="statProfit" style="color:var(--green);font-family:'Space Grotesk',sans-serif;">₹0</h3>
     </div>
   </div>
   <div class="col-md-4">
     <div class="card-panel text-center">
-      <h6 style="color:var(--muted);text-transform:uppercase;font-size:12px;">Top Card Used</h6>
-      <h3 id="statCard" style="color:var(--amber);font-family:'Space Grotesk',sans-serif;">—</h3>
+      <h6 style="color:var(--muted);text-transform:uppercase;font-size:12px;">Top Card Used (By Spend)</h6>
+      <h3 id="statCard" style="color:var(--amber);font-family:'Space Grotesk',sans-serif;font-size:22px;margin-top:5px;">—</h3>
     </div>
   </div>
 </div>
@@ -34,7 +41,7 @@
 <div class="row g-4">
   <div class="col-lg-8">
     <div class="card-panel">
-      <div class="card-panel-title"><i class="bi bi-bar-chart-fill"></i> Spend & Profit by Month</div>
+      <div class="card-panel-title"><i class="bi bi-bar-chart-fill"></i> Spend & Profit Timeline</div>
       <canvas id="monthlyChart" height="100"></canvas>
     </div>
   </div>
@@ -50,29 +57,76 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+let allDashboardOrders = [];
+let monthlyChartInstance = null;
+let cardChartInstance = null;
+
 async function initDashboard() {
-  const orders = await api('/api/main-orders');
+  // 1. Fetch data from BOTH databases simultaneously
+  const [mainOrders, secOrders] = await Promise.all([
+    api('/api/main-orders'),
+    api('/api/secondary-orders')
+  ]);
   
+  // Combine them into one massive array
+  allDashboardOrders = [...mainOrders, ...secOrders];
+
+  // 2. Populate the Dropdown with unique Sale Batches
+  populateDashboardFilter();
+
+  // 3. Render the charts for the first time
+  renderDashboard();
+}
+
+function populateDashboardFilter() {
+  // Find all unique sale batches across both databases
+  const sales = [...new Set(allDashboardOrders.map(o => o.sale_batch || 'Current Sale'))].sort();
+  const sel = document.getElementById('filterSale');
+  
+  sel.innerHTML = '<option value="ALL">All Sales (Combined)</option>';
+  sales.forEach(s => { 
+    const opt = document.createElement('option'); 
+    opt.value = s; 
+    opt.textContent = s; 
+    sel.appendChild(opt); 
+  });
+}
+
+function renderDashboard() {
+  const saleFilter = document.getElementById('filterSale').value;
+  
+  // Update UI Labels so you know what you are looking at
+  const labelText = saleFilter === 'ALL' ? '(All Time)' : `(${saleFilter})`;
+  document.getElementById('spendLabel').textContent = `Total Spend ${labelText}`;
+  document.getElementById('profitLabel').textContent = `Total Profit ${labelText}`;
+
+  // Filter the combined data based on the dropdown selection
+  let filteredData = allDashboardOrders;
+  if (saleFilter !== 'ALL') {
+    filteredData = allDashboardOrders.filter(o => (o.sale_batch || 'Current Sale') === saleFilter);
+  }
+
   let totalSpend = 0;
   let totalProfit = 0;
   const monthlyData = {};
   const cardData = {};
 
-  orders.forEach(o => {
-    // Totals
+  // Crunch the numbers for the filtered data
+  filteredData.forEach(o => {
+    // Top Level Stats
     totalSpend += (parseFloat(o.costing) || 0);
     totalProfit += (parseFloat(o.profit) || 0);
 
-    // Monthly Logic (Using delivery_date or created_at)
+    // Monthly Chart Logic (Groups by YYYY-MM)
     const dateStr = o.delivery_date || o.created_at.split(' ')[0];
-    const month = dateStr.substring(0, 7); // YYYY-MM
+    const month = dateStr.substring(0, 7); 
     if (month && month.length === 7) {
         if (!monthlyData[month]) monthlyData[month] = { spend: 0, profit: 0 };
         monthlyData[month].spend += (parseFloat(o.costing) || 0);
         monthlyData[month].profit += (parseFloat(o.profit) || 0);
     }
 
-    // Card Logic
+    // Donut Chart Logic (Groups by Card & Last Digits)
     if (o.last_digits) {
         const cardKey = `${o.card_type} *${o.last_digits}`;
         if (!cardData[cardKey]) cardData[cardKey] = 0;
@@ -80,37 +134,60 @@ async function initDashboard() {
     }
   });
 
+  // Apply text stats to the DOM
   document.getElementById('statSpend').textContent = formatCost(totalSpend);
   document.getElementById('statProfit').textContent = formatCost(totalProfit);
+  
+  // Find the highest spend card
+  const topCardArr = Object.entries(cardData).sort((a, b) => b[1] - a[1]);
+  document.getElementById('statCard').textContent = topCardArr.length > 0 ? topCardArr[0][0] : '—';
 
-  // Top Card
-  const topCard = Object.entries(cardData).sort((a, b) => b[1] - a[1])[0];
-  if (topCard) document.getElementById('statCard').textContent = topCard[0];
-
-  // Draw Monthly Chart
+  // ── DRAW CHARTS ──
+  // We must destroy old charts before redrawing them, or Chart.js breaks
+  
+  // 1. Monthly Bar Chart
   const months = Object.keys(monthlyData).sort();
-  new Chart(document.getElementById('monthlyChart'), {
+  if (monthlyChartInstance) monthlyChartInstance.destroy();
+  
+  monthlyChartInstance = new Chart(document.getElementById('monthlyChart'), {
     type: 'bar',
     data: {
       labels: months,
       datasets: [
-        { label: 'Spend (₹)', data: months.map(m => monthlyData[m].spend), backgroundColor: '#3b9ddd' },
-        { label: 'Profit (₹)', data: months.map(m => monthlyData[m].profit), backgroundColor: '#2ecc8f' }
+        { label: 'Spend (₹)', data: months.map(m => monthlyData[m].spend), backgroundColor: '#3b9ddd', borderRadius: 4 },
+        { label: 'Profit (₹)', data: months.map(m => monthlyData[m].profit), backgroundColor: '#2ecc8f', borderRadius: 4 }
       ]
     },
-    options: { plugins: { legend: { labels: { color: '#e8edf3' } } }, scales: { x: { ticks: { color: '#8fa3bc' } }, y: { ticks: { color: '#8fa3bc' } } } }
+    options: { 
+      plugins: { legend: { labels: { color: '#e8edf3', font: {family: "'DM Sans', sans-serif"} } } }, 
+      scales: { 
+        x: { ticks: { color: '#8fa3bc' }, grid: { color: 'rgba(255,255,255,0.05)' } }, 
+        y: { ticks: { color: '#8fa3bc' }, grid: { color: 'rgba(255,255,255,0.05)' } } 
+      } 
+    }
   });
 
-  // Draw Card Chart
-  new Chart(document.getElementById('cardChart'), {
+  // 2. Card Donut Chart
+  if (cardChartInstance) cardChartInstance.destroy();
+  
+  cardChartInstance = new Chart(document.getElementById('cardChart'), {
     type: 'doughnut',
     data: {
       labels: Object.keys(cardData),
-      datasets: [{ data: Object.values(cardData), backgroundColor: ['#3b9ddd', '#2ecc8f', '#f5a623', '#e74c3c', '#9b59b6'] }]
+      datasets: [{ 
+        data: Object.values(cardData), 
+        backgroundColor: ['#3b9ddd', '#2ecc8f', '#f5a623', '#e74c3c', '#9b59b6', '#34495e'],
+        borderWidth: 0
+      }]
     },
-    options: { plugins: { legend: { position: 'bottom', labels: { color: '#e8edf3' } } }, cutout: '70%' }
+    options: { 
+      plugins: { legend: { position: 'bottom', labels: { color: '#e8edf3', padding: 15, font: {family: "'DM Sans', sans-serif"} } } }, 
+      cutout: '70%' 
+    }
   });
 }
+
+// Start the dashboard
 initDashboard();
 </script>
 {% endblock %}
