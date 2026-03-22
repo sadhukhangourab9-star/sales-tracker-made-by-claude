@@ -32,6 +32,17 @@ def get_next_id(ws):
     return max([int(r.get('id', 0)) for r in records]) + 1
 
 # ── Page Routes ──────────────────────────────────────────────────────────────
+
+# ── Add these right under your other @app.route functions ──
+
+@app.route('/manifest.json')
+def serve_manifest():
+    return send_file('static/manifest.json', mimetype='application/manifest+json')
+
+@app.route('/sw.js')
+def serve_sw():
+    return send_file('static/sw.js', mimetype='application/javascript')
+    
 @app.route('/')
 def main_orders():
     return render_template('main_orders.html')
