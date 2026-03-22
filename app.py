@@ -222,7 +222,6 @@ def delete_variant(variant_id):
 # ── Main Orders API ───────────────────────────────────────────────────────────
 
 @app.route('/api/main-orders', methods=['GET'])
-@requires_auth
 def get_main_orders():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('main_orders')
@@ -235,7 +234,6 @@ def get_main_orders():
     return jsonify(list(reversed(orders)))
 
 @app.route('/api/main-orders', methods=['POST'])
-@requires_auth
 def add_main_order():
     data = request.json
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -265,7 +263,6 @@ def add_main_order():
     return jsonify(dict(zip(headers, row_data)))
 
 @app.route('/api/main-orders/<int:order_id>', methods=['PUT'])
-@requires_auth
 def update_main_order(order_id):
     data = request.json
     ws = SHEET.worksheet('main_orders')
@@ -298,7 +295,6 @@ def update_main_order(order_id):
     return jsonify({'error': 'Not found'}), 404
 
 @app.route('/api/main-orders/bulk-update-sale', methods=['POST'])
-@requires_auth
 def bulk_update_sale():
     data = request.json
     ids = data.get('ids', [])
