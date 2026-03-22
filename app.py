@@ -367,11 +367,16 @@ def add_secondary_order():
     last_digits = str(data.get('last_digits', ''))
     save_digits = f"'{last_digits}" if last_digits else ""
     
+    costing = float(data.get('costing') or 0)
+    selling_price = float(data.get('selling_price') or 0)
+    profit = selling_price - costing
+    sale_batch = data.get('sale_batch', 'Current Sale')
+    if not sale_batch.strip(): sale_batch = 'Current Sale'
+    
     row_data = [
-        new_id, data.get('card_type', ''), save_digits,
-        data.get('platform', ''), data.get('order_name', ''), 
-        data.get('model', ''), data.get('variant', ''), 
-        data.get('delivery_date', ''), float(data.get('costing') or 0), now
+        new_id, data.get('card_type', ''), save_digits, data.get('platform', ''), 
+        data.get('order_name', ''), data.get('model', ''), data.get('variant', ''), 
+        costing, selling_price, profit, data.get('delivery_date', ''), sale_batch, now
     ]
     ws.append_row(row_data)
     
@@ -392,19 +397,43 @@ def update_secondary_order(order_id):
         last_digits = str(data.get('last_digits', ''))
         save_digits = f"'{last_digits}" if last_digits else ""
         
+        costing = float(data.get('costing') or 0)
+        selling_price = float(data.get('selling_price') or 0)
+        profit = selling_price - costing
+        sale_batch = data.get('sale_batch', 'Current Sale')
+        
         row_data = [
-            order_id, data.get('card_type', ''), save_digits,
-            data.get('platform', ''), data.get('order_name', ''), 
-            data.get('model', ''), data.get('variant', ''), 
-            data.get('delivery_date', ''), float(data.get('costing') or 0), original.get('created_at', '')
+            order_id, data.get('card_type', ''), save_digits, data.get('platform', ''), 
+            data.get('order_name', ''), data.get('model', ''), data.get('variant', ''), 
+            costing, selling_price, profit, data.get('delivery_date', ''), sale_batch, original.get('created_at', '')
         ]
-        # Notice we update columns A through J now
-        ws.update(f'A{row_idx}:J{row_idx}', [row_data]) 
+        ws.update(f'A{row_idx}:M{row_idx}', [row_data]) 
         
         row_data[2] = last_digits
         headers = ws.row_values(1)
         return jsonify(dict(zip(headers, row_data)))
     return jsonify({'error': 'Not found'}), 404
+
+@app.route('/api/secondary-orders/bulk-update-sale', methods=['POST'])
+def bulk_update_secondary_sale():
+    data = request.json
+    ids = data.get('ids', [])
+    new_batch = data.get('sale_batch', 'Current Sale')
+    if not ids: return jsonify({'success': False})
+    
+    ws = SHEET.worksheet('secondary_orders')
+    records = ws.get_all_records()
+    cells_to_update = []
+    
+    for i, r in enumerate(records):
+        if r['id'] in ids:
+            row_idx = i + 2
+            # Column L is 12 (Sale Batch)
+            cells_to_update.append(gspread.Cell(row=row_idx, col=12, value=new_batch))
+            
+    if cells_to_update:
+        ws.update_cells(cells_to_update)
+    return jsonify({'success': True})
 
 @app.route('/api/secondary-orders/<int:order_id>', methods=['DELETE'])
 def delete_secondary_order(order_id):
@@ -432,8 +461,7 @@ def export_secondary_orders():
     fmt = request.args.get('format', 'csv')
     ws = SHEET.worksheet('secondary_orders')
     orders = list(reversed(ws.get_all_records()))
-    # Updated headers to match new format
-    headers = ['ID', 'Card Type', 'Last Digits', 'Platform', 'Order Name', 'Model', 'Variant', 'Delivery Date', 'Costing', 'Created At']
+    headers = ['ID', 'Card Type', 'Last Digits', 'Platform', 'Order Name', 'Model', 'Variant', 'Costing', 'Selling Price', 'Profit', 'Delivery Date', 'Sale Batch', 'Created At']
 
     if fmt == 'excel':
         wb = openpyxl.Workbook()
@@ -447,7 +475,7 @@ def export_secondary_orders():
             cell.font = hfont
         
         for rn, o in enumerate(orders, 2):
-            vals = [o.get('id'), o.get('card_type'), str(o.get('last_digits', '')).replace("'", ""), o.get('platform'), o.get('order_name'), o.get('model'), o.get('variant'), o.get('delivery_date'), o.get('costing'), o.get('created_at')]
+            vals = [o.get('id'), o.get('card_type'), str(o.get('last_digits', '')).replace("'", ""), o.get('platform'), o.get('order_name'), o.get('model'), o.get('variant'), o.get('costing'), o.get('selling_price'), o.get('profit'), o.get('delivery_date'), o.get('sale_batch'), o.get('created_at')]
             for cn, v in enumerate(vals, 1):
                 ws_excel.cell(row=rn, column=cn, value=v)
                 
@@ -460,5 +488,5 @@ def export_secondary_orders():
         writer = csv.writer(output)
         writer.writerow(headers)
         for o in orders:
-            writer.writerow([o.get('id'), o.get('card_type'), str(o.get('last_digits', '')).replace("'", ""), o.get('platform'), o.get('order_name'), o.get('model'), o.get('variant'), o.get('delivery_date'), o.get('costing'), o.get('created_at')])
+            writer.writerow([o.get('id'), o.get('card_type'), str(o.get('last_digits', '')).replace("'", ""), o.get('platform'), o.get('order_name'), o.get('model'), o.get('variant'), o.get('costing'), o.get('selling_price'), o.get('profit'), o.get('delivery_date'), o.get('sale_batch'), o.get('created_at')])
         return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/csv', as_attachment=True, download_name='secondary_orders.csv')
