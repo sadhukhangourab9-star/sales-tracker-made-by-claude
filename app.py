@@ -306,12 +306,37 @@ def update_main_order(order_id):
     return jsonify({'error': 'Not found'}), 404
 
 @app.route('/api/main-orders/bulk-update-sale', methods=['POST'])
+# ... (your other code above) ...
+
+@app.route('/api/main-orders/bulk-update-sale', methods=['POST'])
 def bulk_update_sale():
     data = request.json
     ids = data.get('ids', [])
     new_batch = data.get('sale_batch', 'Current Sale')
-    if not ids: return jsonify({'success': False})
-    
+    # ... (keep all the code inside this function!) ...
+    return jsonify({'success': True})
+
+
+# 👇 PASTE THE NEW DELETE AND EXPORT ROUTES RIGHT HERE 👇
+
+@app.route('/api/main-orders/<int:order_id>', methods=['DELETE'])
+def delete_main_order(order_id):
+    ws = SHEET.worksheet('main_orders')
+    try:
+        cell = ws.find(str(order_id), in_column=1)
+        ws.delete_rows(cell.row)
+    except Exception as e: 
+        print(f"Delete error: {e}")
+        return jsonify({'success': False}), 500
+    return jsonify({'success': True})
+
+@app.route('/api/main-orders/bulk-delete', methods=['POST'])
+def bulk_delete_main_orders():
+    # ... (the rest of the bulk delete code) ...
+
+@app.route('/api/main-orders/export')
+def export_main_orders():
+    # ... (the rest of the export code) ...
     ws = SHEET.worksheet('main_orders')
     records = ws.get_all_records()
     cells_to_update = []
