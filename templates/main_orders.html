@@ -218,22 +218,29 @@ function filterTable() {
     let profit = 0;
     const html = filtered.map(o => {
         profit += parseFloat(o.profit || 0);
-        return `<tr>
-          <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
-          <td style="color:var(--muted);">${(o.created_at || '').split(' ')[0]}</td>
-          <td><span class="badge-card" style="background:var(--navy3);">${o.sale_batch || '-'}</span></td>
-          <td><code>${o.last_digits}</code></td>
-          <td>${o.card_type}</td>
-          <td>${o.platform}</td>
-          <td>${o.account || '-'}</td>
-          <td style="font-weight:bold;">${o.model}</td>
-          <td>${o.variant || '-'}</td>
-          <td>₹${o.costing}</td>
-          <td>₹${o.selling_price}</td>
-          <td style="color:${o.profit >= 0 ? 'green' : 'red'}">₹${o.profit}</td>
-          <td>${o.delivery_date || '-'}</td>
-          <td><button class="btn btn-sm btn-outline-danger" onclick="del(${o.id})"><i class="bi bi-trash"></i></button></td>
-        </tr>`;
+        // ... (inside your filterTable map function)
+return `<tr>
+  <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
+  <td style="color:var(--muted);">${(o.created_at || '').split(' ')[0]}</td>
+  <td><span class="badge-card" id="batch-text-${o.id}" style="background:var(--navy3);">${o.sale_batch || '-'}</span></td>
+  <td><code>${o.last_digits}</code></td>
+  <td>${o.card_type}</td>
+  <td>${o.platform}</td>
+  <td>${o.account || '-'}</td>
+  <td style="font-weight:bold;">${o.model}</td>
+  <td>${o.variant || '-'}</td>
+  <td>₹<span id="cost-text-${o.id}">${o.costing}</span></td>
+  <td>₹<span id="sell-text-${o.id}">${o.selling_price}</span></td>
+  <td style="color:${o.profit >= 0 ? 'green' : 'red'}">₹${o.profit}</td>
+  <td>${o.delivery_date || '-'}</td>
+  <td>
+    <div style="display:flex; gap:5px;">
+        <button class="btn btn-sm btn-outline-primary" onclick="editRow(${o.id})"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="del(${o.id})"><i class="bi bi-trash"></i></button>
+    </div>
+  </td>
+</tr>`;
+// ...
     }).join('');
     
     document.getElementById('tableBody').innerHTML = html;
