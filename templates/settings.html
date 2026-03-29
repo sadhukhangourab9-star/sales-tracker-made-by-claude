@@ -103,4 +103,138 @@
         <div class="col-md-4">
           <label class="form-label" style="font-size:10px;">SWIPING MACHINES</label>
           <div class="d-flex gap-2 mb-3">
-            <input type="text" id="off
+            <input type="text" id="off_mach" class="form-control" placeholder="Add Machine...">
+            <button class="btn-primary-custom" onclick="addSimple('machines', 'off_mach', 'name')">Add</button>
+          </div>
+          <ul class="list-group list-group-flush" id="list_machines" style="font-size:13px;"></ul>
+        </div>
+        
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:10px;">VENDORS</label>
+          <div class="d-flex gap-2 mb-3">
+            <input type="text" id="off_vend" class="form-control" placeholder="Add Vendor...">
+            <button class="btn-primary-custom" onclick="addSimple('vendors', 'off_vend', 'name')">Add</button>
+          </div>
+          <ul class="list-group list-group-flush" id="list_vendors" style="font-size:13px;"></ul>
+        </div>
+        
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:10px;">BRANDS (MODELS)</label>
+          <div class="d-flex gap-2 mb-3">
+            <input type="text" id="off_brand" class="form-control" placeholder="Add Brand...">
+            <button class="btn-primary-custom" onclick="addSimple('brands', 'off_brand', 'name')">Add</button>
+          </div>
+          <ul class="list-group list-group-flush" id="list_brands" style="font-size:13px;"></ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// --- HTML Rendering Helper ---
+function drawList(items, elementId, endpoint, formatTextFn) {
+  const el = document.getElementById(elementId);
+  if(!el) return;
+  el.innerHTML = items.map(i => `
+    <li class="list-group-item d-flex justify-content-between align-items-center px-1 py-2" style="background:transparent; color:var(--text); border-color:var(--border);">
+      <span>${formatTextFn(i)}</span>
+      <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delItem('${endpoint}', ${i.id})"><i class="bi bi-trash"></i></button>
+    </li>
+  `).join('');
+}
+
+// --- Main Load Function ---
+async function loadSettings() {
+  const [cards, plats, models, vars, secs, machs, vends, brands] = await Promise.all([
+    api('/api/cards'), api('/api/platforms'), api('/api/models'), api('/api/variants'),
+    api('/api/sec-order-names'), api('/api/machines'), api('/api/vendors'), api('/api/brands')
+  ]);
+
+  // Render Online Data
+  drawList(cards, 'list_cards', 'cards', c => `<code style="color:var(--accent2)">•••• ${c.last_digits}</code> <span class="ms-2">${c.card_type}</span>`);
+  drawList(plats, 'list_platforms', 'platforms', p => `<b>${p.platform_name}</b> <span style="color:var(--muted)">(${p.account_name})</span>`);
+  drawList(secs, 'list_sec', 'sec-order-names', s => s.name);
+  
+  // Render Offline Data
+  drawList(machs, 'list_machines', 'machines', m => m.name);
+  drawList(vends, 'list_vendors', 'vendors', v => v.name);
+  drawList(brands, 'list_brands', 'brands', b => b.name);
+
+  // Custom Render for Models & Variants (Grouping variants under models)
+  let modelHtml = '';
+  models.forEach(m => {
+    const mVars = vars.filter(v => v.model_id === m.id);
+    modelHtml += `
+      <li class="list-group-item px-1 py-2" style="background:transparent; color:var(--text); border-color:var(--border);">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <strong style="color:var(--accent2);">${m.model_name}</strong>
+          <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delItem('models', ${m.id})"><i class="bi bi-trash"></i></button>
+        </div>
+        ${mVars.map(v => `
+          <div class="d-flex justify-content-between align-items-center ps-3 py-1" style="font-size:11px; border-left: 2px solid var(--border);">
+            <span>${v.variant_name} <span style="color:var(--muted)">(₹${v.costing})</span></span>
+            <button class="btn btn-sm text-danger p-0" onclick="delItem('variants', ${v.id})"><i class="bi bi-x"></i></button>
+          </div>
+        `).join('')}
+      </li>`;
+  });
+  document.getElementById('list_models').innerHTML = modelHtml;
+
+  // Populate Model Dropdown for Variant form
+  const vSel = document.getElementById('v_model_sel');
+  vSel.innerHTML = '<option value="">Select...</option>' + models.map(m => `<option value="${m.id}">${m.model_name}</option>`).join('');
+}
+
+// --- Add Functions ---
+async function addSimple(endpoint, inputId, payloadKey) {
+  const val = document.getElementById(inputId).value.trim();
+  if(!val) return showToast('Please enter a value', true);
+  await api(`/api/${endpoint}`, 'POST', {[payloadKey]: val});
+  document.getElementById(inputId).value = '';
+  loadSettings();
+}
+
+async function addCard() {
+  const d = document.getElementById('c_digits').value.trim();
+  const b = document.getElementById('c_bank').value.trim().toUpperCase();
+  if(!d || !b) return showToast('Enter both digits and bank name', true);
+  await api('/api/cards', 'POST', {last_digits: d, card_type: b});
+  document.getElementById('c_digits').value = ''; document.getElementById('c_bank').value = '';
+  loadSettings();
+}
+
+async function addPlatform() {
+  const p = document.getElementById('p_name').value.trim();
+  const a = document.getElementById('p_acc').value.trim();
+  if(!p || !a) return showToast('Enter platform and account', true);
+  await api('/api/platforms', 'POST', {platform_name: p, account_name: a});
+  document.getElementById('p_name').value = ''; document.getElementById('p_acc').value = '';
+  loadSettings();
+}
+
+async function addVariant() {
+  const m = document.getElementById('v_model_sel').value;
+  const n = document.getElementById('v_name').value.trim();
+  const c = document.getElementById('v_cost').value;
+  if(!m || !n) return showToast('Select model and enter variant name', true);
+  await api('/api/variants', 'POST', {model_id: parseInt(m), variant_name: n, costing: c});
+  document.getElementById('v_name').value = ''; document.getElementById('v_cost').value = '';
+  loadSettings();
+}
+
+// --- Delete Function ---
+async function delItem(endpoint, id) {
+  if(!confirm('Delete this item?')) return;
+  await api(`/api/${endpoint}/${id}`, 'DELETE');
+  loadSettings();
+}
+
+// Boot up
+loadSettings();
+</script>
+{% endblock %}
