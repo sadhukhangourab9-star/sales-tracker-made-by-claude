@@ -281,6 +281,29 @@
       .sidebar { width: 100%; min-height: auto; position: relative; flex-direction: row; flex-wrap: wrap; }
       .main-content { margin-left: 0; padding: 16px; }
     }
+    /* ── Sticky Table Columns for Mobile ── */
+    .data-table th:nth-child(1), .data-table td:nth-child(1) {
+      position: sticky;
+      left: 0;
+      background: var(--navy2); /* Solid color prevents text bleed */
+      z-index: 2;
+    }
+    .data-table th:nth-child(2), .data-table td:nth-child(2) {
+      position: sticky;
+      left: 38px; /* Leaves room for the checkbox */
+      background: var(--navy2);
+      border-right: 1px solid var(--border);
+      z-index: 2;
+    }
+    /* Ensure headers stay above scrolling rows */
+    .data-table thead th:nth-child(1), .data-table thead th:nth-child(2) {
+      background: var(--navy3);
+      z-index: 3;
+    }
+    /* Hover effect fix for sticky columns */
+    .data-table tbody tr:hover td:nth-child(1), .data-table tbody tr:hover td:nth-child(2) {
+      background: var(--navy3);
+    }
   </style>
 </head>
 <body>
