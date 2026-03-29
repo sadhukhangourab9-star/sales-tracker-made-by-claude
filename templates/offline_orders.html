@@ -96,12 +96,12 @@
 {% block scripts %}
 <script>
 let allOrders = [];
-let allCards = []; // Memory to store cards for auto-fill
+let allCards = []; 
 
-// Safe native fetch to replace custom api() calls
 async function safeFetch(url) {
     try {
         const response = await fetch(url);
+        if (!response.ok) throw new Error("Network response was not ok");
         return await response.json();
     } catch (error) {
         console.error("Error fetching " + url, error);
@@ -110,28 +110,19 @@ async function safeFetch(url) {
 }
 
 async function init() {
-    // Set default month
     document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
     
-    // 1. Fetch Dropdown Data & Cards Safely
     const [machines, vendors, brands, cards, orders] = await Promise.all([
-        safeFetch('/api/machines'),
-        safeFetch('/api/vendors'),
-        safeFetch('/api/brands'),
-        safeFetch('/api/cards'),
-        safeFetch('/api/offline-orders')
+        safeFetch('/api/machines'), safeFetch('/api/vendors'),
+        safeFetch('/api/brands'), safeFetch('/api/cards'), safeFetch('/api/offline-orders')
     ]);
     
-    // 2. Populate Dropdowns
-    machines.forEach(m => { if(m.name) document.getElementById('f_machine').innerHTML += `<option value="${m.name}">${m.name}</option>` });
-    vendors.forEach(v => { if(v.name) document.getElementById('f_vendor').innerHTML += `<option value="${v.name}">${v.name}</option>` });
-    brands.forEach(b => { if(b.name) document.getElementById('f_brand').innerHTML += `<option value="${b.name}">${b.name}</option>` });
+    machines.forEach(m => { let n = m.name || m.machine_name; if(n) document.getElementById('f_machine').innerHTML += `<option value="${n}">${n}</option>` });
+    vendors.forEach(v => { let n = v.name || v.vendor_name; if(n) document.getElementById('f_vendor').innerHTML += `<option value="${n}">${n}</option>` });
+    brands.forEach(b => { let n = b.name || b.brand_name; if(n) document.getElementById('f_brand').innerHTML += `<option value="${n}">${n}</option>` });
 
-    // 3. Store Cards & Orders
     allCards = cards;
     allOrders = orders;
-    
-    // 4. Render Table
     filterTable();
 }
 
@@ -140,19 +131,13 @@ function toggleForm() {
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
-// Fixed Auto-Fill Logic (Removed missing lookupCard dependency)
 function onDigitsInput(val) {
     const typedDigits = val.trim();
     const bankInput = document.getElementById('f_bank');
     
     if (typedDigits.length >= 4) {
-        // Search the allCards array we loaded in init()
         const match = allCards.find(c => String(c.last_digits) === typedDigits);
-        if (match) {
-            bankInput.value = match.card_type; // Auto-fill!
-        } else {
-            bankInput.value = ''; // Clear if not found
-        }
+        bankInput.value = match ? match.card_type : '';
     } else {
         bankInput.value = '';
     }
@@ -165,6 +150,7 @@ async function submitOrder() {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right: 6px;" role="status" aria-hidden="true"></span>Saving...';
 
+    // FIX: Fallback to 0 if input is blank to prevent Python crash
     const payload = {
         last_digits: document.getElementById('f_digits').value,
         card_type: document.getElementById('f_bank').value,
@@ -173,8 +159,8 @@ async function submitOrder() {
         brand: document.getElementById('f_brand').value,
         sale_type: document.getElementById('f_type').value,
         sale_month: document.getElementById('f_month').value,
-        costing: document.getElementById('f_costing').value,
-        selling_price: document.getElementById('f_selling').value
+        costing: parseFloat(document.getElementById('f_costing').value) || 0,
+        selling_price: parseFloat(document.getElementById('f_selling').value) || 0
     };
     
     try {
@@ -183,7 +169,10 @@ async function submitOrder() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        const res = await response.json();
+        
+        const text = await response.text();
+        let res;
+        try { res = JSON.parse(text); } catch(e) { throw new Error("Server returned an error: " + text.substring(0, 100)); }
         
         if(res && res.success !== false) {
             allOrders.unshift(res);
@@ -193,7 +182,7 @@ async function submitOrder() {
         }
     } catch (error) {
         console.error("Error saving sale:", error);
-        alert("Failed to save sale. Check your connection.");
+        alert("Failed to save sale. " + error.message);
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
@@ -213,8 +202,6 @@ function filterTable() {
     let profit = 0;
     const html = filtered.map(o => {
         profit += parseFloat(o.profit || 0);
-        
-        // Safety fallbacks in case formatting functions are missing from base.html
         const badge = typeof cardBadge === 'function' ? cardBadge(o.card_type) : o.card_type;
         const cost = typeof formatCost === 'function' ? formatCost(o.costing) : `₹${o.costing}`;
         const sell = typeof formatCost === 'function' ? formatCost(o.selling_price) : `₹${o.selling_price}`;
@@ -237,9 +224,7 @@ function filterTable() {
     
     document.getElementById('tableBody').innerHTML = html;
     document.getElementById('totalCount').textContent = filtered.length;
-    
-    const totalProfitText = typeof formatCost === 'function' ? formatCost(profit) : `₹${profit.toFixed(2)}`;
-    document.getElementById('totalProfit').textContent = `Profit: ${totalProfitText}`;
+    document.getElementById('totalProfit').textContent = `Profit: ${typeof formatCost === 'function' ? formatCost(profit) : `₹${profit.toFixed(2)}`}`;
 }
 
 async function del(id) {
@@ -252,28 +237,21 @@ async function del(id) {
 }
 
 function toggleSelectAll(cb) { document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked); checkBulk(); }
-
 function checkBulk() { 
     const c = document.querySelectorAll('.row-check:checked').length;
     document.getElementById('selCount').textContent = c;
     document.getElementById('bulkDeleteBtn').style.display = c ? 'inline-block' : 'none';
 }
-
 async function bulkDelete() {
     const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
     if(!confirm(`Delete ${ids.length} sales?`)) return;
     try {
-        await fetch('/api/offline-orders/bulk-delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ids})
-        });
+        await fetch('/api/offline-orders/bulk-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ids}) });
         allOrders = allOrders.filter(o => !ids.includes(o.id));
         filterTable();
     } catch(e) { console.error("Error bulk deleting", e); }
 }
 
-// Start the app when the file loads
 init();
 </script>
 {% endblock %}
