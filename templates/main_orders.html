@@ -6,7 +6,7 @@
 <div class="page-header">
   <div>
     <div class="page-title">Main Online Orders</div>
-    <div class="page-subtitle">Track primary platform purchases, models, and delivery statuses</div>
+    <div class="page-subtitle">Track primary platform purchases and manage sale batches</div>
   </div>
   <div style="display:flex;gap:10px;align-items:center;">
     <div class="stat-pill"><strong id="totalCount">0</strong> Sales</div>
@@ -34,13 +34,12 @@
     </div>
     <div class="col-md-2">
       <label class="form-label">Account</label>
-      <input type="text" id="f_account" class="form-control" placeholder="E.g. John Amazon"/>
+      <input type="text" id="f_account" class="form-control" placeholder="Account Name"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Order Name/ID</label>
+      <label class="form-label">Order ID</label>
       <input type="text" id="f_order_name" class="form-control" placeholder="Order ID"/>
     </div>
-    
     <div class="col-md-2">
       <label class="form-label">Model *</label>
       <select id="f_model" class="form-select" onchange="loadVariants()"><option value="">Select</option></select>
@@ -62,18 +61,32 @@
       <input type="date" id="f_delivery" class="form-control"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Sale Batch</label>
+      <label class="form-label">Initial Batch</label>
       <input type="text" id="f_batch" class="form-control" value="Current Sale"/>
     </div>
-
     <div class="col-12 mt-3">
       <button id="saveSaleBtn" class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Sale</button>
     </div>
   </div>
 </div>
 
-<div class="toolbar">
-  <input type="text" class="search-input" id="searchInput" placeholder="Search orders..." oninput="filterTable()"/>
+<div class="toolbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+  <div style="display:flex; gap:10px; align-items:center;">
+    <input type="text" class="search-input" id="searchInput" placeholder="Search orders..." oninput="filterTable()"/>
+    
+    <select id="filterBatch" class="form-select" style="width:180px;" onchange="filterTable()">
+      <option value="">All Batches</option>
+      <option value="Current Sale">Current Sale</option>
+    </select>
+  </div>
+
+  <div id="bulkActions" style="display:none; gap:10px; align-items:center;">
+    <div class="input-group" style="width:250px;">
+      <input type="text" id="newBatchName" class="form-control form-control-sm" placeholder="Set Batch (e.g. Sale 1)">
+      <button class="btn btn-sm btn-warning" onclick="updateBatch()">Update Batch</button>
+    </div>
+    <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()">Delete (<span id="selCount">0</span>)</button>
+  </div>
 </div>
 
 <div class="card-panel" style="padding:0;overflow:hidden;">
@@ -81,7 +94,7 @@
     <table class="data-table">
       <thead>
         <tr>
-          <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"/></th>
+          <th><input type="checkbox" id="selectAllHeader" onchange="toggleSelectAll(this)"/></th>
           <th>Date</th><th>Batch</th><th>Card #</th><th>Bank</th>
           <th>Platform</th><th>Account</th><th>Model</th><th>Variant</th>
           <th>Costing</th><th>Sell Price</th><th>Profit</th><th>Delivery</th><th>Action</th>
@@ -99,86 +112,74 @@ let allOrders = [];
 let allCards = []; 
 let currentVariants = [];
 
-async function safeFetch(url) {
+async function safeFetch(url, options = {}) {
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, options);
         if (!response.ok) return [];
         return await response.json();
-    } catch (error) {
-        console.error("Fetch Error:", error);
-        return [];
-    }
+    } catch (error) { return []; }
 }
 
 async function init() {
     document.getElementById('f_delivery').value = new Date().toISOString().slice(0, 10);
-    
     const [platforms, models, cards, orders] = await Promise.all([
-        safeFetch('/api/platforms'),
-        safeFetch('/api/models'),
-        safeFetch('/api/cards'),
-        safeFetch('/api/main-orders')
+        safeFetch('/api/platforms'), safeFetch('/api/models'),
+        safeFetch('/api/cards'), safeFetch('/api/main-orders')
     ]);
     
-    // BUILD PLATFORMS: Tries platform_name OR name
-    const platformSelect = document.getElementById('f_platform');
-    platformSelect.innerHTML = '<option value="">Select Platform</option>';
-    platforms.forEach(p => {
-        let val = p.platform_name || p.name || Object.values(p)[1];
-        if(val) platformSelect.innerHTML += `<option value="${val}">${val}</option>`;
-    });
+    const pSel = document.getElementById('f_platform');
+    platforms.forEach(p => { let v = p.platform_name || p.name; if(v) pSel.innerHTML += `<option value="${v}">${v}</option>`; });
 
-    // BUILD MODELS: Tries model_name OR name
-    const modelSelect = document.getElementById('f_model');
-    modelSelect.innerHTML = '<option value="">Select Model</option>';
-    models.forEach(m => {
-        let val = m.model_name || m.name || Object.values(m)[1];
-        if(val) modelSelect.innerHTML += `<option value="${val}">${val}</option>`;
-    });
+    const mSel = document.getElementById('f_model');
+    models.forEach(m => { let v = m.model_name || m.name; if(v) mSel.innerHTML += `<option value="${v}">${v}</option>`; });
 
     allCards = cards;
     allOrders = orders;
+    updateBatchDropdown();
     filterTable();
 }
 
+// RESTORED: Populate the Filter Dropdown with unique batch names from your sheet
+function updateBatchDropdown() {
+    const batchFilter = document.getElementById('filterBatch');
+    const uniqueBatches = [...new Set(allOrders.map(o => o.sale_batch).filter(b => b && b !== 'Current Sale'))];
+    batchFilter.innerHTML = '<option value="">All Batches</option><option value="Current Sale">Current Sale</option>';
+    uniqueBatches.forEach(b => {
+        batchFilter.innerHTML += `<option value="${b}">${b}</option>`;
+    });
+}
+
 function onDigitsInput(val) {
-    const typedDigits = val.trim();
+    const typed = val.trim();
     const bankInput = document.getElementById('f_bank');
-    if (typedDigits.length >= 4) {
-        const match = allCards.find(c => String(c.last_digits) === typedDigits);
+    if (typed.length >= 4) {
+        const match = allCards.find(c => String(c.last_digits) === typed);
         bankInput.value = match ? match.card_type : ''; 
-    } else {
-        bankInput.value = '';
-    }
+    } else { bankInput.value = ''; }
 }
 
 async function loadVariants() {
     const modelName = document.getElementById('f_model').value;
-    const variantSelect = document.getElementById('f_variant');
-    if (!modelName) { variantSelect.innerHTML = '<option value="">Select Model First</option>'; return; }
-    
-    variantSelect.innerHTML = '<option value="">Loading...</option>';
+    const vSel = document.getElementById('f_variant');
+    if (!modelName) { vSel.innerHTML = '<option value="">Select Model First</option>'; return; }
+    vSel.innerHTML = '<option value="">Loading...</option>';
     currentVariants = await safeFetch(`/api/variants?model=${encodeURIComponent(modelName)}`);
-    
-    variantSelect.innerHTML = '<option value="">Select Variant</option>';
+    vSel.innerHTML = '<option value="">Select Variant</option>';
     currentVariants.forEach(v => {
-        let val = v.variant_name || v.name || Object.values(v)[2];
-        if(val) variantSelect.innerHTML += `<option value="${val}">${val}</option>`;
+        let val = v.variant_name || v.name;
+        if(val) vSel.innerHTML += `<option value="${val}">${val}</option>`;
     });
 }
 
 function autoFillPrice() {
     const sel = document.getElementById('f_variant').value;
-    const match = currentVariants.find(v => (v.variant_name || v.name || Object.values(v)[2]) === sel);
+    const match = currentVariants.find(v => (v.variant_name || v.name) === sel);
     if (match && match.costing) document.getElementById('f_costing').value = match.costing;
 }
 
 async function submitOrder() {
     const btn = document.getElementById('saveSaleBtn');
-    const originalText = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = 'Saving...';
-
     const payload = {
         last_digits: document.getElementById('f_digits').value,
         card_type: document.getElementById('f_bank').value,
@@ -192,55 +193,102 @@ async function submitOrder() {
         delivery_date: document.getElementById('f_delivery').value,
         sale_batch: document.getElementById('f_batch').value
     };
-    
-    try {
-        const response = await fetch('/api/main-orders', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const res = await response.json();
-        if(res && res.success !== false) {
-            allOrders.unshift(res);
-            filterTable();
-            ['f_digits','f_bank','f_account','f_order_name','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
-            toggleForm();
-        }
-    } catch (error) { alert("Error saving. Check console."); }
-    finally { btn.disabled = false; btn.innerHTML = originalText; }
+    const res = await safeFetch('/api/main-orders', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    if(res && res.id) {
+        allOrders.unshift(res);
+        updateBatchDropdown();
+        filterTable();
+        ['f_digits','f_bank','f_account','f_order_name','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
+    }
+    btn.disabled = false;
 }
 
 function filterTable() {
     const q = document.getElementById('searchInput').value.toLowerCase();
-    let filtered = allOrders.filter(o => Object.values(o).join(' ').toLowerCase().includes(q));
+    const batchFilter = document.getElementById('filterBatch').value;
+    
+    let filtered = allOrders.filter(o => {
+        const matchSearch = Object.values(o).join(' ').toLowerCase().includes(q);
+        const matchBatch = batchFilter ? o.sale_batch === batchFilter : true;
+        return matchSearch && matchBatch;
+    });
+    
     let profit = 0;
     const html = filtered.map(o => {
         profit += parseFloat(o.profit || 0);
         return `<tr>
-          <td><input type="checkbox" class="row-check" value="${o.id}"></td>
-          <td>${(o.created_at || '').split(' ')[0]}</td>
-          <td>${o.sale_batch || '-'}</td>
+          <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
+          <td style="color:var(--muted);">${(o.created_at || '').split(' ')[0]}</td>
+          <td><span class="badge-card" style="background:var(--navy3);">${o.sale_batch || '-'}</span></td>
           <td><code>${o.last_digits}</code></td>
           <td>${o.card_type}</td>
           <td>${o.platform}</td>
           <td>${o.account || '-'}</td>
-          <td>${o.model}</td>
+          <td style="font-weight:bold;">${o.model}</td>
           <td>${o.variant || '-'}</td>
           <td>₹${o.costing}</td>
           <td>₹${o.selling_price}</td>
           <td style="color:${o.profit >= 0 ? 'green' : 'red'}">₹${o.profit}</td>
           <td>${o.delivery_date || '-'}</td>
-          <td><button class="btn btn-sm btn-danger" onclick="del(${o.id})">Delete</button></td>
+          <td><button class="btn btn-sm btn-outline-danger" onclick="del(${o.id})"><i class="bi bi-trash"></i></button></td>
         </tr>`;
     }).join('');
+    
     document.getElementById('tableBody').innerHTML = html;
     document.getElementById('totalCount').textContent = filtered.length;
     document.getElementById('totalProfit').textContent = `Profit: ₹${profit.toFixed(2)}`;
+    checkBulk();
+}
+
+// RESTORED: Bulk Select Toggle
+function toggleSelectAll(cb) {
+    document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked);
+    checkBulk();
+}
+
+function checkBulk() { 
+    const checked = document.querySelectorAll('.row-check:checked');
+    const count = checked.length;
+    document.getElementById('selCount').textContent = count;
+    document.getElementById('bulkActions').style.display = count ? 'flex' : 'none';
+}
+
+// RESTORED: Bulk Update Batch Function
+async function updateBatch() {
+    const newName = document.getElementById('newBatchName').value.trim();
+    if(!newName) return alert("Enter a batch name");
+    const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
+    
+    // Using existing bulk update pattern
+    const res = await safeFetch('/api/main-orders/bulk-update-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, batch: newName })
+    });
+    
+    if(res.success) {
+        allOrders.forEach(o => { if(ids.includes(o.id)) o.sale_batch = newName; });
+        updateBatchDropdown();
+        filterTable();
+        document.getElementById('newBatchName').value = '';
+    }
+}
+
+async function bulkDelete() {
+    const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
+    if(!confirm(`Delete ${ids.length} orders?`)) return;
+    await safeFetch('/api/main-orders/bulk-delete', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ids})
+    });
+    allOrders = allOrders.filter(o => !ids.includes(o.id));
+    filterTable();
 }
 
 async function del(id) {
     if(!confirm("Delete?")) return;
-    await fetch(`/api/main-orders/${id}`, { method: 'DELETE' });
+    await safeFetch(`/api/main-orders/${id}`, { method: 'DELETE' });
     allOrders = allOrders.filter(o => o.id !== id);
     filterTable();
 }
