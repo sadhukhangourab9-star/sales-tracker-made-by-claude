@@ -61,7 +61,7 @@
     </div>
 
     <div class="col-12 mt-3">
-      <button class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Sale</button>
+      <button id="saveSaleBtn" class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Sale</button>
     </div>
   </div>
 </div>
@@ -124,6 +124,14 @@ function onDigitsInput(val) {
 }
 
 async function submitOrder() {
+  // 1. Grab the button and save its original text
+  const btn = document.getElementById('saveSaleBtn');
+  const originalText = btn.innerHTML;
+  
+  // 2. Disable it and show the loading spinner
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right: 6px;" role="status" aria-hidden="true"></span>Saving...';
+
   const payload = {
     last_digits: document.getElementById('f_digits').value,
     card_type: document.getElementById('f_bank').value,
@@ -136,12 +144,19 @@ async function submitOrder() {
     selling_price: document.getElementById('f_selling').value
   };
   
-  const res = await api('/api/offline-orders', 'POST', payload);
-  if(res.success !== false) {
-    allOrders.unshift(res);
-    filterTable();
-    showToast("Offline Sale Saved!");
-    ['f_digits','f_bank','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
+  try {
+    // 3. Send data to the server
+    const res = await api('/api/offline-orders', 'POST', payload);
+    if(res.success !== false) {
+      allOrders.unshift(res);
+      filterTable();
+      showToast("Offline Sale Saved!");
+      ['f_digits','f_bank','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
+    }
+  } finally {
+    // 4. No matter what happens (success or error), turn the button back on
+    btn.disabled = false;
+    btn.innerHTML = originalText;
   }
 }
 
