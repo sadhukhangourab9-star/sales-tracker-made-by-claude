@@ -32,8 +32,8 @@ ai_model = None
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-   ai_model = genai.GenerativeModel('models/gemini-1.5-flash')
-
+    # Ensure there are exactly 4 spaces (or 1 tab) before the line below
+    ai_model = genai.GenerativeModel('gemini-1.5-flash')
 # ──────────────────────────────────────────────────────────────────────────────
 # FIX: A bulletproof wrapper to prevent gspread from crashing on empty/weird sheets
 # ──────────────────────────────────────────────────────────────────────────────
