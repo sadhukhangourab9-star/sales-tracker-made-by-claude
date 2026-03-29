@@ -250,4 +250,33 @@ async function deleteSecOrderName(id) {
 
 init();
 </script>
+<div class="card-panel mt-4 border-top border-primary pt-4">
+  <div class="card-panel-title"><i class="bi bi-shop me-2"></i> Offline Master Data</div>
+  <div class="row g-4">
+    <div class="col-md-4">
+      <div class="form-label text-white">Swiping Machines</div>
+      <div class="d-flex gap-2 mb-2">
+        <input type="text" id="s_machine" class="form-control form-control-sm" placeholder="Add Machine...">
+        <button class="btn-primary-custom btn-sm" onclick="addMaster('machines', 's_machine', 'name')">Add</button>
+      </div>
+      <ul class="list-group list-group-flush" id="list_machines" style="max-height: 200px; overflow-y: auto;"></ul>
+    </div>
+    <div class="col-md-4">
+      <div class="form-label text-white">Vendors</div>
+      <div class="d-flex gap-2 mb-2">
+        <input type="text" id="s_vendor" class="form-control form-control-sm" placeholder="Add Vendor...">
+        <button class="btn-primary-custom btn-sm" onclick="addMaster('vendors', 's_vendor', 'name')">Add</button>
+      </div>
+      <ul class="list-group list-group-flush" id="list_vendors" style="max-height: 200px; overflow-y: auto;"></ul>
+    </div>
+    <div class="col-md-4">
+      <div class="form-label text-white">Brands (Models)</div>
+      <div class="d-flex gap-2 mb-2">
+        <input type="text" id="s_brand" class="form-control form-control-sm" placeholder="Add Brand...">
+        <button class="btn-primary-custom btn-sm" onclick="addMaster('brands', 's_brand', 'name')">Add</button>
+      </div>
+      <ul class="list-group list-group-flush" id="list_brands" style="max-height: 200px; overflow-y: auto;"></ul>
+    </div>
+  </div>
+</div>
 {% endblock %}
