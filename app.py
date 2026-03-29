@@ -261,21 +261,23 @@ def telegram_webhook():
         return jsonify({"status": "ok"})
 
     try:
-        # Using Triple Quotes to prevent SyntaxErrors from line wrapping
-        prompt = f"""You are a data extraction bot for a mobile phone business. Extract the offline sale details from the text below.
-        Format the output ONLY as a valid JSON object. Do not include markdown formatting or backticks.
-        Required JSON keys:
-        - "last_digits" (string, just the numbers)
-        - "card_type" (string, e.g., SBI, HDFC)
-        - "machine" (string)
-        - "vendor" (string)
-        - "brand" (string, e.g., iPhone 15)
-        - "sale_type" (string: must be either "INSTANT" or "EMI")
-        - "costing" (number, digits only)
-        - "selling_price" (number, digits only)
-        
-        Text: "{text}"
-        """
+        # Building the string using an array to completely bypass editor multi-line bugs
+        prompt_lines = [
+            "You are a data extraction bot for a mobile phone business. Extract the offline sale details from the text below.",
+            "Format the output ONLY as a valid JSON object. Do not include markdown formatting or backticks.",
+            "Required JSON keys:",
+            "- \"last_digits\" (string, just the numbers)",
+            "- \"card_type\" (string, e.g., SBI, HDFC)",
+            "- \"machine\" (string)",
+            "- \"vendor\" (string)",
+            "- \"brand\" (string, e.g., iPhone 15)",
+            "- \"sale_type\" (string: must be either \"INSTANT\" or \"EMI\")",
+            "- \"costing\" (number, digits only)",
+            "- \"selling_price\" (number, digits only)",
+            "",
+            f"Text: \"{text}\""
+        ]
+        prompt = "\n".join(prompt_lines)
         
         response = ai_model.generate_content(
             prompt,
@@ -287,3 +289,5 @@ def telegram_webhook():
 http://googleusercontent.com/immersive_entry_chip/0
 http://googleusercontent.com/immersive_entry_chip/1
 http://googleusercontent.com/immersive_entry_chip/2
+
+Did this finally slay the syntax error for good? Let me know so we can move on to actually using the app!
