@@ -31,9 +31,9 @@ TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 ai_model = None
 
 if GEMINI_API_KEY:
+    # Use 4 spaces for the lines below
     genai.configure(api_key=GEMINI_API_KEY)
-    # Ensure there are exactly 4 spaces (or 1 tab) before the line below
-    ai_model = genai.GenerativeModel('gemini-1.5-flash')
+    ai_model = genai.GenerativeModel('gemini-2.0-flash')
 # ──────────────────────────────────────────────────────────────────────────────
 # FIX: A bulletproof wrapper to prevent gspread from crashing on empty/weird sheets
 # ──────────────────────────────────────────────────────────────────────────────
