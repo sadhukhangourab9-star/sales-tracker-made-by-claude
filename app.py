@@ -257,6 +257,33 @@ def api_secondary_orders():
     row[2] = last_digits
     return jsonify(dict(zip(ws.row_values(1), row)))
 
+@app.route('/api/secondary-orders/bulk-update-batch', methods=['POST'])
+def bulk_update_secondary_batch():
+    if not SHEET: return jsonify({'success': False})
+    data = request.json
+    ids = data.get('ids', [])
+    new_batch = data.get('batch', 'Current Sale')
+    ws = SHEET.worksheet('secondary_orders')
+    records = safe_get_records(ws)
+    for i, r in enumerate(records):
+        if r.get('id') in ids:
+            ws.update_cell(i + 2, 13, new_batch) # Column M
+    return jsonify({'success': True})
+
+@app.route('/api/secondary-orders/<int:id>', methods=['PUT'])
+def update_secondary_order(id):
+    if not SHEET: return jsonify({'success': False})
+    data = request.json
+    ws = SHEET.worksheet('secondary_orders')
+    try:
+        cell = ws.find(str(id), in_column=1)
+        ws.update_cell(cell.row, 9, data.get('costing', 0))
+        ws.update_cell(cell.row, 10, data.get('selling_price', 0))
+        ws.update_cell(cell.row, 13, data.get('sale_batch', 'Current Sale'))
+        return jsonify({'success': True})
+    except:
+        return jsonify({'success': False})
+
 @app.route('/api/secondary-orders/<int:id>', methods=['DELETE'])
 def del_sec(id): return delete_master_table('secondary_orders', id)
 
