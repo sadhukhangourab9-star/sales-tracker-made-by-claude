@@ -305,6 +305,38 @@ function toggleForm() {
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
+  // RESTORED: Inline Edit Function
+async function editRow(id) {
+    const newCost = prompt("Enter New Costing:", document.getElementById(`cost-text-${id}`).innerText);
+    const newSell = prompt("Enter New Selling Price:", document.getElementById(`sell-text-${id}`).innerText);
+    const newBatch = prompt("Enter New Batch Name:", document.getElementById(`batch-text-${id}`).innerText);
+
+    if (newCost === null || newSell === null) return;
+
+    const res = await safeFetch(`/api/main-orders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            costing: parseFloat(newCost) || 0,
+            selling_price: parseFloat(newSell) || 0,
+            sale_batch: newBatch
+        })
+    });
+
+    if (res.success) {
+        location.reload(); // Refresh to show updated math and profit
+    } else {
+        alert("Update failed. Check Sheet headers.");
+    }
+}
+
+// FIX: Ensure Bulk Select triggers correctly
+function toggleSelectAll(cb) {
+    const checks = document.querySelectorAll('.row-check');
+    checks.forEach(c => c.checked = cb.checked);
+    checkBulk();
+}
+
 init();
 </script>
 {% endblock %}
