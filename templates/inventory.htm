@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% set active = 'inventory' %}
+{% block title %}Master Inventory — OrderTrack{% endblock %}
+
+{% block content %}
+<div class="page-title">Global Card Inventory</div>
+
+<div class="card-panel">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label">Filter Bank</label>
+      <select id="f_type" class="form-select" onchange="runLogic()"><option value="">All Banks</option></select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Check specific Brand/Model</label>
+      <input type="text" id="f_model" class="form-control" placeholder="e.g. Apple or iPhone 15" oninput="runLogic()"/>
+    </div>
+    <div class="col-md-6 pb-2">
+      <div class="form-check form-switch" style="font-size:15px;">
+        <input class="form-check-input" type="checkbox" id="f_remaining" onchange="runLogic()">
+        <label class="form-check-label" style="color:var(--accent2);font-weight:600;">🎯 Show Cards NEVER swiped for this Brand/Model</label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr><th>Card Number</th><th>Bank</th><th>Global Status</th><th>Usage Info</th></tr>
+    </thead>
+    <tbody id="invBody"><tr><td colspan="4">Loading...</td></tr></tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let mCards = [], allSales = [];
+
+async function init() {
+  const [cards, main, sec, off] = await Promise.all([
+    api('/api/cards'), api('/api/main-orders'), api('/api/secondary-orders'), api('/api/offline-orders')
+  ]);
+  
+  mCards = cards;
+  // Combine all sales so we know everywhere a card was used
+  allSales = [...main, ...sec, ...off];
+  
+  const types = [...new Set(mCards.map(c => c.card_type))].sort();
+  types.forEach(t => document.getElementById('f_type').innerHTML += `<option value="${t}">${t}</option>`);
+  
+  runLogic();
+}
+
+function runLogic() {
+  const sType = document.getElementById('f_type').value;
+  const sModel = document.getElementById('f_model').value.toLowerCase().trim();
+  const sRem = document.getElementById('f_remaining').checked;
+  
+  let result = [...mCards];
+  if(sType) result = result.filter(c => c.card_type === sType);
+  
+  if(sRem && sModel) {
+    // Find all cards that HAVE been used for a model/brand matching the text
+    const usedCards = allSales.filter(s => {
+      const m = (s.model || s.brand || '').toLowerCase();
+      return m.includes(sModel);
+    }).map(s => String(s.last_digits));
+    
+    // Filter them out
+    result = result.filter(c => !usedCards.includes(String(c.last_digits)));
+  }
+  
+  let html = '';
+  result.forEach(c => {
+    const usages = allSales.filter(s => String(s.last_digits) === String(c.last_digits));
+    const isUsed = usages.length > 0;
+    
+    html += `<tr>
+      <td><code>•••• ${c.last_digits}</code></td>
+      <td>${cardBadge(c.card_type)}</td>
+      <td>${isUsed ? '<span class="badge bg-secondary">Used</span>' : '<span class="badge bg-success">Pristine</span>'}</td>
+      <td style="color:var(--muted);font-size:12px;">
+        ${isUsed ? `Swiped ${usages.length} time(s). Last seen: ${usages[0].model || usages[0].brand}` : 'Never Swiped Anywhere'}
+      </td>
+    </tr>`;
+  });
+  document.getElementById('invBody').innerHTML = html;
+}
+init();
+</script>
+{% endblock %}
