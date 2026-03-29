@@ -96,162 +96,125 @@
 {% block scripts %}
 <script>
 let allOrders = [];
-let allCards = []; 
-
-async function safeFetch(url) {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Network response was not ok");
-        return await response.json();
-    } catch (error) {
-        console.error("Error fetching " + url, error);
-        return [];
-    }
-}
+let allCards = [];
 
 async function init() {
-    document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
-    
-    const [machines, vendors, brands, cards, orders] = await Promise.all([
-        safeFetch('/api/machines'), safeFetch('/api/vendors'),
-        safeFetch('/api/brands'), safeFetch('/api/cards'), safeFetch('/api/offline-orders')
-    ]);
-    
-    machines.forEach(m => { let n = m.name || m.machine_name; if(n) document.getElementById('f_machine').innerHTML += `<option value="${n}">${n}</option>` });
-    vendors.forEach(v => { let n = v.name || v.vendor_name; if(n) document.getElementById('f_vendor').innerHTML += `<option value="${n}">${n}</option>` });
-    brands.forEach(b => { let n = b.name || b.brand_name; if(n) document.getElementById('f_brand').innerHTML += `<option value="${n}">${n}</option>` });
+  document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
+  
+  const [machines, vendors, brands, cards] = await Promise.all([
+    api('/api/machines'), api('/api/vendors'), api('/api/brands'), api('/api/cards')
+  ]);
+  
+  allCards = cards;
+  
+  machines.forEach(m => document.getElementById('f_machine').innerHTML += `<option value="${m.name}">${m.name}</option>`);
+  vendors.forEach(v => document.getElementById('f_vendor').innerHTML += `<option value="${v.name}">${v.name}</option>`);
+  brands.forEach(b => document.getElementById('f_brand').innerHTML += `<option value="${b.name}">${b.name}</option>`);
 
-    allCards = cards;
-    allOrders = orders;
-    filterTable();
+  allOrders = await api('/api/offline-orders');
+  filterTable();
 }
 
 function toggleForm() {
-    const panel = document.getElementById('addFormPanel');
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  const panel = document.getElementById('addFormPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
+let digitTimer = null;
 function onDigitsInput(val) {
-    const typedDigits = val.trim();
-    const bankInput = document.getElementById('f_bank');
-    
-    if (typedDigits.length >= 4) {
-        const match = allCards.find(c => String(c.last_digits) === typedDigits);
-        bankInput.value = match ? match.card_type : '';
-    } else {
-        bankInput.value = '';
-    }
+  clearTimeout(digitTimer);
+  if (val.length >= 4) digitTimer = setTimeout(() => {
+    const match = allCards.find(c => String(c.last_digits) === val.trim());
+    document.getElementById('f_bank').value = match ? match.card_type : '';
+  }, 500);
 }
 
 async function submitOrder() {
-    const btn = document.getElementById('saveSaleBtn');
-    const originalText = btn.innerHTML;
-    
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right: 6px;" role="status" aria-hidden="true"></span>Saving...';
+  const btn = document.getElementById('saveSaleBtn');
+  const originalText = btn.innerHTML;
+  
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right: 6px;" role="status" aria-hidden="true"></span>Saving...';
 
-    // FIX: Fallback to 0 if input is blank to prevent Python crash
-    const payload = {
-        last_digits: document.getElementById('f_digits').value,
-        card_type: document.getElementById('f_bank').value,
-        machine: document.getElementById('f_machine').value,
-        vendor: document.getElementById('f_vendor').value,
-        brand: document.getElementById('f_brand').value,
-        sale_type: document.getElementById('f_type').value,
-        sale_month: document.getElementById('f_month').value,
-        costing: parseFloat(document.getElementById('f_costing').value) || 0,
-        selling_price: parseFloat(document.getElementById('f_selling').value) || 0
-    };
-    
-    try {
-        const response = await fetch('/api/offline-orders', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        
-        const text = await response.text();
-        let res;
-        try { res = JSON.parse(text); } catch(e) { throw new Error("Server returned an error: " + text.substring(0, 100)); }
-        
-        if(res && res.success !== false) {
-            allOrders.unshift(res);
-            filterTable();
-            if(typeof showToast === 'function') showToast("Offline Sale Saved!");
-            ['f_digits','f_bank','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
-        }
-    } catch (error) {
-        console.error("Error saving sale:", error);
-        alert("Failed to save sale. " + error.message);
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
+  const payload = {
+    last_digits: document.getElementById('f_digits').value,
+    card_type: document.getElementById('f_bank').value,
+    machine: document.getElementById('f_machine').value,
+    vendor: document.getElementById('f_vendor').value,
+    brand: document.getElementById('f_brand').value,
+    sale_type: document.getElementById('f_type').value,
+    sale_month: document.getElementById('f_month').value,
+    costing: document.getElementById('f_costing').value || 0,
+    selling_price: document.getElementById('f_selling').value || 0
+  };
+  
+  try {
+    const res = await api('/api/offline-orders', 'POST', payload);
+    if(res.success !== false) {
+      allOrders.unshift(res);
+      filterTable();
+      showToast("Offline Sale Saved!");
+      ['f_digits','f_bank','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
     }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
 }
 
 function filterTable() {
-    const q = document.getElementById('searchInput').value.toLowerCase();
-    const m = document.getElementById('filterMonth').value;
-    
-    let filtered = allOrders.filter(o => {
-        const matchSearch = Object.values(o).join(' ').toLowerCase().includes(q);
-        const matchMonth = m ? o.sale_month === m : true;
-        return matchSearch && matchMonth;
-    });
-    
-    let profit = 0;
-    const html = filtered.map(o => {
-        profit += parseFloat(o.profit || 0);
-        const badge = typeof cardBadge === 'function' ? cardBadge(o.card_type) : o.card_type;
-        const cost = typeof formatCost === 'function' ? formatCost(o.costing) : `₹${o.costing}`;
-        const sell = typeof formatCost === 'function' ? formatCost(o.selling_price) : `₹${o.selling_price}`;
-        const prof = typeof formatCost === 'function' ? formatCost(o.profit) : `₹${o.profit}`;
-        
-        return `<tr>
-          <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
-          <td><span class="badge-card" style="background:var(--navy3);">${o.sale_month}</span></td>
-          <td style="color:var(--muted);">${(o.created_at || '').split(' ')[0]}</td>
-          <td><code style="color:var(--accent2);">•••• ${o.last_digits}</code></td>
-          <td>${badge}</td>
-          <td>${o.machine}</td><td>${o.vendor}</td><td style="font-weight:bold;">${o.brand}</td>
-          <td>${o.sale_type}</td>
-          <td style="color:var(--muted)">${cost}</td>
-          <td>${sell}</td>
-          <td style="color:${o.profit >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:bold;">${prof}</td>
-          <td><button class="btn-sm btn-outline-danger" onclick="del(${o.id})"><i class="bi bi-trash"></i></button></td>
-        </tr>`;
-    }).join('');
-    
-    document.getElementById('tableBody').innerHTML = html;
-    document.getElementById('totalCount').textContent = filtered.length;
-    document.getElementById('totalProfit').textContent = `Profit: ${typeof formatCost === 'function' ? formatCost(profit) : `₹${profit.toFixed(2)}`}`;
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const m = document.getElementById('filterMonth').value;
+  
+  let filtered = allOrders.filter(o => {
+    const matchSearch = Object.values(o).join(' ').toLowerCase().includes(q);
+    const matchMonth = m ? o.sale_month === m : true;
+    return matchSearch && matchMonth;
+  });
+  
+  let profit = 0;
+  const html = filtered.map(o => {
+    profit += parseFloat(o.profit || 0);
+    return `<tr>
+      <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
+      <td><span class="badge-card" style="background:var(--navy3);">${o.sale_month}</span></td>
+      <td style="color:var(--muted);">${(o.created_at || '').split(' ')[0]}</td>
+      <td><code style="color:var(--accent2);">•••• ${o.last_digits}</code></td>
+      <td>${cardBadge(o.card_type)}</td>
+      <td>${o.machine}</td><td>${o.vendor}</td><td style="font-weight:bold;">${o.brand}</td>
+      <td>${o.sale_type}</td>
+      <td style="color:var(--muted)">${formatCost(o.costing)}</td>
+      <td>${formatCost(o.selling_price)}</td>
+      <td style="color:${o.profit >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:bold;">${formatCost(o.profit)}</td>
+      <td><button class="btn-sm btn-outline-danger" onclick="del(${o.id})"><i class="bi bi-trash"></i></button></td>
+    </tr>`;
+  }).join('');
+  
+  document.getElementById('tableBody').innerHTML = html;
+  document.getElementById('totalCount').textContent = filtered.length;
+  document.getElementById('totalProfit').textContent = `Profit: ${formatCost(profit)}`;
 }
 
 async function del(id) {
-    if(!confirm("Delete this?")) return;
-    try {
-        await fetch(`/api/offline-orders/${id}`, { method: 'DELETE' });
-        allOrders = allOrders.filter(o => o.id !== id);
-        filterTable();
-    } catch(e) { console.error("Error deleting", e); }
+  if(!confirm("Delete this?")) return;
+  await api(`/api/offline-orders/${id}`, 'DELETE');
+  allOrders = allOrders.filter(o => o.id !== id);
+  filterTable();
 }
 
 function toggleSelectAll(cb) { document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked); checkBulk(); }
 function checkBulk() { 
-    const c = document.querySelectorAll('.row-check:checked').length;
-    document.getElementById('selCount').textContent = c;
-    document.getElementById('bulkDeleteBtn').style.display = c ? 'inline-block' : 'none';
+  const c = document.querySelectorAll('.row-check:checked').length;
+  document.getElementById('selCount').textContent = c;
+  document.getElementById('bulkDeleteBtn').style.display = c ? 'inline-block' : 'none';
 }
 async function bulkDelete() {
-    const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
-    if(!confirm(`Delete ${ids.length} sales?`)) return;
-    try {
-        await fetch('/api/offline-orders/bulk-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ids}) });
-        allOrders = allOrders.filter(o => !ids.includes(o.id));
-        filterTable();
-    } catch(e) { console.error("Error bulk deleting", e); }
+  const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
+  if(!confirm(`Delete ${ids.length} sales?`)) return;
+  await api('/api/offline-orders/bulk-delete', 'POST', {ids});
+  allOrders = allOrders.filter(o => !ids.includes(o.id));
+  filterTable();
 }
-
 init();
 </script>
 {% endblock %}
