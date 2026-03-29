@@ -33,8 +33,8 @@
       <select id="f_platform" class="form-select"><option value="">Select</option></select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Account</label>
-      <input type="text" id="f_account" class="form-control"/>
+      <label class="form-label">Account *</label>
+      <select id="f_account" class="form-select"><option value="">Select Account</option></select>
     </div>
     <div class="col-md-2">
       <label class="form-label">Order ID</label>
@@ -120,9 +120,14 @@ async function safeFetch(url, options = {}) {
 
 async function init() {
     document.getElementById('f_delivery').value = new Date().toISOString().slice(0, 10);
-    const [platforms, models, cards, orders] = await Promise.all([
-        safeFetch('/api/platforms'), safeFetch('/api/models'),
-        safeFetch('/api/cards'), safeFetch('/api/secondary-orders')
+    
+    // FETCHING ACCOUNT DATA: Added /api/sec-order-names to the list
+    const [platforms, models, cards, orders, accounts] = await Promise.all([
+        safeFetch('/api/platforms'), 
+        safeFetch('/api/models'),
+        safeFetch('/api/cards'), 
+        safeFetch('/api/secondary-orders'),
+        safeFetch('/api/sec-order-names')
     ]);
     
     const pSel = document.getElementById('f_platform');
@@ -130,6 +135,14 @@ async function init() {
 
     const mSel = document.getElementById('f_model');
     models.forEach(m => { let v = m.model_name || m.name || Object.values(m)[1]; if(v) mSel.innerHTML += `<option value="${v}">${v}</option>`; });
+
+    // POPULATE ACCOUNT DROPDOWN
+    const accSel = document.getElementById('f_account');
+    accSel.innerHTML = '<option value="">Select Account</option>';
+    accounts.forEach(a => {
+        let val = a.name || Object.values(a)[1];
+        if(val) accSel.innerHTML += `<option value="${val}">${val}</option>`;
+    });
 
     allCards = cards;
     allOrders = orders;
@@ -194,7 +207,7 @@ async function submitOrder() {
         allOrders.unshift(res);
         updateBatchDropdown();
         filterTable();
-        ['f_digits','f_bank','f_account','f_order_name','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
+        ['f_digits','f_bank','f_order_name','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
     }
     btn.disabled = false;
 }
