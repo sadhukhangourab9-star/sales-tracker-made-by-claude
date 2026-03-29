@@ -195,6 +195,40 @@ def api_main_orders():
 @app.route('/api/main-orders/<int:id>', methods=['DELETE'])
 def del_main(id): return delete_master_table('main_orders', id)
 
+@app.route('/api/main-orders/bulk-update-batch', methods=['POST'])
+def bulk_update_batch():
+    if not SHEET: return jsonify({'success': False})
+    data = request.json
+    ids = data.get('ids', [])
+    new_batch = data.get('batch', 'Current Sale')
+    
+    ws = SHEET.worksheet('main_orders')
+    records = safe_get_records(ws)
+    
+    # Find the row index for each ID and update the 'sale_batch' column (Column 13 / M)
+    for i, r in enumerate(records):
+        if r.get('id') in ids:
+            row_idx = i + 2  # +2 because of header row and 0-indexing
+            ws.update_cell(row_idx, 13, new_batch)
+            
+    return jsonify({'success': True})
+
+# Add this for the Edit functionality
+@app.route('/api/main-orders/<int:id>', methods=['PUT'])
+def update_order(id):
+    if not SHEET: return jsonify({'success': False})
+    data = request.json
+    ws = SHEET.worksheet('main_orders')
+    try:
+        cell = ws.find(str(id), in_column=1)
+        # Update specific columns (Costing: 9, Selling: 10, Batch: 13, etc.)
+        ws.update_cell(cell.row, 9, data.get('costing', 0))
+        ws.update_cell(cell.row, 10, data.get('selling_price', 0))
+        ws.update_cell(cell.row, 13, data.get('sale_batch', 'Current Sale'))
+        return jsonify({'success': True})
+    except:
+        return jsonify({'success': False})
+
 # ── Secondary Orders API ──────────────────────────────────────────────────────
 @app.route('/api/secondary-orders', methods=['GET', 'POST'])
 def api_secondary_orders():
