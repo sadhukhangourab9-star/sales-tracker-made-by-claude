@@ -31,7 +31,6 @@ ai_model = None
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    # Using the fast Flash model and forcing it to only return JSON data
     ai_model = genai.GenerativeModel('gemini-1.5-flash')
 
 def get_next_id(ws):
@@ -64,7 +63,10 @@ def manage_cards():
             if str(c.get('last_digits', '')).startswith("'"): c['last_digits'] = str(c['last_digits'])[1:]
         return jsonify(list(reversed(cards)))
     data = request.json
-    ws.append_row([get_next_id(ws), data.get('card_type', ''), f"'{data.get('last_digits', '')}"])
+    
+    # Safe string concatenation instead of complex f-strings
+    safe_digits = "'" + str(data.get('last_digits', ''))
+    ws.append_row([get_next_id(ws), data.get('card_type', ''), safe_digits])
     return jsonify({'success': True})
 
 @app.route('/api/cards/<int:card_id>', methods=['DELETE'])
@@ -153,11 +155,16 @@ def api_main_orders():
     data = request.json
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     last_digits = str(data.get('last_digits', ''))
-    costing, selling_price = float(data.get('costing') or 0), float(data.get('selling_price') or 0)
+    costing = float(data.get('costing') or 0)
+    selling_price = float(data.get('selling_price') or 0)
     
-    row = [get_next_id(ws), data.get('card_type', ''), f"'{last_digits}" if last_digits else "", data.get('platform', ''), 
-           data.get('account', ''), data.get('order_name', ''), data.get('model', ''), data.get('variant', ''), 
-           costing, selling_price, selling_price - costing, data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now]
+    safe_digits = "'" + last_digits if last_digits else ""
+    
+    row = [
+        get_next_id(ws), data.get('card_type', ''), safe_digits, data.get('platform', ''), 
+        data.get('account', ''), data.get('order_name', ''), data.get('model', ''), data.get('variant', ''), 
+        costing, selling_price, selling_price - costing, data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now
+    ]
     ws.append_row(row)
     row[2] = last_digits
     return jsonify(dict(zip(ws.row_values(1), row)))
@@ -179,11 +186,16 @@ def api_secondary_orders():
     data = request.json
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     last_digits = str(data.get('last_digits', ''))
-    costing, selling_price = float(data.get('costing') or 0), float(data.get('selling_price') or 0)
+    costing = float(data.get('costing') or 0)
+    selling_price = float(data.get('selling_price') or 0)
     
-    row = [get_next_id(ws), data.get('card_type', ''), f"'{last_digits}" if last_digits else "", data.get('platform', ''), 
-           data.get('order_name', ''), data.get('model', ''), data.get('variant', ''), 
-           costing, selling_price, selling_price - costing, data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now]
+    safe_digits = "'" + last_digits if last_digits else ""
+    
+    row = [
+        get_next_id(ws), data.get('card_type', ''), safe_digits, data.get('platform', ''), 
+        data.get('order_name', ''), data.get('model', ''), data.get('variant', ''), 
+        costing, selling_price, selling_price - costing, data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now
+    ]
     ws.append_row(row)
     row[2] = last_digits
     return jsonify(dict(zip(ws.row_values(1), row)))
@@ -205,11 +217,16 @@ def api_offline_orders():
     data = request.json
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     last_digits = str(data.get('last_digits', ''))
-    costing, selling_price = float(data.get('costing') or 0), float(data.get('selling_price') or 0)
+    costing = float(data.get('costing') or 0)
+    selling_price = float(data.get('selling_price') or 0)
     
-    row = [get_next_id(ws), data.get('card_type', ''), f"'{last_digits}" if last_digits else "", 
-           data.get('machine', ''), data.get('vendor', ''), data.get('brand', ''), data.get('sale_type', ''),
-           costing, selling_price, selling_price - costing, data.get('sale_month', ''), now]
+    safe_digits = "'" + last_digits if last_digits else ""
+    
+    row = [
+        get_next_id(ws), data.get('card_type', ''), safe_digits, 
+        data.get('machine', ''), data.get('vendor', ''), data.get('brand', ''), data.get('sale_type', ''),
+        costing, selling_price, selling_price - costing, data.get('sale_month', ''), now
+    ]
     ws.append_row(row)
     row[2] = last_digits
     return jsonify(dict(zip(ws.row_values(1), row)))
@@ -232,46 +249,42 @@ def bulk_del_offline():
 def telegram_webhook():
     update = request.get_json(silent=True)
     
-    # Safe structure checking
     if not update or "message" not in update or "text" not in update["message"]:
         return jsonify({"status": "ok"})
         
     chat_id = update["message"]["chat"]["id"]
     text = update["message"]["text"]
+    bot_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     
-    # Simple health check command
     if text == "/start":
-        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", 
-                      json={"chat_id": chat_id, "text": "🤖 OrderTrack AI is online! Send me a messy sale text and I'll log it."})
+        start_msg = "🤖 OrderTrack AI is online! Send me a messy sale text and I'll log it."
+        requests.post(bot_url, json={"chat_id": chat_id, "text": start_msg})
         return jsonify({"status": "ok"})
 
     try:
-        prompt = f"""
-        You are a data extraction bot for a mobile phone business. Extract the offline sale details from the text below.
-        Format the output ONLY as a valid JSON object. Do not include markdown formatting or backticks.
-        Required JSON keys:
-        - "last_digits" (string, just the numbers)
-        - "card_type" (string, e.g., SBI, HDFC)
-        - "machine" (string)
-        - "vendor" (string)
-        - "brand" (string, e.g., iPhone 15)
-        - "sale_type" (string: must be either "INSTANT" or "EMI")
-        - "costing" (number, digits only)
-        - "selling_price" (number, digits only)
-        
-        Text: "{text}"
-        """
+        # Broken out into single lines to prevent SyntaxErrors
+        prompt = (
+            "You are a data extraction bot for a mobile phone business. Extract the offline sale details from the text below.\n"
+            "Format the output ONLY as a valid JSON object. Do not include markdown formatting or backticks.\n"
+            "Required JSON keys:\n"
+            "- \"last_digits\" (string, just the numbers)\n"
+            "- \"card_type\" (string, e.g., SBI, HDFC)\n"
+            "- \"machine\" (string)\n"
+            "- \"vendor\" (string)\n"
+            "- \"brand\" (string, e.g., iPhone 15)\n"
+            "- \"sale_type\" (string: must be either \"INSTANT\" or \"EMI\")\n"
+            "- \"costing\" (number, digits only)\n"
+            "- \"selling_price\" (number, digits only)\n\n"
+            f"Text: \"{text}\""
+        )
         
         response = ai_model.generate_content(
             prompt,
             generation_config=genai.GenerationConfig(response_mime_type="application/json")
         )
         
-        # Clean markdown formatting in case the AI includes backticks
         raw_text = response.text.strip()
         if raw_text.startswith("
 http://googleusercontent.com/immersive_entry_chip/0
 http://googleusercontent.com/immersive_entry_chip/1
 http://googleusercontent.com/immersive_entry_chip/2
-
-Would you like me to take a look at the HTML template structure next to make sure the frontend isn't masking any other errors?
