@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from flask import Flask, render_template, request, jsonify, send_file
 import os, io, json, csv, requests
 from datetime import datetime
@@ -22,7 +23,7 @@ if creds_json:
         client = gspread.authorize(creds)
         SHEET = client.open(SHEET_NAME)
     except Exception as e:
-        print(f"Failed to connect to Google Sheets: {e}")
+        print("Failed to connect to Google Sheets: " + str(e))
 
 # ── AI & Telegram Setup ───────────────────────────────────────────────────────
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
@@ -243,7 +244,7 @@ def bulk_del_offline():
         ws.delete_row(r_idx)
     return jsonify({'success': True})
 
-# ── 🤖 TELEGRAM AI AGENT WEBHOOK 🤖 ───────────────────────────────────────────
+# ── TELEGRAM AI AGENT WEBHOOK ─────────────────────────────────────────────────
 @app.route('/telegram-webhook', methods=['POST'])
 def telegram_webhook():
     update = request.get_json(silent=True)
@@ -252,32 +253,28 @@ def telegram_webhook():
         return jsonify({"status": "ok"})
         
     chat_id = update["message"]["chat"]["id"]
-    text = update["message"]["text"]
-    bot_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    text = str(update["message"]["text"])
+    bot_url = "https://api.telegram.org/bot" + str(TELEGRAM_BOT_TOKEN) + "/sendMessage"
     
     if text == "/start":
-        start_msg = "🤖 OrderTrack AI is online! Send me a messy sale text and I'll log it."
+        start_msg = "OrderTrack AI is online! Send me a messy sale text and I will log it."
         requests.post(bot_url, json={"chat_id": chat_id, "text": start_msg})
         return jsonify({"status": "ok"})
 
     try:
-        # Building the string using an array to completely bypass editor multi-line bugs
-        prompt_lines = [
-            "You are a data extraction bot for a mobile phone business. Extract the offline sale details from the text below.",
-            "Format the output ONLY as a valid JSON object. Do not include markdown formatting or backticks.",
-            "Required JSON keys:",
-            "- \"last_digits\" (string, just the numbers)",
-            "- \"card_type\" (string, e.g., SBI, HDFC)",
-            "- \"machine\" (string)",
-            "- \"vendor\" (string)",
-            "- \"brand\" (string, e.g., iPhone 15)",
-            "- \"sale_type\" (string: must be either \"INSTANT\" or \"EMI\")",
-            "- \"costing\" (number, digits only)",
-            "- \"selling_price\" (number, digits only)",
-            "",
-            f"Text: \"{text}\""
-        ]
-        prompt = "\n".join(prompt_lines)
+        # 100% pure string addition, no lists or formatters
+        prompt = "You are a data extraction bot for a mobile phone business. Extract the offline sale details from the text below.\n"
+        prompt += "Format the output ONLY as a valid JSON object. Do not include markdown formatting or backticks.\n"
+        prompt += "Required JSON keys:\n"
+        prompt += "- \"last_digits\" (string, just the numbers)\n"
+        prompt += "- \"card_type\" (string, e.g., SBI, HDFC)\n"
+        prompt += "- \"machine\" (string)\n"
+        prompt += "- \"vendor\" (string)\n"
+        prompt += "- \"brand\" (string, e.g., iPhone 15)\n"
+        prompt += "- \"sale_type\" (string: must be either INSTANT or EMI)\n"
+        prompt += "- \"costing\" (number, digits only)\n"
+        prompt += "- \"selling_price\" (number, digits only)\n\n"
+        prompt += "Text: \"" + text + "\""
         
         response = ai_model.generate_content(
             prompt,
@@ -289,5 +286,3 @@ def telegram_webhook():
 http://googleusercontent.com/immersive_entry_chip/0
 http://googleusercontent.com/immersive_entry_chip/1
 http://googleusercontent.com/immersive_entry_chip/2
-
-Did this finally slay the syntax error for good? Let me know so we can move on to actually using the app!
