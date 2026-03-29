@@ -278,10 +278,7 @@ def telegram_webhook():
         prompt += "- \"selling_price\" (number, digits only)\n\n"
         prompt += "Text: \"" + text + "\""
         
-        response = ai_model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(response_mime_type="application/json")
-        )
+      response = ai_model.generate_content(prompt)
         
         raw_text = response.text.strip()
         
