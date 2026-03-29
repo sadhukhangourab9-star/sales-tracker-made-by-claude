@@ -291,17 +291,24 @@
     <h1>OrderTrack</h1>
     <p>Mobile Sales Manager</p>
   </div>
-  <div class="sidebar-nav">
+ <div class="sidebar-nav">
     <div class="nav-label">Analytics</div>
     <a href="/dashboard" class="nav-link {% if active=='dashboard' %}active{% endif %}">
       <i class="bi bi-graph-up-arrow"></i> Dashboard
     </a>
-    <div class="nav-label">Orders</div>
+    <div class="nav-label">Online Operations</div>
     <a href="/" class="nav-link {% if active=='main' %}active{% endif %}">
       <i class="bi bi-journal-text"></i> Main Orders
     </a>
     <a href="/secondary" class="nav-link {% if active=='secondary' %}active{% endif %}">
       <i class="bi bi-journals"></i> Secondary Orders
+    </a>
+    <div class="nav-label">Offline Operations</div>
+    <a href="/offline" class="nav-link {% if active=='offline' %}active{% endif %}">
+      <i class="bi bi-shop"></i> Offline Sales
+    </a>
+    <a href="/inventory" class="nav-link {% if active=='inventory' %}active{% endif %}">
+      <i class="bi bi-credit-card-2-front"></i> Card Inventory
     </a>
     <div class="nav-label">Config</div>
     <a href="/settings" class="nav-link {% if active=='settings' %}active{% endif %}">
