@@ -138,13 +138,27 @@ def api_variants():
     ws = SHEET.worksheet('variants')
     if request.method == 'GET':
         model_name = request.args.get('model')
-        variants = safe_get_records(ws)
+        all_variants = safe_get_records(ws)
+        
         if model_name:
-            models = safe_get_records(SHEET.worksheet('models'))
-            m_id = next((m['id'] for m in models if m['model_name'] == model_name), None)
-            return jsonify([v for v in variants if v['model_id'] == m_id]) if m_id else jsonify([])
-        return jsonify(variants)
-    ws.append_row([get_next_id(ws), request.json.get('model_id'), request.json.get('variant_name', ''), request.json.get('costing', '')])
+            # Get models to find the ID of the selected model name
+            models_ws = SHEET.worksheet('models')
+            models_data = safe_get_records(models_ws)
+            
+            # Find the ID for the model name (checking 'model_name' or 'name' columns)
+            m_id = next((m.get('id') for m in models_data if (m.get('model_name') == model_name or m.get('name') == model_name)), None)
+            
+            if m_id:
+                # Filter variants that match this model_id
+                filtered = [v for v in all_variants if str(v.get('model_id')) == str(m_id)]
+                return jsonify(filtered)
+            return jsonify([]) # Return nothing if model ID wasn't found
+            
+        return jsonify(all_variants)
+    
+    # POST logic for adding new variants
+    data = request.json
+    ws.append_row([get_next_id(ws), data.get('model_id'), data.get('variant_name', ''), data.get('costing', '')])
     return jsonify({'success': True})
 @app.route('/api/variants/<int:var_id>', methods=['DELETE'])
 def del_variant(var_id): return delete_master_table('variants', var_id)
