@@ -9,11 +9,15 @@
   <div class="row g-3 align-items-end">
     <div class="col-md-3">
       <label class="form-label">Filter Bank</label>
-      <select id="f_type" class="form-select" onchange="runLogic()"><option value="">All Banks</option></select>
+      <select id="f_type" class="form-select" onchange="runLogic()">
+        <option value="">All Banks</option>
+      </select>
     </div>
     <div class="col-md-3">
       <label class="form-label">Check specific Brand/Model</label>
-      <input type="text" id="f_model" class="form-control" placeholder="e.g. Apple or iPhone 15" oninput="runLogic()"/>
+      <select id="f_model" class="form-select" onchange="runLogic()">
+        <option value="">All Models & Brands</option>
+      </select>
     </div>
     <div class="col-md-6 pb-2">
       <div class="form-check form-switch" style="font-size:15px;">
@@ -39,55 +43,89 @@
 let mCards = [], allSales = [];
 
 async function init() {
-  const [cards, main, sec, off] = await Promise.all([
-    api('/api/cards'), api('/api/main-orders'), api('/api/secondary-orders'), api('/api/offline-orders')
-  ]);
-  
-  mCards = cards;
-  // Combine all sales so we know everywhere a card was used
-  allSales = [...main, ...sec, ...off];
-  
-  const types = [...new Set(mCards.map(c => c.card_type))].sort();
-  types.forEach(t => document.getElementById('f_type').innerHTML += `<option value="${t}">${t}</option>`);
-  
-  runLogic();
+  try {
+    // Fetch all master cards and every single sale from all 3 tabs
+    const [cards, main, sec, off] = await Promise.all([
+      api('/api/cards'), 
+      api('/api/main-orders'), 
+      api('/api/secondary-orders'), 
+      api('/api/offline-orders')
+    ]);
+    
+    mCards = cards;
+    allSales = [...main, ...sec, ...off];
+    
+    // 1. Populate Bank Dropdown
+    const types = [...new Set(mCards.map(c => c.card_type))].filter(Boolean).sort();
+    types.forEach(t => document.getElementById('f_type').innerHTML += `<option value="${t}">${t}</option>`);
+    
+    // 2. Populate Model/Brand Dropdown from ACTUAL sales data
+    // We check both 'model' (Online) and 'brand' (Offline) columns
+    const rawModels = allSales.map(s => s.model || s.brand).filter(Boolean);
+    const uniqueModels = [...new Set(rawModels)].sort();
+    
+    uniqueModels.forEach(m => {
+      // Store the value as lowercase to make filtering foolproof
+      document.getElementById('f_model').innerHTML += `<option value="${m.toLowerCase()}">${m}</option>`;
+    });
+    
+    runLogic();
+    
+  } catch (err) {
+    // If the server throws a 500 error, this will catch it and print it to the screen
+    document.getElementById('invBody').innerHTML = `<tr><td colspan="4" style="color:var(--red); font-weight:bold;">⚠️ Error loading data. Please ensure the 'cards', 'main_orders', 'secondary_orders', and 'offline_orders' tabs all exist in your Google Sheet.</td></tr>`;
+    console.error("Fetch Error:", err);
+  }
 }
 
 function runLogic() {
   const sType = document.getElementById('f_type').value;
-  const sModel = document.getElementById('f_model').value.toLowerCase().trim();
+  const sModel = document.getElementById('f_model').value; 
   const sRem = document.getElementById('f_remaining').checked;
   
   let result = [...mCards];
+  
+  // 1. Filter by Bank
   if(sType) result = result.filter(c => c.card_type === sType);
   
+  // 2. Filter by "Remaining for Model"
   if(sRem && sModel) {
-    // Find all cards that HAVE been used for a model/brand matching the text
+    // Find all cards used for this EXACT model/brand
     const usedCards = allSales.filter(s => {
       const m = (s.model || s.brand || '').toLowerCase();
-      return m.includes(sModel);
+      return m === sModel; 
     }).map(s => String(s.last_digits));
     
-    // Filter them out
+    // Keep only the cards that are NOT in the used list
     result = result.filter(c => !usedCards.includes(String(c.last_digits)));
   }
   
+  // 3. Render the table
   let html = '';
-  result.forEach(c => {
-    const usages = allSales.filter(s => String(s.last_digits) === String(c.last_digits));
-    const isUsed = usages.length > 0;
-    
-    html += `<tr>
-      <td><code>•••• ${c.last_digits}</code></td>
-      <td>${cardBadge(c.card_type)}</td>
-      <td>${isUsed ? '<span class="badge bg-secondary">Used</span>' : '<span class="badge bg-success">Pristine</span>'}</td>
-      <td style="color:var(--muted);font-size:12px;">
-        ${isUsed ? `Swiped ${usages.length} time(s). Last seen: ${usages[0].model || usages[0].brand}` : 'Never Swiped Anywhere'}
-      </td>
-    </tr>`;
-  });
+  if (result.length === 0) {
+    html = '<tr><td colspan="4" class="text-center" style="color:var(--muted); padding: 20px;">No cards found matching criteria.</td></tr>';
+  } else {
+    result.forEach(c => {
+      const usages = allSales.filter(s => String(s.last_digits) === String(c.last_digits));
+      const isUsed = usages.length > 0;
+      
+      let usageText = 'Never Swiped Anywhere';
+      if (isUsed) {
+        usageText = `Swiped ${usages.length} time(s). Last seen: ${usages[0].model || usages[0].brand || 'Unknown'}`;
+      }
+
+      html += `<tr>
+        <td><code style="color:var(--text); font-size:14px;">•••• ${c.last_digits || '????'}</code></td>
+        <td>${cardBadge(c.card_type)}</td>
+        <td>${isUsed ? '<span class="badge-card" style="background:rgba(255,255,255,0.1); color:var(--muted); border-color:var(--border);">Used</span>' : '<span class="badge-card badge-visa">Pristine</span>'}</td>
+        <td style="color:var(--muted);font-size:12px;">${usageText}</td>
+      </tr>`;
+    });
+  }
   document.getElementById('invBody').innerHTML = html;
 }
+
+// Boot up the page
 init();
 </script>
 {% endblock %}
