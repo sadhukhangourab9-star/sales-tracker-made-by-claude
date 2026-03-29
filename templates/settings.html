@@ -106,149 +106,82 @@
 
 {% block scripts %}
 <script>
-let allModels = [];
+// ── Initialization ──
+async function loadSettings() {
+  // 1. Fetch Online Master Data
+  const platforms = await api('/api/platforms');
+  const models = await api('/api/models');
+  const secNames = await api('/api/sec-order-names');
 
-async function init() {
-  await loadCards();
-  await loadPlatforms();
-  await loadModels();
-  await loadSecOrderNames();
-}
+  // 2. Fetch Offline Master Data
+  const machines = await api('/api/machines');
+  const vendors = await api('/api/vendors');
+  const brands = await api('/api/brands');
 
-// CARDS
-async function loadCards() {
-  const cards = await api('/api/cards');
-  const list = document.getElementById('cardsList');
-  if (!cards.length) { list.innerHTML = '<div class="empty-state" style="padding:20px 10px;"><i class="bi bi-credit-card"></i><p>No cards added</p></div>'; return; }
-  list.innerHTML = cards.map(c => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--navy3);border-radius:8px;margin-bottom:8px;">
-      <div>${cardBadge(c.card_type)} <code style="color:var(--accent2);margin-left:8px;">•••• ${c.last_digits}</code></div>
-      <button class="btn-danger-custom" style="padding:3px 8px;font-size:11px;" onclick="deleteCard(${c.id})"><i class="bi bi-trash3"></i></button>
-    </div>
-  `).join('');
-}
-async function addCard() {
-  const digits = document.getElementById('card_digits').value.trim();
-  const type   = document.getElementById('card_type').value.trim();
-  if (!digits || !type) { showToast('Fill both fields', 'error'); return; }
-  const res = await api('/api/cards', 'POST', {card_type: type, last_digits: digits});
-  if (res.error) { showToast(res.error, 'error'); return; }
-  document.getElementById('card_digits').value = ''; document.getElementById('card_type').value = '';
-  showToast('Card added!'); loadCards();
-}
-async function deleteCard(id) {
-  if (!confirm('Remove this card?')) return;
-  await api(`/api/cards/${id}`, 'DELETE'); showToast('Card removed.'); loadCards();
-}
+  // 3. Render function for simple lists
+  const renderList = (items, elementId, endpointName, displayKey = 'name') => {
+    const el = document.getElementById(elementId);
+    if (!el) return; // Skip if the HTML element doesn't exist on the page
+    
+    el.innerHTML = items.map(i => `
+      <li class="list-group-item d-flex justify-content-between align-items-center" style="background:var(--navy2); color:var(--text); border-color:var(--border);">
+        ${i[displayKey]}
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteMaster('${endpointName}', ${i.id})">
+          <i class="bi bi-trash"></i>
+        </button>
+      </li>
+    `).join('');
+  };
 
-// PLATFORMS
-async function loadPlatforms() {
-  const plats = await api('/api/platforms');
-  const list = document.getElementById('platformsList');
-  if (!plats.length) { list.innerHTML = '<div class="empty-state" style="padding:20px 10px;"><i class="bi bi-shop"></i><p>No platforms</p></div>'; return; }
-  const grouped = {};
-  plats.forEach(p => { if (!grouped[p.platform_name]) grouped[p.platform_name] = []; grouped[p.platform_name].push(p); });
-  list.innerHTML = Object.entries(grouped).map(([name, entries]) => `
-    <div style="background:var(--navy3);border-radius:8px;margin-bottom:10px;overflow:hidden;">
-      <div style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--accent2);"><i class="bi bi-shop"></i> ${name}</div>
-      ${entries.map(e => `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
-          <span style="font-size:13px;color:var(--muted);">${e.account_name}</span>
-          <button class="btn-danger-custom" style="padding:2px 7px;font-size:11px;" onclick="deletePlatform(${e.id})"><i class="bi bi-trash3"></i></button>
-        </div>`).join('')}
-    </div>`).join('');
-}
-async function addPlatform() {
-  const name = document.getElementById('plat_name').value.trim();
-  const account = document.getElementById('plat_account').value.trim();
-  if (!name || !account) { showToast('Fill both', 'error'); return; }
-  const res = await api('/api/platforms', 'POST', {platform_name: name, account_name: account});
-  if (res.error) { showToast(res.error, 'error'); return; }
-  document.getElementById('plat_name').value = ''; document.getElementById('plat_account').value = '';
-  showToast('Platform added!'); loadPlatforms();
-}
-async function deletePlatform(id) {
-  if (!confirm('Remove account?')) return;
-  await api(`/api/platforms/${id}`, 'DELETE'); showToast('Removed.'); loadPlatforms();
+  // 4. Draw the lists to the screen
+  // Online lists (assuming you have these IDs from your previous setup)
+  renderList(platforms, 'list_platforms', 'platforms', 'platform_name');
+  renderList(models, 'list_models', 'models', 'model_name');
+  renderList(secNames, 'list_sec_names', 'sec-order-names', 'name');
+
+  // Offline lists (The new ones!)
+  renderList(machines, 'list_machines', 'machines', 'name');
+  renderList(vendors, 'list_vendors', 'vendors', 'name');
+  renderList(brands, 'list_brands', 'brands', 'name');
 }
 
-// MODELS & VARIANTS
-async function loadModels() {
-  allModels = await api('/api/models');
-  renderModels();
-  const sel = document.getElementById('variant_model_id');
-  sel.innerHTML = '<option value="">Select Model</option>';
-  allModels.forEach(m => { const opt = document.createElement('option'); opt.value = m.id; opt.textContent = m.model_name; sel.appendChild(opt); });
-}
-async function renderModels() {
-  const list = document.getElementById('modelsList');
-  if (!allModels.length) { list.innerHTML = '<div class="empty-state" style="padding:20px 10px;"><i class="bi bi-phone"></i><p>No models</p></div>'; return; }
-  const items = await Promise.all(allModels.map(async m => { const variants = await api(`/api/variants/by-model/${m.id}`); return {model: m, variants}; }));
-  list.innerHTML = items.map(({model, variants}) => `
-    <div style="background:var(--navy3);border-radius:8px;margin-bottom:10px;overflow:hidden;">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border);">
-        <span style="font-size:13px;font-weight:600;color:var(--text);"><i class="bi bi-phone" style="color:var(--accent2);margin-right:6px;"></i>${model.model_name}</span>
-        <button class="btn-danger-custom" style="padding:2px 7px;font-size:11px;" onclick="deleteModel(${model.id})"><i class="bi bi-trash3"></i> Model</button>
-      </div>
-      ${variants.length ? variants.map(v => `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px 7px 28px;border-bottom:1px solid rgba(255,255,255,0.04);">
-          <span style="font-size:12px;color:var(--muted);">↳ ${v.variant_name} <span style="color:var(--green);margin-left:5px;">(₹${v.costing||0})</span></span>
-          <button class="btn-outline-custom" style="padding:2px 6px;font-size:10px;" onclick="deleteVariant(${v.id})"><i class="bi bi-x-lg"></i></button>
-        </div>`).join('') : `<div style="padding:8px 28px;font-size:12px;color:var(--muted);">No variants</div>`}
-    </div>`).join('');
-}
-async function addModel() {
-  const name = document.getElementById('model_name').value.trim();
-  if (!name) { showToast('Enter name', 'error'); return; }
-  const res = await api('/api/models', 'POST', {model_name: name});
-  if (res.error) { showToast(res.error, 'error'); return; }
-  document.getElementById('model_name').value = ''; showToast('Model added!'); await loadModels();
-}
-async function addVariant() {
-  const model_id = document.getElementById('variant_model_id').value;
-  const name = document.getElementById('variant_name').value.trim();
-  const costing = document.getElementById('variant_costing').value;
-  if (!model_id || !name) { showToast('Fill required fields', 'error'); return; }
-  const res = await api('/api/variants', 'POST', {model_id: parseInt(model_id), variant_name: name, costing: costing});
-  if (res.error) { showToast(res.error, 'error'); return; }
-  document.getElementById('variant_name').value = ''; document.getElementById('variant_costing').value = '';
-  showToast('Variant added!'); await renderModels();
-}
-async function deleteModel(id) {
-  if (!confirm('Delete model and variants?')) return;
-  await api(`/api/models/${id}`, 'DELETE'); showToast('Deleted.'); await loadModels();
-}
-async function deleteVariant(id) {
-  if (!confirm('Delete variant?')) return;
-  await api(`/api/variants/${id}`, 'DELETE'); showToast('Deleted.'); await renderModels();
+// ── Generic Add Function ──
+async function addMaster(endpointName, inputId, payloadKey = 'name') {
+  const inputEl = document.getElementById(inputId);
+  const val = inputEl.value.trim();
+  if (!val) {
+    showToast('Please enter a value', 'error');
+    return;
+  }
+
+  const payload = {};
+  payload[payloadKey] = val;
+
+  const res = await api(`/api/${endpointName}`, 'POST', payload);
+  if (res.success) {
+    inputEl.value = ''; // Clear the input box
+    showToast('Added successfully!');
+    loadSettings(); // Refresh the lists to show the new item
+  } else {
+    showToast('Failed to add item', 'error');
+  }
 }
 
-// SECONDARY ORDER NAMES
-async function loadSecOrderNames() {
-  const names = await api('/api/sec-order-names');
-  const list = document.getElementById('secNamesList');
-  if (!names.length) { list.innerHTML = '<div class="empty-state" style="padding:20px 10px;"><i class="bi bi-tags"></i><p>No names added</p></div>'; return; }
-  list.innerHTML = names.map(n => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--navy3);border-radius:8px;margin-bottom:8px;">
-      <span style="font-size:13px;">${n.name}</span>
-      <button class="btn-danger-custom" style="padding:3px 8px;font-size:11px;" onclick="deleteSecOrderName(${n.id})"><i class="bi bi-trash3"></i></button>
-    </div>
-  `).join('');
-}
-async function addSecOrderName() {
-  const name = document.getElementById('sec_name_input').value.trim();
-  if (!name) { showToast('Enter a name', 'error'); return; }
-  const res = await api('/api/sec-order-names', 'POST', {name: name});
-  if (res.error) { showToast(res.error, 'error'); return; }
-  document.getElementById('sec_name_input').value = '';
-  showToast('Name added!'); loadSecOrderNames();
-}
-async function deleteSecOrderName(id) {
-  if (!confirm('Delete this name?')) return;
-  await api(`/api/sec-order-names/${id}`, 'DELETE'); showToast('Deleted.'); loadSecOrderNames();
+// ── Generic Delete Function ──
+async function deleteMaster(endpointName, id) {
+  if (!confirm('Are you sure you want to delete this item?')) return;
+  
+  const res = await api(`/api/${endpointName}/${id}`, 'DELETE');
+  if (res.success) {
+    showToast('Deleted successfully!');
+    loadSettings(); // Refresh the lists to remove the item
+  } else {
+    showToast('Failed to delete item', 'error');
+  }
 }
 
-init();
+// Boot up the page
+loadSettings();
 </script>
 <div class="card-panel mt-4 border-top border-primary pt-4">
   <div class="card-panel-title"><i class="bi bi-shop me-2"></i> Offline Master Data</div>
