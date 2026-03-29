@@ -18,10 +18,10 @@ SHEET = None
 if creds_json:
     try:
         creds_dict = json.loads(creds_json)
-       scopes = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
         SHEET = client.open(SHEET_NAME)
@@ -257,7 +257,7 @@ def telegram_webhook():
         
     chat_id = update["message"]["chat"]["id"]
     text = str(update["message"]["text"])
-    bot_url = "[https://api.telegram.org/bot](https://api.telegram.org/bot)" + str(TELEGRAM_BOT_TOKEN) + "/sendMessage"
+    bot_url = "https://api.telegram.org/bot" + str(TELEGRAM_BOT_TOKEN) + "/sendMessage"
     
     if text == "/start":
         start_msg = "OrderTrack AI is online! Send me a messy sale text and I will log it."
@@ -285,11 +285,6 @@ def telegram_webhook():
         
         raw_text = response.text.strip()
         
-        # ───────────────────────────────────────────────────────────────────────
-        # FIX: We construct markdown backticks programmatically using chr(96) 
-        # so they do not exist directly in the Python code string. This prevents 
-        # your code editor and Render from corrupting the file during copy-paste.
-        # ───────────────────────────────────────────────────────────────────────
         bt = chr(96) + chr(96) + chr(96) 
         
         if raw_text.startswith(bt + "json"): 
