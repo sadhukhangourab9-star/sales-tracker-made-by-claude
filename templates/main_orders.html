@@ -72,13 +72,8 @@
   </div>
 </div>
 
-<div class="toolbar" style="display:flex; justify-content:space-between; align-items:center;">
-  <div style="display:flex; gap:10px;">
-    <input type="text" class="search-input" id="searchInput" placeholder="Search orders..." oninput="filterTable()"/>
-  </div>
-  <div class="toolbar-right">
-    <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">Delete (<span id="selCount">0</span>)</button>
-  </div>
+<div class="toolbar">
+  <input type="text" class="search-input" id="searchInput" placeholder="Search orders..." oninput="filterTable()"/>
 </div>
 
 <div class="card-panel" style="padding:0;overflow:hidden;">
@@ -102,15 +97,15 @@
 <script>
 let allOrders = [];
 let allCards = []; 
-let currentVariants = []; // Holds the variant pricing data in memory
+let currentVariants = [];
 
 async function safeFetch(url) {
     try {
         const response = await fetch(url);
-        if (!response.ok) throw new Error("Network error");
+        if (!response.ok) return [];
         return await response.json();
     } catch (error) {
-        console.error("Error fetching " + url, error);
+        console.error("Fetch Error:", error);
         return [];
     }
 }
@@ -119,29 +114,31 @@ async function init() {
     document.getElementById('f_delivery').value = new Date().toISOString().slice(0, 10);
     
     const [platforms, models, cards, orders] = await Promise.all([
-        safeFetch('/api/platforms'), safeFetch('/api/models'),
-        safeFetch('/api/cards'), safeFetch('/api/main-orders')
+        safeFetch('/api/platforms'),
+        safeFetch('/api/models'),
+        safeFetch('/api/cards'),
+        safeFetch('/api/main-orders')
     ]);
     
-    // FIX: Check for both 'name' and 'model_name' from Google Sheets
-    platforms.forEach(p => { 
-        let n = p.platform_name || p.name; 
-        if(n) document.getElementById('f_platform').innerHTML += `<option value="${n}">${n}</option>`; 
+    // BUILD PLATFORMS: Tries platform_name OR name
+    const platformSelect = document.getElementById('f_platform');
+    platformSelect.innerHTML = '<option value="">Select Platform</option>';
+    platforms.forEach(p => {
+        let val = p.platform_name || p.name || Object.values(p)[1];
+        if(val) platformSelect.innerHTML += `<option value="${val}">${val}</option>`;
     });
-    
-    models.forEach(m => { 
-        let n = m.model_name || m.name; 
-        if(n) document.getElementById('f_model').innerHTML += `<option value="${n}">${n}</option>`;
+
+    // BUILD MODELS: Tries model_name OR name
+    const modelSelect = document.getElementById('f_model');
+    modelSelect.innerHTML = '<option value="">Select Model</option>';
+    models.forEach(m => {
+        let val = m.model_name || m.name || Object.values(m)[1];
+        if(val) modelSelect.innerHTML += `<option value="${val}">${val}</option>`;
     });
 
     allCards = cards;
     allOrders = orders;
     filterTable();
-}
-
-function toggleForm() {
-    const panel = document.getElementById('addFormPanel');
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
 function onDigitsInput(val) {
@@ -158,59 +155,30 @@ function onDigitsInput(val) {
 async function loadVariants() {
     const modelName = document.getElementById('f_model').value;
     const variantSelect = document.getElementById('f_variant');
-    const costInput = document.getElementById('f_costing');
-    
-    costInput.value = ''; // Reset price
-    
-    if (!modelName) {
-        variantSelect.innerHTML = '<option value="">Select Model First</option>';
-        return;
-    }
+    if (!modelName) { variantSelect.innerHTML = '<option value="">Select Model First</option>'; return; }
     
     variantSelect.innerHTML = '<option value="">Loading...</option>';
+    currentVariants = await safeFetch(`/api/variants?model=${encodeURIComponent(modelName)}`);
     
-    // Fetch variants from backend
-    const url = `/api/variants?model=${encodeURIComponent(modelName)}`;
-    currentVariants = await safeFetch(url);
-    
-    if (currentVariants.length === 0) {
-        variantSelect.innerHTML = '<option value="">No variants found for this model</option>';
-    } else {
-        variantSelect.innerHTML = '<option value="">Select Variant</option>';
-        currentVariants.forEach(v => {
-            // Check for both possible column names
-            let vName = v.variant_name || v.name;
-            if(vName) {
-                variantSelect.innerHTML += `<option value="${vName}">${vName}</option>`;
-            }
-        });
-    }
+    variantSelect.innerHTML = '<option value="">Select Variant</option>';
+    currentVariants.forEach(v => {
+        let val = v.variant_name || v.name || Object.values(v)[2];
+        if(val) variantSelect.innerHTML += `<option value="${val}">${val}</option>`;
+    });
 }
 
-// FIX: New function to grab the price automatically
 function autoFillPrice() {
-    const selectedVariant = document.getElementById('f_variant').value;
-    const costInput = document.getElementById('f_costing');
-    
-    // Find the variant we saved in memory
-    const match = currentVariants.find(v => (v.variant_name || v.name) === selectedVariant);
-    
-    // If it has a costing value, plug it directly into the input box
-    if (match && match.costing) {
-        costInput.value = match.costing;
-    } else {
-        costInput.value = ''; // Leave blank if no price was set in settings
-    }
+    const sel = document.getElementById('f_variant').value;
+    const match = currentVariants.find(v => (v.variant_name || v.name || Object.values(v)[2]) === sel);
+    if (match && match.costing) document.getElementById('f_costing').value = match.costing;
 }
 
 async function submitOrder() {
     const btn = document.getElementById('saveSaleBtn');
     const originalText = btn.innerHTML;
-    
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right: 6px;" role="status" aria-hidden="true"></span>Saving...';
+    btn.innerHTML = 'Saving...';
 
-    // FIX: Parse empty strings to 0 to stop backend crash
     const payload = {
         last_digits: document.getElementById('f_digits').value,
         card_type: document.getElementById('f_bank').value,
@@ -231,77 +199,55 @@ async function submitOrder() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
-        const text = await response.text();
-        let res;
-        try { res = JSON.parse(text); } catch(e) { throw new Error("Server error: " + text.substring(0, 50)); }
-        
+        const res = await response.json();
         if(res && res.success !== false) {
             allOrders.unshift(res);
             filterTable();
-            if(typeof showToast === 'function') showToast("Online Sale Saved!");
             ['f_digits','f_bank','f_account','f_order_name','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
-            document.getElementById('f_variant').innerHTML = '<option value="">Select Model First</option>';
+            toggleForm();
         }
-    } catch (error) {
-        console.error("Error saving sale:", error);
-        alert("Failed to save sale. " + error.message);
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-    }
+    } catch (error) { alert("Error saving. Check console."); }
+    finally { btn.disabled = false; btn.innerHTML = originalText; }
 }
 
 function filterTable() {
     const q = document.getElementById('searchInput').value.toLowerCase();
     let filtered = allOrders.filter(o => Object.values(o).join(' ').toLowerCase().includes(q));
-    
     let profit = 0;
     const html = filtered.map(o => {
         profit += parseFloat(o.profit || 0);
-        const badge = typeof cardBadge === 'function' ? cardBadge(o.card_type) : o.card_type;
-        const cost = typeof formatCost === 'function' ? formatCost(o.costing) : `₹${o.costing}`;
-        const sell = typeof formatCost === 'function' ? formatCost(o.selling_price) : `₹${o.selling_price}`;
-        const prof = typeof formatCost === 'function' ? formatCost(o.profit) : `₹${o.profit}`;
-        
         return `<tr>
-          <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
-          <td style="color:var(--muted);">${(o.created_at || '').split(' ')[0]}</td>
-          <td><span class="badge-card" style="background:var(--navy3);">${o.sale_batch || '-'}</span></td>
-          <td><code style="color:var(--accent2);">•••• ${o.last_digits}</code></td>
-          <td>${badge}</td>
+          <td><input type="checkbox" class="row-check" value="${o.id}"></td>
+          <td>${(o.created_at || '').split(' ')[0]}</td>
+          <td>${o.sale_batch || '-'}</td>
+          <td><code>${o.last_digits}</code></td>
+          <td>${o.card_type}</td>
           <td>${o.platform}</td>
           <td>${o.account || '-'}</td>
-          <td style="font-weight:bold;">${o.model}</td>
+          <td>${o.model}</td>
           <td>${o.variant || '-'}</td>
-          <td style="color:var(--muted)">${cost}</td>
-          <td>${sell}</td>
-          <td style="color:${o.profit >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:bold;">${prof}</td>
-          <td style="color:var(--muted);">${o.delivery_date || '-'}</td>
-          <td><button class="btn-sm btn-outline-danger" onclick="del(${o.id})"><i class="bi bi-trash"></i></button></td>
+          <td>₹${o.costing}</td>
+          <td>₹${o.selling_price}</td>
+          <td style="color:${o.profit >= 0 ? 'green' : 'red'}">₹${o.profit}</td>
+          <td>${o.delivery_date || '-'}</td>
+          <td><button class="btn btn-sm btn-danger" onclick="del(${o.id})">Delete</button></td>
         </tr>`;
     }).join('');
-    
     document.getElementById('tableBody').innerHTML = html;
     document.getElementById('totalCount').textContent = filtered.length;
-    document.getElementById('totalProfit').textContent = `Profit: ${typeof formatCost === 'function' ? formatCost(profit) : `₹${profit.toFixed(2)}`}`;
+    document.getElementById('totalProfit').textContent = `Profit: ₹${profit.toFixed(2)}`;
 }
 
 async function del(id) {
-    if(!confirm("Delete this order?")) return;
-    try { await fetch(`/api/main-orders/${id}`, { method: 'DELETE' }); allOrders = allOrders.filter(o => o.id !== id); filterTable(); } catch(e) {}
+    if(!confirm("Delete?")) return;
+    await fetch(`/api/main-orders/${id}`, { method: 'DELETE' });
+    allOrders = allOrders.filter(o => o.id !== id);
+    filterTable();
 }
 
-function toggleSelectAll(cb) { document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked); checkBulk(); }
-function checkBulk() { 
-    const c = document.querySelectorAll('.row-check:checked').length;
-    document.getElementById('selCount').textContent = c;
-    document.getElementById('bulkDeleteBtn').style.display = c ? 'inline-block' : 'none';
-}
-async function bulkDelete() {
-    const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
-    if(!confirm(`Delete ${ids.length} orders?`)) return;
-    try { await fetch('/api/main-orders/bulk-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ids}) }); allOrders = allOrders.filter(o => !ids.includes(o.id)); filterTable(); } catch(e) {}
+function toggleForm() {
+    const panel = document.getElementById('addFormPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
 init();
