@@ -64,7 +64,6 @@ def manage_cards():
         return jsonify(list(reversed(cards)))
     data = request.json
     
-    # Safe string concatenation instead of complex f-strings
     safe_digits = "'" + str(data.get('last_digits', ''))
     ws.append_row([get_next_id(ws), data.get('card_type', ''), safe_digits])
     return jsonify({'success': True})
@@ -262,21 +261,21 @@ def telegram_webhook():
         return jsonify({"status": "ok"})
 
     try:
-        # Broken out into single lines to prevent SyntaxErrors
-        prompt = (
-            "You are a data extraction bot for a mobile phone business. Extract the offline sale details from the text below.\n"
-            "Format the output ONLY as a valid JSON object. Do not include markdown formatting or backticks.\n"
-            "Required JSON keys:\n"
-            "- \"last_digits\" (string, just the numbers)\n"
-            "- \"card_type\" (string, e.g., SBI, HDFC)\n"
-            "- \"machine\" (string)\n"
-            "- \"vendor\" (string)\n"
-            "- \"brand\" (string, e.g., iPhone 15)\n"
-            "- \"sale_type\" (string: must be either \"INSTANT\" or \"EMI\")\n"
-            "- \"costing\" (number, digits only)\n"
-            "- \"selling_price\" (number, digits only)\n\n"
-            f"Text: \"{text}\""
-        )
+        # Using Triple Quotes to prevent SyntaxErrors from line wrapping
+        prompt = f"""You are a data extraction bot for a mobile phone business. Extract the offline sale details from the text below.
+        Format the output ONLY as a valid JSON object. Do not include markdown formatting or backticks.
+        Required JSON keys:
+        - "last_digits" (string, just the numbers)
+        - "card_type" (string, e.g., SBI, HDFC)
+        - "machine" (string)
+        - "vendor" (string)
+        - "brand" (string, e.g., iPhone 15)
+        - "sale_type" (string: must be either "INSTANT" or "EMI")
+        - "costing" (number, digits only)
+        - "selling_price" (number, digits only)
+        
+        Text: "{text}"
+        """
         
         response = ai_model.generate_content(
             prompt,
