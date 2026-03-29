@@ -18,7 +18,6 @@ SHEET = None
 if creds_json:
     try:
         creds_dict = json.loads(creds_json)
-        # Flattened to a single line to completely prevent IndentationErrors
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
@@ -35,8 +34,17 @@ if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     ai_model = genai.GenerativeModel('gemini-1.5-flash')
 
+# ──────────────────────────────────────────────────────────────────────────────
+# FIX: A bulletproof wrapper to prevent gspread from crashing on empty/weird sheets
+# ──────────────────────────────────────────────────────────────────────────────
+def safe_get_records(ws):
+    try:
+        return ws.get_all_records()
+    except Exception:
+        return []
+
 def get_next_id(ws):
-    records = ws.get_all_records()
+    records = safe_get_records(ws)
     if not records: return 1
     return max([int(r.get('id', 0) or 0) for r in records]) + 1
 
@@ -60,7 +68,7 @@ def manage_cards():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('cards')
     if request.method == 'GET':
-        cards = ws.get_all_records()
+        cards = safe_get_records(ws)
         for c in cards:
             if str(c.get('last_digits', '')).startswith("'"): c['last_digits'] = str(c['last_digits'])[1:]
         return jsonify(list(reversed(cards)))
@@ -82,7 +90,7 @@ def delete_card(card_id):
 def handle_master_table(table_name, req, field_name='name'):
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet(table_name)
-    if req.method == 'GET': return jsonify(ws.get_all_records())
+    if req.method == 'GET': return jsonify(safe_get_records(ws))
     ws.append_row([get_next_id(ws), req.json.get(field_name, '')])
     return jsonify({'success': True})
 
@@ -130,9 +138,9 @@ def api_variants():
     ws = SHEET.worksheet('variants')
     if request.method == 'GET':
         model_name = request.args.get('model')
-        variants = ws.get_all_records()
+        variants = safe_get_records(ws)
         if model_name:
-            models = SHEET.worksheet('models').get_all_records()
+            models = safe_get_records(SHEET.worksheet('models'))
             m_id = next((m['id'] for m in models if m['model_name'] == model_name), None)
             return jsonify([v for v in variants if v['model_id'] == m_id]) if m_id else jsonify([])
         return jsonify(variants)
@@ -147,7 +155,7 @@ def api_main_orders():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('main_orders')
     if request.method == 'GET':
-        orders = ws.get_all_records()
+        orders = safe_get_records(ws)
         for o in orders:
             if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
             if str(o.get('account', '')).startswith("'"): o['account'] = str(o['account'])[1:]
@@ -179,7 +187,7 @@ def api_secondary_orders():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('secondary_orders')
     if request.method == 'GET':
-        orders = ws.get_all_records()
+        orders = safe_get_records(ws)
         for o in orders:
             if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
         return jsonify(list(reversed(orders)))
@@ -210,7 +218,7 @@ def api_offline_orders():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('offline_orders')
     if request.method == 'GET':
-        orders = ws.get_all_records()
+        orders = safe_get_records(ws)
         for o in orders:
             if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
         return jsonify(list(reversed(orders)))
@@ -240,7 +248,11 @@ def bulk_del_offline():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', [])
     ws = SHEET.worksheet('offline_orders')
-    rows_to_delete = [i + 2 for i, r in enumerate(ws.get_all_records()) if r['id'] in ids]
+    
+    # Safe fetch for bulk deletion too
+    records = safe_get_records(ws)
+    rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
+    
     for r_idx in sorted(rows_to_delete, reverse=True): 
         ws.delete_row(r_idx)
     return jsonify({'success': True})
@@ -276,7 +288,6 @@ def telegram_webhook():
         prompt += "- \"selling_price\" (number, digits only)\n\n"
         prompt += "Text: \"" + text + "\""
         
-        # Stripped generation_config to prevent Render version mismatch errors
         response = ai_model.generate_content(prompt)
         
         raw_text = response.text.strip()
