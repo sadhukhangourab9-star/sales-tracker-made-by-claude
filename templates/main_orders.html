@@ -158,7 +158,9 @@ function onDigitsInput(val) {
 async function loadVariants() {
     const modelName = document.getElementById('f_model').value;
     const variantSelect = document.getElementById('f_variant');
-    document.getElementById('f_costing').value = ''; // Reset price when model changes
+    const costInput = document.getElementById('f_costing');
+    
+    costInput.value = ''; // Reset price
     
     if (!modelName) {
         variantSelect.innerHTML = '<option value="">Select Model First</option>';
@@ -167,14 +169,22 @@ async function loadVariants() {
     
     variantSelect.innerHTML = '<option value="">Loading...</option>';
     
-    // Fetch variants and store them in the global variable so we can read the pricing later
-    currentVariants = await safeFetch(`/api/variants?model=${encodeURIComponent(modelName)}`);
+    // Fetch variants from backend
+    const url = `/api/variants?model=${encodeURIComponent(modelName)}`;
+    currentVariants = await safeFetch(url);
     
-    variantSelect.innerHTML = '<option value="">Select Variant</option>';
-    currentVariants.forEach(v => {
-        let vName = v.variant_name || v.name;
-        if(vName) variantSelect.innerHTML += `<option value="${vName}">${vName}</option>`;
-    });
+    if (currentVariants.length === 0) {
+        variantSelect.innerHTML = '<option value="">No variants found for this model</option>';
+    } else {
+        variantSelect.innerHTML = '<option value="">Select Variant</option>';
+        currentVariants.forEach(v => {
+            // Check for both possible column names
+            let vName = v.variant_name || v.name;
+            if(vName) {
+                variantSelect.innerHTML += `<option value="${vName}">${vName}</option>`;
+            }
+        });
+    }
 }
 
 // FIX: New function to grab the price automatically
