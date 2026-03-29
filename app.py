@@ -18,7 +18,7 @@ SHEET = None
 if creds_json:
     try:
         creds_dict = json.loads(creds_json)
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        scopes = ["[https://www.googleapis.com/auth/spreadsheets](https://www.googleapis.com/auth/spreadsheets)", "[https://www.googleapis.com/auth/drive](https://www.googleapis.com/auth/drive)"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
         SHEET = client.open(SHEET_NAME)
@@ -254,7 +254,7 @@ def telegram_webhook():
         
     chat_id = update["message"]["chat"]["id"]
     text = str(update["message"]["text"])
-    bot_url = "https://api.telegram.org/bot" + str(TELEGRAM_BOT_TOKEN) + "/sendMessage"
+    bot_url = "[https://api.telegram.org/bot](https://api.telegram.org/bot)" + str(TELEGRAM_BOT_TOKEN) + "/sendMessage"
     
     if text == "/start":
         start_msg = "OrderTrack AI is online! Send me a messy sale text and I will log it."
@@ -262,7 +262,6 @@ def telegram_webhook():
         return jsonify({"status": "ok"})
 
     try:
-        # 100% pure string addition, no lists or formatters
         prompt = "You are a data extraction bot for a mobile phone business. Extract the offline sale details from the text below.\n"
         prompt += "Format the output ONLY as a valid JSON object. Do not include markdown formatting or backticks.\n"
         prompt += "Required JSON keys:\n"
@@ -282,7 +281,75 @@ def telegram_webhook():
         )
         
         raw_text = response.text.strip()
-        if raw_text.startswith("
-http://googleusercontent.com/immersive_entry_chip/0
-http://googleusercontent.com/immersive_entry_chip/1
-http://googleusercontent.com/immersive_entry_chip/2
+        
+        # ───────────────────────────────────────────────────────────────────────
+        # FIX: We construct markdown backticks programmatically using chr(96) 
+        # so they do not exist directly in the Python code string. This prevents 
+        # your code editor and Render from corrupting the file during copy-paste.
+        # ───────────────────────────────────────────────────────────────────────
+        bt = chr(96) + chr(96) + chr(96) 
+        
+        if raw_text.startswith(bt + "json"): 
+            raw_text = raw_text[7:]
+        elif raw_text.startswith(bt): 
+            raw_text = raw_text[3:]
+        if raw_text.endswith(bt): 
+            raw_text = raw_text[:-3]
+            
+        parsed_data = json.loads(raw_text.strip())
+
+        if not SHEET:
+            raise Exception("Google Sheets not configured.")
+
+        ws = SHEET.worksheet('offline_orders')
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        sale_month = datetime.now().strftime('%Y-%m')
+        
+        costing = float(parsed_data.get('costing') or 0)
+        selling_price = float(parsed_data.get('selling_price') or 0)
+        profit = selling_price - costing
+        
+        sheet_last_digits = "'" + str(parsed_data.get('last_digits', ''))
+        
+        row = [
+            get_next_id(ws),
+            parsed_data.get('card_type', 'UNKNOWN'),
+            sheet_last_digits,
+            parsed_data.get('machine', 'UNKNOWN'),
+            parsed_data.get('vendor', 'UNKNOWN'),
+            parsed_data.get('brand', 'UNKNOWN'),
+            parsed_data.get('sale_type', 'INSTANT').upper(),
+            costing,
+            selling_price,
+            profit,
+            sale_month,
+            now
+        ]
+        ws.append_row(row)
+
+        b_text = str(parsed_data.get('brand', 'N/A'))
+        c_type = str(parsed_data.get('card_type', 'N/A'))
+        l_dig = str(parsed_data.get('last_digits', 'N/A'))
+        p_val = "{:.2f}".format(profit)
+        
+        reply_msg = "SUCCESS: Sale Logged to Cloud\n\n"
+        reply_msg += "Brand: " + b_text + "\n"
+        reply_msg += "Card: " + c_type + " (" + l_dig + ")\n"
+        reply_msg += "Profit: INR " + p_val
+        
+        requests.post(bot_url, json={"chat_id": chat_id, "text": reply_msg})
+
+    except Exception as e:
+        error_msg = "Error processing sale: " + str(e)
+        requests.post(bot_url, json={"chat_id": chat_id, "text": error_msg})
+
+    return jsonify({"status": "ok"})
+
+# ── PWA Setup ─────────────────────────────────────────────────────────────────
+@app.route('/manifest.json')
+def serve_manifest(): return send_file('static/manifest.json', mimetype='application/manifest+json')
+@app.route('/sw.js')
+def serve_sw(): return send_file('static/sw.js', mimetype='application/javascript')
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
