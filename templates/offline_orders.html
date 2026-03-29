@@ -96,123 +96,184 @@
 {% block scripts %}
 <script>
 let allOrders = [];
+let allCards = []; // Memory to store cards for auto-fill
+
+// Safe native fetch to replace custom api() calls
+async function safeFetch(url) {
+    try {
+        const response = await fetch(url);
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching " + url, error);
+        return [];
+    }
+}
 
 async function init() {
-  document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
-  
-  const [machines, vendors, brands] = await Promise.all([
-    api('/api/machines'), api('/api/vendors'), api('/api/brands')
-  ]);
-  
-  machines.forEach(m => document.getElementById('f_machine').innerHTML += `<option value="${m.name}">${m.name}</option>`);
-  vendors.forEach(v => document.getElementById('f_vendor').innerHTML += `<option value="${v.name}">${v.name}</option>`);
-  brands.forEach(b => document.getElementById('f_brand').innerHTML += `<option value="${b.name}">${b.name}</option>`);
+    // Set default month
+    document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
+    
+    // 1. Fetch Dropdown Data & Cards Safely
+    const [machines, vendors, brands, cards, orders] = await Promise.all([
+        safeFetch('/api/machines'),
+        safeFetch('/api/vendors'),
+        safeFetch('/api/brands'),
+        safeFetch('/api/cards'),
+        safeFetch('/api/offline-orders')
+    ]);
+    
+    // 2. Populate Dropdowns
+    machines.forEach(m => { if(m.name) document.getElementById('f_machine').innerHTML += `<option value="${m.name}">${m.name}</option>` });
+    vendors.forEach(v => { if(v.name) document.getElementById('f_vendor').innerHTML += `<option value="${v.name}">${v.name}</option>` });
+    brands.forEach(b => { if(b.name) document.getElementById('f_brand').innerHTML += `<option value="${b.name}">${b.name}</option>` });
 
-  allOrders = await api('/api/offline-orders');
-  filterTable();
+    // 3. Store Cards & Orders
+    allCards = cards;
+    allOrders = orders;
+    
+    // 4. Render Table
+    filterTable();
 }
 
 function toggleForm() {
-  const panel = document.getElementById('addFormPanel');
-  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    const panel = document.getElementById('addFormPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
-let digitTimer = null;
+// Fixed Auto-Fill Logic (Removed missing lookupCard dependency)
 function onDigitsInput(val) {
-  clearTimeout(digitTimer);
-  if (val.length >= 4) digitTimer = setTimeout(() => lookupCard(val, document.getElementById('f_bank')), 500);
+    const typedDigits = val.trim();
+    const bankInput = document.getElementById('f_bank');
+    
+    if (typedDigits.length >= 4) {
+        // Search the allCards array we loaded in init()
+        const match = allCards.find(c => String(c.last_digits) === typedDigits);
+        if (match) {
+            bankInput.value = match.card_type; // Auto-fill!
+        } else {
+            bankInput.value = ''; // Clear if not found
+        }
+    } else {
+        bankInput.value = '';
+    }
 }
 
 async function submitOrder() {
-  // 1. Grab the button and save its original text
-  const btn = document.getElementById('saveSaleBtn');
-  const originalText = btn.innerHTML;
-  
-  // 2. Disable it and show the loading spinner
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right: 6px;" role="status" aria-hidden="true"></span>Saving...';
+    const btn = document.getElementById('saveSaleBtn');
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right: 6px;" role="status" aria-hidden="true"></span>Saving...';
 
-  const payload = {
-    last_digits: document.getElementById('f_digits').value,
-    card_type: document.getElementById('f_bank').value,
-    machine: document.getElementById('f_machine').value,
-    vendor: document.getElementById('f_vendor').value,
-    brand: document.getElementById('f_brand').value,
-    sale_type: document.getElementById('f_type').value,
-    sale_month: document.getElementById('f_month').value,
-    costing: document.getElementById('f_costing').value,
-    selling_price: document.getElementById('f_selling').value
-  };
-  
-  try {
-    // 3. Send data to the server
-    const res = await api('/api/offline-orders', 'POST', payload);
-    if(res.success !== false) {
-      allOrders.unshift(res);
-      filterTable();
-      showToast("Offline Sale Saved!");
-      ['f_digits','f_bank','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
+    const payload = {
+        last_digits: document.getElementById('f_digits').value,
+        card_type: document.getElementById('f_bank').value,
+        machine: document.getElementById('f_machine').value,
+        vendor: document.getElementById('f_vendor').value,
+        brand: document.getElementById('f_brand').value,
+        sale_type: document.getElementById('f_type').value,
+        sale_month: document.getElementById('f_month').value,
+        costing: document.getElementById('f_costing').value,
+        selling_price: document.getElementById('f_selling').value
+    };
+    
+    try {
+        const response = await fetch('/api/offline-orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const res = await response.json();
+        
+        if(res && res.success !== false) {
+            allOrders.unshift(res);
+            filterTable();
+            if(typeof showToast === 'function') showToast("Offline Sale Saved!");
+            ['f_digits','f_bank','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
+        }
+    } catch (error) {
+        console.error("Error saving sale:", error);
+        alert("Failed to save sale. Check your connection.");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
     }
-  } finally {
-    // 4. No matter what happens (success or error), turn the button back on
-    btn.disabled = false;
-    btn.innerHTML = originalText;
-  }
 }
 
 function filterTable() {
-  const q = document.getElementById('searchInput').value.toLowerCase();
-  const m = document.getElementById('filterMonth').value;
-  
-  let filtered = allOrders.filter(o => {
-    const matchSearch = Object.values(o).join(' ').toLowerCase().includes(q);
-    const matchMonth = m ? o.sale_month === m : true;
-    return matchSearch && matchMonth;
-  });
-  
-  let profit = 0;
-  const html = filtered.map(o => {
-    profit += parseFloat(o.profit);
-    return `<tr>
-      <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
-      <td><span class="badge-card" style="background:var(--navy3);">${o.sale_month}</span></td>
-      <td style="color:var(--muted);">${o.created_at.split(' ')[0]}</td>
-      <td><code style="color:var(--accent2);">•••• ${o.last_digits}</code></td>
-      <td>${cardBadge(o.card_type)}</td>
-      <td>${o.machine}</td><td>${o.vendor}</td><td style="font-weight:bold;">${o.brand}</td>
-      <td>${o.sale_type}</td>
-      <td style="color:var(--muted)">${formatCost(o.costing)}</td>
-      <td>${formatCost(o.selling_price)}</td>
-      <td style="color:${o.profit >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:bold;">${formatCost(o.profit)}</td>
-      <td><button class="btn-sm btn-outline-danger" onclick="del(${o.id})"><i class="bi bi-trash"></i></button></td>
-    </tr>`;
-  }).join('');
-  
-  document.getElementById('tableBody').innerHTML = html;
-  document.getElementById('totalCount').textContent = filtered.length;
-  document.getElementById('totalProfit').textContent = `Profit: ${formatCost(profit)}`;
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const m = document.getElementById('filterMonth').value;
+    
+    let filtered = allOrders.filter(o => {
+        const matchSearch = Object.values(o).join(' ').toLowerCase().includes(q);
+        const matchMonth = m ? o.sale_month === m : true;
+        return matchSearch && matchMonth;
+    });
+    
+    let profit = 0;
+    const html = filtered.map(o => {
+        profit += parseFloat(o.profit || 0);
+        
+        // Safety fallbacks in case formatting functions are missing from base.html
+        const badge = typeof cardBadge === 'function' ? cardBadge(o.card_type) : o.card_type;
+        const cost = typeof formatCost === 'function' ? formatCost(o.costing) : `₹${o.costing}`;
+        const sell = typeof formatCost === 'function' ? formatCost(o.selling_price) : `₹${o.selling_price}`;
+        const prof = typeof formatCost === 'function' ? formatCost(o.profit) : `₹${o.profit}`;
+        
+        return `<tr>
+          <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
+          <td><span class="badge-card" style="background:var(--navy3);">${o.sale_month}</span></td>
+          <td style="color:var(--muted);">${(o.created_at || '').split(' ')[0]}</td>
+          <td><code style="color:var(--accent2);">•••• ${o.last_digits}</code></td>
+          <td>${badge}</td>
+          <td>${o.machine}</td><td>${o.vendor}</td><td style="font-weight:bold;">${o.brand}</td>
+          <td>${o.sale_type}</td>
+          <td style="color:var(--muted)">${cost}</td>
+          <td>${sell}</td>
+          <td style="color:${o.profit >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:bold;">${prof}</td>
+          <td><button class="btn-sm btn-outline-danger" onclick="del(${o.id})"><i class="bi bi-trash"></i></button></td>
+        </tr>`;
+    }).join('');
+    
+    document.getElementById('tableBody').innerHTML = html;
+    document.getElementById('totalCount').textContent = filtered.length;
+    
+    const totalProfitText = typeof formatCost === 'function' ? formatCost(profit) : `₹${profit.toFixed(2)}`;
+    document.getElementById('totalProfit').textContent = `Profit: ${totalProfitText}`;
 }
 
 async function del(id) {
-  if(!confirm("Delete this?")) return;
-  await api(`/api/offline-orders/${id}`, 'DELETE');
-  allOrders = allOrders.filter(o => o.id !== id);
-  filterTable();
+    if(!confirm("Delete this?")) return;
+    try {
+        await fetch(`/api/offline-orders/${id}`, { method: 'DELETE' });
+        allOrders = allOrders.filter(o => o.id !== id);
+        filterTable();
+    } catch(e) { console.error("Error deleting", e); }
 }
 
 function toggleSelectAll(cb) { document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked); checkBulk(); }
+
 function checkBulk() { 
-  const c = document.querySelectorAll('.row-check:checked').length;
-  document.getElementById('selCount').textContent = c;
-  document.getElementById('bulkDeleteBtn').style.display = c ? 'inline-block' : 'none';
+    const c = document.querySelectorAll('.row-check:checked').length;
+    document.getElementById('selCount').textContent = c;
+    document.getElementById('bulkDeleteBtn').style.display = c ? 'inline-block' : 'none';
 }
+
 async function bulkDelete() {
-  const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
-  if(!confirm(`Delete ${ids.length} sales?`)) return;
-  await api('/api/offline-orders/bulk-delete', 'POST', {ids});
-  allOrders = allOrders.filter(o => !ids.includes(o.id));
-  filterTable();
+    const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
+    if(!confirm(`Delete ${ids.length} sales?`)) return;
+    try {
+        await fetch('/api/offline-orders/bulk-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ids})
+        });
+        allOrders = allOrders.filter(o => !ids.includes(o.id));
+        filterTable();
+    } catch(e) { console.error("Error bulk deleting", e); }
 }
+
+// Start the app when the file loads
 init();
 </script>
 {% endblock %}
