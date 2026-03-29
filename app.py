@@ -18,10 +18,8 @@ SHEET = None
 if creds_json:
     try:
         creds_dict = json.loads(creds_json)
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
+        # Flattened to a single line to completely prevent IndentationErrors
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
         SHEET = client.open(SHEET_NAME)
@@ -278,7 +276,8 @@ def telegram_webhook():
         prompt += "- \"selling_price\" (number, digits only)\n\n"
         prompt += "Text: \"" + text + "\""
         
-      response = ai_model.generate_content(prompt)
+        # Stripped generation_config to prevent Render version mismatch errors
+        response = ai_model.generate_content(prompt)
         
         raw_text = response.text.strip()
         
