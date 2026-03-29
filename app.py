@@ -37,7 +37,7 @@ if GEMINI_API_KEY:
 def get_next_id(ws):
     records = ws.get_all_records()
     if not records: return 1
-    return max([int(r.get('id', 0)) for r in records]) + 1
+    return max([int(r.get('id', 0) or 0) for r in records]) + 1
 
 # ── Page Routes ──────────────────────────────────────────────────────────────
 @app.route('/')
@@ -69,9 +69,10 @@ def manage_cards():
 
 @app.route('/api/cards/<int:card_id>', methods=['DELETE'])
 def delete_card(card_id):
+    if not SHEET: return jsonify({'success': False})
     try:
         ws = SHEET.worksheet('cards')
-        ws.delete_rows(ws.find(str(card_id), in_column=1).row)
+        ws.delete_row(ws.find(str(card_id), in_column=1).row)
     except: pass
     return jsonify({'success': True})
 
@@ -83,9 +84,10 @@ def handle_master_table(table_name, req, field_name='name'):
     return jsonify({'success': True})
 
 def delete_master_table(table_name, item_id):
+    if not SHEET: return jsonify({'success': False})
     try:
         ws = SHEET.worksheet(table_name)
-        ws.delete_rows(ws.find(str(item_id), in_column=1).row)
+        ws.delete_row(ws.find(str(item_id), in_column=1).row)
     except: pass
     return jsonify({'success': True})
 
@@ -139,6 +141,7 @@ def del_variant(var_id): return delete_master_table('variants', var_id)
 # ── Main Orders API ───────────────────────────────────────────────────────────
 @app.route('/api/main-orders', methods=['GET', 'POST'])
 def api_main_orders():
+    if not SHEET: return jsonify([])
     ws = SHEET.worksheet('main_orders')
     if request.method == 'GET':
         orders = ws.get_all_records()
@@ -158,12 +161,14 @@ def api_main_orders():
     ws.append_row(row)
     row[2] = last_digits
     return jsonify(dict(zip(ws.row_values(1), row)))
+
 @app.route('/api/main-orders/<int:id>', methods=['DELETE'])
 def del_main(id): return delete_master_table('main_orders', id)
 
 # ── Secondary Orders API ──────────────────────────────────────────────────────
 @app.route('/api/secondary-orders', methods=['GET', 'POST'])
 def api_secondary_orders():
+    if not SHEET: return jsonify([])
     ws = SHEET.worksheet('secondary_orders')
     if request.method == 'GET':
         orders = ws.get_all_records()
@@ -182,12 +187,14 @@ def api_secondary_orders():
     ws.append_row(row)
     row[2] = last_digits
     return jsonify(dict(zip(ws.row_values(1), row)))
+
 @app.route('/api/secondary-orders/<int:id>', methods=['DELETE'])
 def del_sec(id): return delete_master_table('secondary_orders', id)
 
 # ── Offline Orders API ────────────────────────────────────────────────────────
 @app.route('/api/offline-orders', methods=['GET', 'POST'])
 def api_offline_orders():
+    if not SHEET: return jsonify([])
     ws = SHEET.worksheet('offline_orders')
     if request.method == 'GET':
         orders = ws.get_all_records()
@@ -209,96 +216,62 @@ def api_offline_orders():
 
 @app.route('/api/offline-orders/<int:id>', methods=['DELETE'])
 def del_offline(id): return delete_master_table('offline_orders', id)
+
 @app.route('/api/offline-orders/bulk-delete', methods=['POST'])
 def bulk_del_offline():
+    if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', [])
     ws = SHEET.worksheet('offline_orders')
     rows_to_delete = [i + 2 for i, r in enumerate(ws.get_all_records()) if r['id'] in ids]
-    for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_rows(r_idx)
+    for r_idx in sorted(rows_to_delete, reverse=True): 
+        ws.delete_row(r_idx)
     return jsonify({'success': True})
 
 # ── 🤖 TELEGRAM AI AGENT WEBHOOK 🤖 ───────────────────────────────────────────
 @app.route('/telegram-webhook', methods=['POST'])
 def telegram_webhook():
-    update = request.json
+    update = request.get_json(silent=True)
     
-    # Only process text messages
-    if "message" in update and "text" in update["message"]:
-        chat_id = update["message"]["chat"]["id"]
-        text = update["message"]["text"]
+    # Safe structure checking
+    if not update or "message" not in update or "text" not in update["message"]:
+        return jsonify({"status": "ok"})
         
-        # Simple health check command
-        if text == "/start":
-            requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", 
-                          json={"chat_id": chat_id, "text": "🤖 OrderTrack AI is online! Send me a messy sale text and I'll log it."})
-            return jsonify({"status": "ok"})
+    chat_id = update["message"]["chat"]["id"]
+    text = update["message"]["text"]
+    
+    # Simple health check command
+    if text == "/start":
+        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", 
+                      json={"chat_id": chat_id, "text": "🤖 OrderTrack AI is online! Send me a messy sale text and I'll log it."})
+        return jsonify({"status": "ok"})
 
-        try:
-            # 1. Ask Gemini to read the text and extract the data
-            prompt = f"""
-            You are a data extraction bot for a mobile phone business. Extract the offline sale details from the text below.
-            Format the output ONLY as a valid JSON object. Do not include markdown formatting or backticks.
-            Required JSON keys:
-            - "last_digits" (string, just the numbers)
-            - "card_type" (string, e.g., SBI, HDFC)
-            - "machine" (string)
-            - "vendor" (string)
-            - "brand" (string, e.g., iPhone 15)
-            - "sale_type" (string: must be either "INSTANT" or "EMI")
-            - "costing" (number, digits only)
-            - "selling_price" (number, digits only)
-            
-            Text: "{text}"
-            """
-            
-            response = ai_model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(response_mime_type="application/json")
-            )
-            parsed_data = json.loads(response.text)
+    try:
+        prompt = f"""
+        You are a data extraction bot for a mobile phone business. Extract the offline sale details from the text below.
+        Format the output ONLY as a valid JSON object. Do not include markdown formatting or backticks.
+        Required JSON keys:
+        - "last_digits" (string, just the numbers)
+        - "card_type" (string, e.g., SBI, HDFC)
+        - "machine" (string)
+        - "vendor" (string)
+        - "brand" (string, e.g., iPhone 15)
+        - "sale_type" (string: must be either "INSTANT" or "EMI")
+        - "costing" (number, digits only)
+        - "selling_price" (number, digits only)
+        
+        Text: "{text}"
+        """
+        
+        response = ai_model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(response_mime_type="application/json")
+        )
+        
+        # Clean markdown formatting in case the AI includes backticks
+        raw_text = response.text.strip()
+        if raw_text.startswith("
+http://googleusercontent.com/immersive_entry_chip/0
+http://googleusercontent.com/immersive_entry_chip/1
+http://googleusercontent.com/immersive_entry_chip/2
 
-            # 2. Save the extracted data to Google Sheets
-            ws = SHEET.worksheet('offline_orders')
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            sale_month = datetime.now().strftime('%Y-%m')
-            
-            costing = float(parsed_data.get('costing', 0))
-            selling_price = float(parsed_data.get('selling_price', 0))
-            profit = selling_price - costing
-            
-            row = [
-                get_next_id(ws),
-                parsed_data.get('card_type', 'UNKNOWN'),
-                f"'{parsed_data.get('last_digits', '')}",
-                parsed_data.get('machine', 'UNKNOWN'),
-                parsed_data.get('vendor', 'UNKNOWN'),
-                parsed_data.get('brand', 'UNKNOWN'),
-                parsed_data.get('sale_type', 'INSTANT').upper(),
-                costing,
-                selling_price,
-                profit,
-                sale_month,
-                now
-            ]
-            ws.append_row(row)
-
-            # 3. Send a success message back to Telegram
-            reply_msg = f"✅ **Sale Logged to Cloud**\n\n📱 Brand: {parsed_data.get('brand')}\n💳 Card: {parsed_data.get('card_type')} ({parsed_data.get('last_digits')})\n💰 Profit: ₹{profit:,.2f}"
-            requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", 
-                          json={"chat_id": chat_id, "text": reply_msg, "parse_mode": "Markdown"})
-
-        except Exception as e:
-            # If the AI fails or sheet fails, tell the user
-            requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", 
-                          json={"chat_id": chat_id, "text": f"❌ Error processing sale: {str(e)}"})
-
-    return jsonify({"status": "ok"})
-
-# ── PWA Setup ─────────────────────────────────────────────────────────────────
-@app.route('/manifest.json')
-def serve_manifest(): return send_file('static/manifest.json', mimetype='application/manifest+json')
-@app.route('/sw.js')
-def serve_sw(): return send_file('static/sw.js', mimetype='application/javascript')
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+Would you like me to take a look at the HTML template structure next to make sure the frontend isn't masking any other errors?
