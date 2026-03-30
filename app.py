@@ -266,12 +266,27 @@ def modify_main(id):
         cost = float(data.get('costing', 0) or 0)
         sell = float(data.get('selling_price', 0) or 0)
         profit = sell - cost
-        
-        ws.update_cell(cell.row, 9, cost)
-        ws.update_cell(cell.row, 10, sell)
-        ws.update_cell(cell.row, 11, profit) 
-        ws.update_cell(cell.row, 13, data.get('sale_batch', 'Current Sale'))
-        return jsonify({'success': True})
+        last_digits = str(data.get('last_digits', ''))
+        safe_digits = f"'{last_digits}" if last_digits else ""
+
+        # Update ALL editable columns B–M in one batch API call (fast)
+        ws.update(f'B{cell.row}:M{cell.row}', [[
+            data.get('card_type', ''), safe_digits, data.get('platform', ''),
+            data.get('account', ''), data.get('order_name', ''), data.get('model', ''),
+            data.get('variant', ''), cost, sell, profit,
+            data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
+        ]])
+
+        # Return the full updated record so the frontend can update instantly
+        return jsonify({
+            'success': True, 'id': id,
+            'card_type': data.get('card_type', ''), 'last_digits': last_digits,
+            'platform': data.get('platform', ''), 'account': data.get('account', ''),
+            'order_name': data.get('order_name', ''), 'model': data.get('model', ''),
+            'variant': data.get('variant', ''), 'costing': cost, 'selling_price': sell,
+            'profit': profit, 'delivery_date': data.get('delivery_date', ''),
+            'sale_batch': data.get('sale_batch', 'Current Sale')
+        })
     except Exception as e:
         print("Edit Error:", e)
         return jsonify({'success': False})
@@ -355,12 +370,26 @@ def modify_sec(id):
         cost = float(data.get('costing', 0) or 0)
         sell = float(data.get('selling_price', 0) or 0)
         profit = sell - cost
-        
-        ws.update_cell(cell.row, 9, cost)
-        ws.update_cell(cell.row, 10, sell)
-        ws.update_cell(cell.row, 11, profit)
-        ws.update_cell(cell.row, 13, data.get('sale_batch', 'Current Sale'))
-        return jsonify({'success': True})
+        last_digits = str(data.get('last_digits', ''))
+        safe_digits = f"'{last_digits}" if last_digits else ""
+
+        # Update ALL editable columns B–M in one batch API call (fast)
+        ws.update(f'B{cell.row}:M{cell.row}', [[
+            data.get('card_type', ''), safe_digits, data.get('platform', ''),
+            data.get('account', ''), data.get('order_name', ''), data.get('model', ''),
+            data.get('variant', ''), cost, sell, profit,
+            data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
+        ]])
+
+        return jsonify({
+            'success': True, 'id': id,
+            'card_type': data.get('card_type', ''), 'last_digits': last_digits,
+            'platform': data.get('platform', ''), 'account': data.get('account', ''),
+            'order_name': data.get('order_name', ''), 'model': data.get('model', ''),
+            'variant': data.get('variant', ''), 'costing': cost, 'selling_price': sell,
+            'profit': profit, 'delivery_date': data.get('delivery_date', ''),
+            'sale_batch': data.get('sale_batch', 'Current Sale')
+        })
     except Exception as e:
         print("Edit Error:", e)
         return jsonify({'success': False})
