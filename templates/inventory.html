@@ -1,9 +1,14 @@
 {% extends 'base.html' %}
 {% set active = 'inventory' %}
-{% block title %}Master Inventory — OrderTrack{% endblock %}
+{% block title %}Offline Inventory — OrderTrack{% endblock %}
 
 {% block content %}
-<div class="page-title">Global Card Inventory</div>
+<div class="page-header">
+  <div>
+    <div class="page-title">Offline Card Inventory</div>
+    <div class="page-subtitle">Track card availability against specific offline brands</div>
+  </div>
+</div>
 
 <div class="card-panel">
   <div class="row g-3 align-items-end">
@@ -14,15 +19,15 @@
       </select>
     </div>
     <div class="col-md-3">
-      <label class="form-label">Check specific Brand/Model</label>
+      <label class="form-label">Check specific Brand</label>
       <select id="f_model" class="form-select" onchange="runLogic()">
-        <option value="">All Models & Brands</option>
+        <option value="">All Brands</option>
       </select>
     </div>
     <div class="col-md-6 pb-2">
       <div class="form-check form-switch" style="font-size:15px;">
         <input class="form-check-input" type="checkbox" id="f_remaining" onchange="runLogic()">
-        <label class="form-check-label" style="color:var(--accent2);font-weight:600;">🎯 Show Cards NEVER swiped for this Brand/Model</label>
+        <label class="form-check-label" style="color:var(--accent2);font-weight:600;">🎯 Show Cards NEVER swiped for this Brand</label>
       </div>
     </div>
   </div>
@@ -31,7 +36,7 @@
 <div class="table-wrap">
   <table class="data-table">
     <thead>
-      <tr><th>Card Number</th><th>Bank</th><th>Global Status</th><th>Usage Info</th></tr>
+      <tr><th>Card Number</th><th>Bank</th><th>Offline Status</th><th>Offline Usage Info</th></tr>
     </thead>
     <tbody id="invBody"><tr><td colspan="4">Loading...</td></tr></tbody>
   </table>
@@ -40,78 +45,76 @@
 
 {% block scripts %}
 <script>
-let mCards = [], allSales = [];
+let mCards = [], offlineSales = [], offlineBrands = [];
 
 async function init() {
   try {
-    // Fetch all master cards and every single sale from all 3 tabs
-    const [cards, main, sec, off] = await Promise.all([
+    // 1. Fetch ONLY Master Cards, Offline Sales, and Offline Brands Master Data
+    const [cards, offSales, brands] = await Promise.all([
       api('/api/cards'), 
-      api('/api/main-orders'), 
-      api('/api/secondary-orders'), 
-      api('/api/offline-orders')
+      api('/api/offline-orders'),
+      api('/api/brands')
     ]);
     
     mCards = cards;
-    allSales = [...main, ...sec, ...off];
+    offlineSales = offSales;
+    offlineBrands = brands;
     
-    // 1. Populate Bank Dropdown
+    // 2. Populate Bank Dropdown
     const types = [...new Set(mCards.map(c => c.card_type))].filter(Boolean).sort();
     types.forEach(t => document.getElementById('f_type').innerHTML += `<option value="${t}">${t}</option>`);
     
-    // 2. Populate Model/Brand Dropdown from ACTUAL sales data
-    // We check both 'model' (Online) and 'brand' (Offline) columns
-    const rawModels = allSales.map(s => s.model || s.brand).filter(Boolean);
-    const uniqueModels = [...new Set(rawModels)].sort();
-    
-    uniqueModels.forEach(m => {
-      // Store the value as lowercase to make filtering foolproof
-      document.getElementById('f_model').innerHTML += `<option value="${m.toLowerCase()}">${m}</option>`;
+    // 3. Populate Brand Dropdown straight from your Settings Master Data
+    offlineBrands.forEach(b => {
+      let bName = b.name || b.brand_name;
+      if(bName) {
+        document.getElementById('f_model').innerHTML += `<option value="${bName.toLowerCase()}">${bName}</option>`;
+      }
     });
     
     runLogic();
     
   } catch (err) {
-    // If the server throws a 500 error, this will catch it and print it to the screen
-    document.getElementById('invBody').innerHTML = `<tr><td colspan="4" style="color:var(--red); font-weight:bold;">⚠️ Error loading data. Please ensure the 'cards', 'main_orders', 'secondary_orders', and 'offline_orders' tabs all exist in your Google Sheet.</td></tr>`;
+    document.getElementById('invBody').innerHTML = `<tr><td colspan="4" style="color:var(--red); font-weight:bold;">⚠️ Error loading data. Please ensure your Google Sheet connections are active.</td></tr>`;
     console.error("Fetch Error:", err);
   }
 }
 
 function runLogic() {
   const sType = document.getElementById('f_type').value;
-  const sModel = document.getElementById('f_model').value; 
+  const sBrand = document.getElementById('f_model').value; 
   const sRem = document.getElementById('f_remaining').checked;
   
   let result = [...mCards];
   
-  // 1. Filter by Bank
+  // Filter by Bank
   if(sType) result = result.filter(c => c.card_type === sType);
   
-  // 2. Filter by "Remaining for Model"
-  if(sRem && sModel) {
-    // Find all cards used for this EXACT model/brand
-    const usedCards = allSales.filter(s => {
-      const m = (s.model || s.brand || '').toLowerCase();
-      return m === sModel; 
+  // Filter by "Remaining for Brand"
+  if(sRem && sBrand) {
+    // Find all cards used for this EXACT offline brand
+    const usedCards = offlineSales.filter(s => {
+      const b = (s.brand || '').toLowerCase();
+      return b === sBrand; 
     }).map(s => String(s.last_digits));
     
     // Keep only the cards that are NOT in the used list
     result = result.filter(c => !usedCards.includes(String(c.last_digits)));
   }
   
-  // 3. Render the table
+  // Render the table
   let html = '';
   if (result.length === 0) {
     html = '<tr><td colspan="4" class="text-center" style="color:var(--muted); padding: 20px;">No cards found matching criteria.</td></tr>';
   } else {
     result.forEach(c => {
-      const usages = allSales.filter(s => String(s.last_digits) === String(c.last_digits));
+      // Check usages strictly against offline sales
+      const usages = offlineSales.filter(s => String(s.last_digits) === String(c.last_digits));
       const isUsed = usages.length > 0;
       
-      let usageText = 'Never Swiped Anywhere';
+      let usageText = 'Never Swiped Offline';
       if (isUsed) {
-        usageText = `Swiped ${usages.length} time(s). Last seen: ${usages[0].model || usages[0].brand || 'Unknown'}`;
+        usageText = `Swiped ${usages.length} time(s). Last seen: ${usages[0].brand || 'Unknown'}`;
       }
 
       html += `<tr>
