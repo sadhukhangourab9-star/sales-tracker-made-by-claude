@@ -5,102 +5,200 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <div class="page-title">Main Online Orders</div>
-    <div class="page-subtitle">Track primary platform purchases, models, and delivery statuses</div>
+    <div class="page-title">Main Orders</div>
+    <div class="page-subtitle">Track all online platform orders with financial and batch details</div>
   </div>
   <div style="display:flex;gap:10px;align-items:center;">
-    <div class="stat-pill"><strong id="totalCount">0</strong> Sales</div>
-    <div class="stat-pill" id="totalProfit" style="color:var(--green);font-weight:600;">Profit: ₹0</div>
+    <div class="stat-pill"><strong id="totalCount">0</strong> Orders</div>
+    <div class="stat-pill" id="totalCost" style="color:var(--text);font-weight:600;">Spend: ₹0 | Profit: ₹0</div>
   </div>
 </div>
 
 <button class="toggle-form-btn" onclick="toggleForm()">
-  <i class="bi bi-plus-circle"></i> <span id="formToggleText">Add New Online Sale</span>
+  <i class="bi bi-plus-circle"></i> <span id="formToggleText">Add New Order</span>
 </button>
 
-<div class="card-panel" id="addFormPanel" style="display:none; border-left: 4px solid var(--accent2);">
+<div class="card-panel" id="addFormPanel" style="display:none;">
+  <div class="card-panel-title"><i class="bi bi-plus-lg"></i> New Main Order</div>
   <div class="row g-3">
     <div class="col-md-2">
-      <label class="form-label">Card Number *</label>
-      <input type="text" id="f_digits" class="form-control" placeholder="Last 4-5 digits" maxlength="5" oninput="onDigitsInput(this.value)"/>
+      <label class="form-label">1. Order Date</label>
+      <input type="text" id="f_created_at" class="form-control" readonly/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Bank</label>
+      <label class="form-label">2. Card Number *</label>
+      <input type="text" id="f_digits" class="form-control" placeholder="Last 4-5 digits" maxlength="5" oninput="onDigitsInput(this.value, 'f_bank')"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">3. Bank</label>
       <input type="text" id="f_bank" class="form-control" readonly placeholder="Auto-filled"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Platform *</label>
+      <label class="form-label">4. Platform *</label>
       <select id="f_platform" class="form-select"><option value="">Select</option></select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Account</label>
-      <select id="f_account" class="form-select"><option value="">Select</option></select>
+      <label class="form-label">5. Account No.</label>
+      <input type="text" id="f_account" class="form-control" placeholder="Manual entry"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Order Name/ID</label>
-      <input type="text" id="f_order_name" class="form-control" placeholder="Order ID"/>
+      <label class="form-label">6. Order Name *</label>
+      <input type="text" id="f_order_name" class="form-control" placeholder="Order #"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">7. Model *</label>
+      <input type="text" id="f_model" class="form-control" placeholder="e.g. iPhone 15" list="modelList" oninput="onModelInput(this.value,'f_variant')"/>
+      <datalist id="modelList"></datalist>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">8. Variant</label>
+      <select id="f_variant" class="form-select" onchange="onVariantChange(this, 'f_costing')"><option value="">Select Variant</option></select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">9. Delivery Date</label>
+      <input type="date" id="f_delivery_date" class="form-control"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">10. Costing (₹)</label>
+      <input type="number" id="f_costing" class="form-control" placeholder="Amount" step="0.01"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">11. Selling Price (₹)</label>
+      <input type="number" id="f_selling_price" class="form-control" placeholder="Optional" step="0.01"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">12. Sale Batch</label>
+      <input type="text" id="f_sale_batch" class="form-control" value="Current Sale" placeholder="e.g. Sale 1"/>
     </div>
     
-    <div class="col-md-2">
-      <label class="form-label">Model *</label>
-      <select id="f_model" class="form-select" onchange="loadVariants()"><option value="">Select</option></select>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Variant</label>
-      <select id="f_variant" class="form-select" onchange="autoFillPrice()"><option value="">Select Model First</option></select>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Costing (₹)</label>
-      <input type="number" id="f_costing" class="form-control" placeholder="0.00"/>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Selling Price (₹)</label>
-      <input type="number" id="f_selling" class="form-control" placeholder="0.00"/>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Delivery Date</label>
-      <input type="date" id="f_delivery" class="form-control"/>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Sale Batch</label>
-      <input type="text" id="f_batch" class="form-control" value="Current Sale"/>
-    </div>
-
-    <div class="col-12 mt-3">
-      <button id="saveSaleBtn" class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Sale</button>
+    <div class="col-12 d-flex gap-2 mt-2">
+      <button class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Order</button>
+      <button class="btn-outline-custom" onclick="clearForm()"><i class="bi bi-x-lg"></i> Clear</button>
     </div>
   </div>
 </div>
 
-<div class="toolbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+<div class="toolbar" style="display:flex; justify-content:space-between; align-items:center;">
   <div style="display:flex; gap:10px; align-items:center;">
-    <input type="text" class="search-input" id="searchInput" placeholder="Search orders..." oninput="filterTable()"/>
-    <select id="filterBatch" class="form-select" style="width:180px;" onchange="filterTable()">
-      <option value="">All Batches</option>
+    <div class="search-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search orders…" oninput="filterTable()"/>
+    </div>
+    <select id="filterSale" class="form-select" style="width:160px;" onchange="filterTable()">
+      <option value="ALL">All Sales</option>
     </select>
   </div>
-  <div id="bulkActions" style="display:none; gap:10px; align-items:center;">
-    <div class="input-group" style="width:250px;">
-      <input type="text" id="newBatchName" class="form-control form-control-sm" placeholder="Set Batch">
-      <button class="btn btn-sm btn-warning" onclick="updateBatch()">Update Batch</button>
-    </div>
-    <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()">Delete (<span id="selCount">0</span>)</button>
+  
+  <div class="toolbar-right">
+    <button class="btn-success-custom" id="bulkSaleBtn" onclick="promptBulkSale()" style="display:none;">
+      <i class="bi bi-tags"></i> Assign Sale
+    </button>
+    <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">
+      <i class="bi bi-trash3"></i> Delete (<span id="selCount">0</span>)
+    </button>
+    <button class="btn-outline-custom" onclick="exportOrders('csv')"><i class="bi bi-filetype-csv"></i> CSV</button>
+    <button class="btn-outline-custom" onclick="exportOrders('excel')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
   </div>
 </div>
 
 <div class="card-panel" style="padding:0;overflow:hidden;">
   <div class="data-table-wrap">
-    <table class="data-table">
+    <table class="data-table" id="mainTable">
       <thead>
         <tr>
           <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"/></th>
-          <th>Date</th><th>Batch</th><th>Card #</th><th>Bank</th>
-          <th>Platform</th><th>Account</th><th>Model</th><th>Variant</th>
-          <th>Costing</th><th>Sell Price</th><th>Profit</th><th>Delivery</th><th>Action</th>
+          <th>Batch</th>
+          <th>Order Date</th>
+          <th>Card #</th>
+          <th>Bank</th>
+          <th>Platform</th>
+          <th>Account No.</th>
+          <th>Order Name</th>
+          <th>Model</th>
+          <th>Variant</th>
+          <th>Delivery Date</th>
+          <th>Costing</th>
+          <th>Sale Price</th>
+          <th>Profit</th>
+          <th>Actions</th>
         </tr>
       </thead>
-      <tbody id="tableBody"></tbody>
+      <tbody id="mainTableBody">
+        <tr><td colspan="15"><div class="empty-state"><i class="bi bi-inbox"></i><p>Loading orders...</p></div></td></tr>
+      </tbody>
     </table>
+  </div>
+  <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px; border-top:1px solid var(--border);">
+    <span id="pageInfo" style="color:var(--muted); font-size:12px; font-weight:600;">0 - 0 of 0</span>
+    <div style="display:flex; gap:8px;">
+      <button id="btnPrev" onclick="changePage(-1)" class="btn-outline-custom" disabled>Previous</button>
+      <button id="btnNext" onclick="changePage(1)" class="btn-outline-custom" disabled>Next</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Order</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="e_id"/>
+        <div class="row g-3">
+          <div class="col-md-2">
+            <label class="form-label">Card Number</label>
+            <input type="text" id="e_digits" class="form-control" maxlength="5" oninput="onDigitsInput(this.value,'e_bank')"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Bank</label>
+            <input type="text" id="e_bank" class="form-control" readonly/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Platform</label>
+            <select id="e_platform" class="form-select"><option value="">Select</option></select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Account No.</label>
+            <input type="text" id="e_account" class="form-control"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Order Name</label>
+            <input type="text" id="e_order_name" class="form-control"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Model</label>
+            <input type="text" id="e_model" class="form-control" list="eModelList" oninput="onModelInput(this.value,'e_variant')"/>
+            <datalist id="eModelList"></datalist>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Variant</label>
+            <select id="e_variant" class="form-select" onchange="onVariantChange(this, 'e_costing')"><option value="">Select</option></select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Delivery Date</label>
+            <input type="date" id="e_delivery_date" class="form-control"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Costing (₹)</label>
+            <input type="number" id="e_costing" class="form-control" step="0.01"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Selling Price (₹)</label>
+            <input type="number" id="e_selling_price" class="form-control" step="0.01"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Sale Batch</label>
+            <input type="text" id="e_sale_batch" class="form-control"/>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-primary-custom" onclick="saveEdit()"><i class="bi bi-check-lg"></i> Save Changes</button>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -108,164 +206,351 @@
 {% block scripts %}
 <script>
 let allOrders = [];
-let allCards = [];
-let currentVariants = [];
+let filteredOrders = []; 
+let currentPage = 1;
+const PAGE_SIZE = 50;
+let modelTimer = null;
+const editModal = new bootstrap.Modal(document.getElementById('editModal'));
 
+// ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-  document.getElementById('f_delivery').value = new Date().toISOString().slice(0, 10);
-  
-  const [platforms, models, cards, accounts] = await Promise.all([
-    api('/api/platforms'), api('/api/models'), api('/api/cards'), api('/api/sec-order-names')
-  ]);
-  
-  allCards = cards;
-  
-  platforms.forEach(p => { let v = p.platform_name || p.name; if(v) document.getElementById('f_platform').innerHTML += `<option value="${v}">${v}</option>`; });
-  models.forEach(m => { let v = m.model_name || m.name; if(v) document.getElementById('f_model').innerHTML += `<option value="${v}">${v}</option>`; });
-  accounts.forEach(a => { let v = a.name; if(v) document.getElementById('f_account').innerHTML += `<option value="${v}">${v}</option>`; });
+  document.getElementById('f_delivery_date').value = '';
+  document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
 
-  allOrders = await api('/api/main-orders');
-  updateBatchDropdown();
-  filterTable();
-}
-
-function updateBatchDropdown() {
-  const batchFilter = document.getElementById('filterBatch');
-  const uniqueBatches = [...new Set(allOrders.map(o => o.sale_batch).filter(b => b && b !== 'Current Sale'))];
-  batchFilter.innerHTML = '<option value="">All Batches</option><option value="Current Sale">Current Sale</option>';
-  uniqueBatches.forEach(b => { batchFilter.innerHTML += `<option value="${b}">${b}</option>`; });
-}
-
-function toggleForm() {
-  const panel = document.getElementById('addFormPanel');
-  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-}
-
-let digitTimer = null;
-function onDigitsInput(val) {
-  clearTimeout(digitTimer);
-  if (val.length >= 4) digitTimer = setTimeout(() => {
-    const match = allCards.find(c => String(c.last_digits) === val.trim());
-    document.getElementById('f_bank').value = match ? match.card_type : '';
-  }, 500);
-}
-
-async function loadVariants() {
-  const modelName = document.getElementById('f_model').value;
-  const vSel = document.getElementById('f_variant');
-  if (!modelName) { vSel.innerHTML = '<option value="">Select Model First</option>'; return; }
-  vSel.innerHTML = '<option value="">Loading...</option>';
-  currentVariants = await api(`/api/variants?model=${encodeURIComponent(modelName)}`);
-  vSel.innerHTML = '<option value="">Select Variant</option>';
-  currentVariants.forEach(v => {
-    let val = v.variant_name || v.name;
-    if(val) vSel.innerHTML += `<option value="${val}">${val}</option>`;
+  const platforms = await api('/api/platform-names');
+  ['f_platform','e_platform'].forEach(id => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '<option value="">Select Platform</option>';
+    platforms.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = p;
+      sel.appendChild(opt);
+    });
   });
+
+  const models = await api('/api/models');
+  ['modelList','eModelList'].forEach(id => {
+    const dl = document.getElementById(id);
+    dl.innerHTML = '';
+    models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.model_name;
+      dl.appendChild(opt);
+    });
+  });
+
+  await loadOrders();
 }
 
-function autoFillPrice() {
-  const sel = document.getElementById('f_variant').value;
-  const match = currentVariants.find(v => (v.variant_name || v.name) === sel);
-  if (match && match.costing) document.getElementById('f_costing').value = match.costing;
+async function loadOrders() {
+  allOrders = await api('/api/main-orders');
+  populateSaleFilter();
+  filterTable(); 
 }
 
-async function submitOrder() {
-  const btn = document.getElementById('saveSaleBtn');
-  const originalText = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right: 6px;" role="status" aria-hidden="true"></span>Saving...';
-
-  const payload = {
-    last_digits: document.getElementById('f_digits').value,
-    card_type: document.getElementById('f_bank').value,
-    platform: document.getElementById('f_platform').value,
-    account: document.getElementById('f_account').value,
-    order_name: document.getElementById('f_order_name').value,
-    model: document.getElementById('f_model').value,
-    variant: document.getElementById('f_variant').value,
-    costing: document.getElementById('f_costing').value || 0,
-    selling_price: document.getElementById('f_selling').value || 0,
-    delivery_date: document.getElementById('f_delivery').value,
-    sale_batch: document.getElementById('f_batch').value
-  };
+// ── Pagination & Rendering ────────────────────────────────────────────────────
+function renderTable() {
+  const body = document.getElementById('mainTableBody');
+  if (!filteredOrders.length) {
+    body.innerHTML = '<tr><td colspan="15"><div class="empty-state"><i class="bi bi-inbox"></i><p>No orders found.</p></div></td></tr>';
+    document.getElementById('pageInfo').textContent = '0 - 0 of 0';
+    document.getElementById('btnPrev').disabled = true;
+    document.getElementById('btnNext').disabled = true;
+    return;
+  }
   
-  try {
-    const res = await api('/api/main-orders', 'POST', payload);
-    if(res.success !== false) {
-      allOrders.unshift(res);
-      updateBatchDropdown();
-      filterTable();
-      showToast("Online Sale Saved!");
-      ['f_digits','f_bank','f_order_name','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
-    }
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalText;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const end = Math.min(start + PAGE_SIZE, filteredOrders.length);
+  const pageData = filteredOrders.slice(start, end);
+  
+  document.getElementById('pageInfo').textContent = `${start + 1} - ${end} of ${filteredOrders.length}`;
+  document.getElementById('btnPrev').disabled = currentPage === 1;
+  document.getElementById('btnNext').disabled = end >= filteredOrders.length;
+
+  body.innerHTML = pageData.map(o => {
+    const pColor = o.profit >= 0 ? 'var(--green)' : 'var(--red)';
+    const dateStr = (o.created_at || '—').split(' ')[0]; // Show only date for space
+    return `
+    <tr data-id="${o.id}">
+      <td><input type="checkbox" class="row-check" value="${o.id}" onchange="onCheckChange()"/></td>
+      <td><span class="badge-card" style="background:var(--navy);border:1px solid var(--border)">${o.sale_batch||'Current Sale'}</span></td>
+      <td style="color:var(--muted);font-size:12px;">${dateStr}</td>
+      <td><code style="color:var(--accent2);font-size:12px;">•••• ${o.last_digits||'—'}</code></td>
+      <td>${cardBadge(o.card_type)}</td>
+      <td>${o.platform||'—'}</td>
+      <td style="color:var(--muted)">${o.account||'—'}</td>
+      <td style="font-weight:500">${o.order_name||'—'}</td>
+      <td>${o.model||'—'}</td>
+      <td style="color:var(--muted)">${o.variant||'—'}</td>
+      <td style="color:var(--muted)">${o.delivery_date||'—'}</td>
+      <td style="color:var(--muted)">${formatCost(o.costing)}</td>
+      <td style="color:var(--text);font-weight:600">${formatCost(o.selling_price)}</td>
+      <td style="color:${pColor};font-weight:600">${formatCost(o.profit)}</td>
+      <td>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})"><i class="bi bi-pencil"></i></button>
+        </div>
+      </td>
+    </tr>
+  `}).join('');
+}
+
+function changePage(dir) {
+  currentPage += dir;
+  renderTable();
+}
+
+function updateStats() {
+  document.getElementById('totalCount').textContent = filteredOrders.length;
+  const totalCost = filteredOrders.reduce((s, o) => s + (parseFloat(o.costing)||0), 0);
+  const totalProfit = filteredOrders.reduce((s, o) => s + (parseFloat(o.profit)||0), 0);
+  document.getElementById('totalCost').innerHTML = `<span style="color:var(--muted)">Spend:</span> ${formatCost(totalCost)} <span style="color:var(--muted);margin-left:8px;">Profit:</span> <span style="color:var(--green)">${formatCost(totalProfit)}</span>`;
+}
+
+// ── Search & Filters ──────────────────────────────────────────────────────────
+function populateSaleFilter() {
+  const sales = [...new Set(allOrders.map(o => o.sale_batch || 'Current Sale'))].sort();
+  const sel = document.getElementById('filterSale');
+  const currentVal = sel.value; // Remember selection
+  
+  sel.innerHTML = '<option value="ALL">All Sales</option>';
+  sales.forEach(s => { 
+    const opt = document.createElement('option'); 
+    opt.value = s; 
+    opt.textContent = s; 
+    sel.appendChild(opt); 
+  });
+  
+  // Restore selection if it still exists
+  if ([...sel.options].some(o => o.value === currentVal)) {
+    sel.value = currentVal;
   }
 }
 
 function filterTable() {
   const q = document.getElementById('searchInput').value.toLowerCase();
-  const batchFilter = document.getElementById('filterBatch').value;
+  const saleFilter = document.getElementById('filterSale').value;
   
-  let filtered = allOrders.filter(o => {
-    const matchSearch = Object.values(o).join(' ').toLowerCase().includes(q);
-    const matchBatch = batchFilter ? o.sale_batch === batchFilter : true;
-    return matchSearch && matchBatch;
+  filteredOrders = allOrders.filter(o => {
+    const matchesSearch = Object.values(o).some(v => String(v||'').toLowerCase().includes(q));
+    const matchesSale = (saleFilter === 'ALL') || ((o.sale_batch || 'Current Sale') === saleFilter);
+    return matchesSearch && matchesSale;
   });
   
-  let profit = 0;
-  const html = filtered.map(o => {
-    profit += parseFloat(o.profit || 0);
-    return `<tr>
-      <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
-      <td style="color:var(--muted);">${(o.created_at || '').split(' ')[0]}</td>
-      <td><span class="badge-card" style="background:var(--navy3);">${o.sale_batch || '-'}</span></td>
-      <td><code style="color:var(--accent2);">•••• ${o.last_digits}</code></td>
-      <td>${cardBadge(o.card_type)}</td>
-      <td>${o.platform}</td>
-      <td>${o.account || '-'}</td>
-      <td style="font-weight:bold;">${o.model}</td>
-      <td>${o.variant || '-'}</td>
-      <td style="color:var(--muted)">${formatCost(o.costing)}</td>
-      <td>${formatCost(o.selling_price)}</td>
-      <td style="color:${o.profit >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:bold;">${formatCost(o.profit)}</td>
-      <td style="color:var(--muted);">${o.delivery_date || '-'}</td>
-      <td><button class="btn-sm btn-outline-danger" onclick="del(${o.id})"><i class="bi bi-trash"></i></button></td>
-    </tr>`;
-  }).join('');
-  
-  document.getElementById('tableBody').innerHTML = html;
-  document.getElementById('totalCount').textContent = filtered.length;
-  document.getElementById('totalProfit').textContent = `Profit: ${formatCost(profit)}`;
-  checkBulk();
+  currentPage = 1; 
+  renderTable();
+  updateStats();
 }
 
-async function del(id) {
-  if(!confirm("Delete this?")) return;
-  await api(`/api/main-orders/${id}`, 'DELETE');
-  allOrders = allOrders.filter(o => o.id !== id);
-  filterTable();
+// ── Form ──────────────────────────────────────────────────────────────────────
+function toggleForm() {
+  const panel = document.getElementById('addFormPanel');
+  const btn = document.getElementById('formToggleText');
+  const visible = panel.style.display !== 'none';
+  panel.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? 'Add New Order' : 'Hide Form';
 }
 
-function toggleSelectAll(cb) { document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked); checkBulk(); }
-function checkBulk() { 
-  const c = document.querySelectorAll('.row-check:checked').length;
-  document.getElementById('selCount').textContent = c;
-  document.getElementById('bulkActions').style.display = c ? 'flex' : 'none';
+function clearForm() {
+  ['f_digits','f_bank','f_account','f_order_name','f_model','f_costing','f_selling_price'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f_platform').value = '';
+  document.getElementById('f_variant').innerHTML = '<option value="">Select Variant</option>';
+  document.getElementById('f_sale_batch').value = 'Current Sale';
+  document.getElementById('f_delivery_date').value = ''; 
+  document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN'); 
 }
 
-async function updateBatch() {
-  const newName = document.getElementById('newBatchName').value.trim();
-  if(!newName) return;
-  const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
-  const res = await api('/api/main-orders/bulk-update-batch', 'POST', { ids, batch: newName });
-  if(res.success !== false) {
-    allOrders.forEach(o => { if(ids.includes(o.id)) o.sale_batch = newName; });
-    updateBatchDropdown();
-    filterTable();
-    document.getElementById('newBatchName').value = '';
+let digitTimer = null;
+function onDigitsInput(val, targetId='f_bank') {
+  clearTimeout(digitTimer);
+  if (val.length >= 4) {
+    digitTimer = setTimeout(() => lookupCard(val, document.getElementById(targetId)), 500);
+  } else {
+    document.getElementById(targetId).value = '';
   }
+}
+
+function onModelInput(val, variantId) {
+  clearTimeout(modelTimer);
+  if (val.trim()) {
+    modelTimer = setTimeout(() => lookupVariants(val.trim(), document.getElementById(variantId)), 600);
+  }
+}
+
+function onVariantChange(selectElem, costingInputId) {
+  const selectedOpt = selectElem.options[selectElem.selectedIndex];
+  if (selectedOpt && selectedOpt.hasAttribute('data-costing')) {
+    const cost = selectedOpt.getAttribute('data-costing');
+    if (cost !== '') {
+        document.getElementById(costingInputId).value = cost;
+    }
+  }
+}
+
+async function submitOrder() {
+  const payload = {
+    last_digits:   document.getElementById('f_digits').value.trim(),
+    card_type:     document.getElementById('f_bank').value.trim(), 
+    platform:      document.getElementById('f_platform').value,
+    account:       document.getElementById('f_account').value.trim(), 
+    order_name:    document.getElementById('f_order_name').value.trim(),
+    model:         document.getElementById('f_model').value.trim(),
+    variant:       document.getElementById('f_variant').value,
+    delivery_date: document.getElementById('f_delivery_date').value,
+    costing:       document.getElementById('f_costing').value || null,
+    selling_price: document.getElementById('f_selling_price').value || null,
+    sale_batch:    document.getElementById('f_sale_batch').value.trim() || 'Current Sale'
+  };
+  
+  if (!payload.last_digits || !payload.platform || !payload.order_name || !payload.model) {
+    showToast('Please fill required fields: Last Digits, Platform, Order Name, Model', 'error');
+    return;
+  }
+  
+  const res = await api('/api/main-orders', 'POST', payload);
+  if (res.error) { showToast(res.error, 'error'); return; }
+  
+  allOrders.unshift(res);
+  populateSaleFilter();
+  filterTable(); 
+  clearForm();
+  showToast('Order saved successfully!');
+}
+
+// ── Edit & Bulk Actions ───────────────────────────────────────────────────────
+async function openEdit(id) {
+  const o = allOrders.find(x => x.id === id);
+  if (!o) return;
+  document.getElementById('e_id').value = o.id;
+  document.getElementById('e_digits').value = o.last_digits || '';
+  document.getElementById('e_bank').value = o.card_type || ''; 
+  document.getElementById('e_account').value = o.account || ''; 
+  document.getElementById('e_order_name').value = o.order_name || '';
+  document.getElementById('e_model').value = o.model || '';
+  document.getElementById('e_delivery_date').value = o.delivery_date || '';
+  document.getElementById('e_costing').value = o.costing || '';
+  document.getElementById('e_selling_price').value = o.selling_price || '';
+  document.getElementById('e_sale_batch').value = o.sale_batch || 'Current Sale';
+
+  const platforms = await api('/api/platform-names');
+  const ePlat = document.getElementById('e_platform');
+  ePlat.innerHTML = '<option value="">Select Platform</option>';
+  platforms.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = p;
+    if (p === o.platform) opt.selected = true;
+    ePlat.appendChild(opt);
+  });
+
+  if (o.model) {
+    const variants = await api(`/api/variants?model=${encodeURIComponent(o.model)}`);
+    const eVar = document.getElementById('e_variant');
+    eVar.innerHTML = '<option value="">Select Variant</option>';
+    variants.forEach(v => {
+      const opt = document.createElement('option');
+      const vName = typeof v === 'object' ? v.variant_name : v;
+      const vCost = typeof v === 'object' ? (v.costing || '') : '';
+      opt.value = vName;
+      opt.textContent = vName;
+      opt.setAttribute('data-costing', vCost);
+      if (vName === o.variant) opt.selected = true;
+      eVar.appendChild(opt);
+    });
+  }
+
+  editModal.show();
+}
+
+async function saveEdit() {
+  const id = document.getElementById('e_id').value;
+  const payload = {
+    last_digits:   document.getElementById('e_digits').value.trim(),
+    card_type:     document.getElementById('e_bank').value.trim(),
+    platform:      document.getElementById('e_platform').value,
+    account:       document.getElementById('e_account').value.trim(),
+    order_name:    document.getElementById('e_order_name').value.trim(),
+    model:         document.getElementById('e_model').value.trim(),
+    variant:       document.getElementById('e_variant').value,
+    delivery_date: document.getElementById('e_delivery_date').value,
+    costing:       document.getElementById('e_costing').value || null,
+    selling_price: document.getElementById('e_selling_price').value || null,
+    sale_batch:    document.getElementById('e_sale_batch').value.trim() || 'Current Sale'
+  };
+  
+  const res = await api(`/api/main-orders/${id}`, 'PUT', payload);
+  if (res.error) { showToast(res.error, 'error'); return; }
+  
+  const idx = allOrders.findIndex(x => x.id === res.id);
+  if (idx !== -1) allOrders[idx] = res;
+  
+  populateSaleFilter();
+  filterTable(); 
+  editModal.hide();
+  showToast('Order updated!');
+}
+
+async function deleteOrder(id) {
+  if (!confirm('Delete this order?')) return;
+  const res = await api(`/api/main-orders/${id}`, 'DELETE');
+  if (res.success) {
+    allOrders = allOrders.filter(o => o.id !== id);
+    populateSaleFilter();
+    filterTable();
+    showToast('Order deleted.');
+  }
+}
+
+function onCheckChange() {
+  const checks = document.querySelectorAll('.row-check:checked');
+  const delBtn = document.getElementById('bulkDeleteBtn');
+  const saleBtn = document.getElementById('bulkSaleBtn');
+  
+  document.getElementById('selCount').textContent = checks.length;
+  const show = checks.length > 0;
+  
+  delBtn.style.display = show ? 'inline-flex' : 'none';
+  saleBtn.style.display = show ? 'inline-flex' : 'none';
+}
+
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.row-check').forEach(c => { c.checked = cb.checked; });
+  onCheckChange();
+}
+
+async function bulkDelete() {
+  const ids = [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} selected orders?`)) return;
+  
+  const res = await api('/api/main-orders/bulk-delete', 'POST', {ids});
+  if (res.success) {
+    allOrders = allOrders.filter(o => !ids.includes(o.id));
+    populateSaleFilter();
+    filterTable();
+    document.getElementById('selectAll').checked = false;
+    onCheckChange();
+    showToast(`${res.deleted} orders deleted.`);
+  }
+}
+
+async function promptBulkSale() {
+  const ids = [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
+  if (!ids.length) return;
+  
+  const newBatch = prompt(`Enter Sale Batch name for ${ids.length} orders (e.g. Sale 1, Current Sale):`, "Sale 1");
+  if (!newBatch) return;
+
+  const res = await api('/api/main-orders/bulk-update-sale', 'POST', {ids: ids, sale_batch: newBatch});
+  if (res.success) {
+    showToast(`Assigned ${ids.length} orders to ${newBatch}`);
+    await loadOrders(); 
+    document.getElementById('selectAll').checked = false;
+    onCheckChange();
+  }
+}
+
+function exportOrders(fmt) {
+  window.location.href = `/api/main-orders/export?format=${fmt}`;
 }
 
 init();
