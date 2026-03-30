@@ -50,7 +50,7 @@ def dashboard(): return render_template('dashboard.html')
 @app.route('/settings')
 def settings(): return render_template('settings.html')
 
-# ── Settings APIs ─────────────────────────────────────────────────────────────
+# ── Settings APIs (Cards, Platforms, Models, Variants, SecNames) ──────────────
 @app.route('/api/cards', methods=['GET', 'POST'])
 def manage_cards():
     if not SHEET: return jsonify([])
@@ -96,6 +96,7 @@ def card_lookup():
         if db_digits == digits: return jsonify({'card_type': row.get('card_type'), 'found': True})
     return jsonify({'found': False})
 
+# Generic Master Data Handler for simple ID/Name tables
 def handle_master_table(table_name, req, field_name='name'):
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet(table_name)
@@ -205,15 +206,11 @@ def api_main_orders():
         data = request.json
         next_id = get_next_id(ws)
             
-        try:
-            costing = float(data.get('costing') or 0)
-        except ValueError:
-            costing = 0.0
+        try: costing = float(data.get('costing') or 0)
+        except ValueError: costing = 0.0
             
-        try:
-            selling = float(data.get('selling_price') or 0)
-        except ValueError:
-            selling = 0.0
+        try: selling = float(data.get('selling_price') or 0)
+        except ValueError: selling = 0.0
             
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
@@ -227,24 +224,15 @@ def api_main_orders():
         ]
         ws.append_row(row)
         
-        # Exact Hardcoded Dict for Instant Update
-        new_order = {
-            'success': True,
-            'id': next_id,
-            'card_type': data.get('card_type', ''),
-            'last_digits': last_digits,
-            'platform': data.get('platform', ''),
-            'account': data.get('account', ''),
-            'order_name': data.get('order_name', ''),
-            'model': data.get('model', ''),
-            'variant': data.get('variant', ''),
-            'costing': costing,
-            'selling_price': selling,
-            'profit': selling - costing,
-            'delivery_date': data.get('delivery_date', ''),
-            'sale_batch': data.get('sale_batch', 'Current Sale'),
-            'created_at': now
-        }
+        # Pull exact column names dynamically from Google Sheets
+        row[2] = last_digits
+        try:
+            headers = ws.row_values(1)
+        except Exception:
+            headers = ['id', 'card_type', 'last_digits', 'platform', 'account', 'order_name', 'model', 'variant', 'costing', 'selling_price', 'profit', 'delivery_date', 'sale_batch', 'created_at']
+            
+        new_order = dict(zip(headers, row))
+        new_order['success'] = True
         return jsonify(new_order)
         
     except Exception as e:
@@ -308,15 +296,11 @@ def api_secondary_orders():
         data = request.json
         next_id = get_next_id(ws)
             
-        try:
-            costing = float(data.get('costing') or 0)
-        except ValueError:
-            costing = 0.0
+        try: costing = float(data.get('costing') or 0)
+        except ValueError: costing = 0.0
             
-        try:
-            selling = float(data.get('selling_price') or 0)
-        except ValueError:
-            selling = 0.0
+        try: selling = float(data.get('selling_price') or 0)
+        except ValueError: selling = 0.0
             
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
@@ -330,24 +314,15 @@ def api_secondary_orders():
         ]
         ws.append_row(row)
         
-        # Exact Hardcoded Dict for Instant Update
-        new_order = {
-            'success': True,
-            'id': next_id,
-            'card_type': data.get('card_type', ''),
-            'last_digits': last_digits,
-            'platform': data.get('platform', ''),
-            'account': data.get('account', ''),
-            'order_name': data.get('order_name', ''),
-            'model': data.get('model', ''),
-            'variant': data.get('variant', ''),
-            'costing': costing,
-            'selling_price': selling,
-            'profit': selling - costing,
-            'delivery_date': data.get('delivery_date', ''),
-            'sale_batch': data.get('sale_batch', 'Current Sale'),
-            'created_at': now
-        }
+        # Pull exact column names dynamically from Google Sheets
+        row[2] = last_digits
+        try:
+            headers = ws.row_values(1)
+        except Exception:
+            headers = ['id', 'card_type', 'last_digits', 'platform', 'account', 'order_name', 'model', 'variant', 'costing', 'selling_price', 'profit', 'delivery_date', 'sale_batch', 'created_at']
+        
+        new_order = dict(zip(headers, row))
+        new_order['success'] = True
         return jsonify(new_order)
         
     except Exception as e:
@@ -410,15 +385,11 @@ def api_offline_orders():
         data = request.json
         next_id = get_next_id(ws)
         
-        try:
-            costing = float(data.get('costing') or 0)
-        except ValueError:
-            costing = 0.0
+        try: costing = float(data.get('costing') or 0)
+        except ValueError: costing = 0.0
             
-        try:
-            selling = float(data.get('selling_price') or 0)
-        except ValueError:
-            selling = 0.0
+        try: selling = float(data.get('selling_price') or 0)
+        except ValueError: selling = 0.0
             
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
@@ -431,22 +402,15 @@ def api_offline_orders():
         ]
         ws.append_row(row)
         
-        # Exact Hardcoded Dict for Instant Update
-        new_order = {
-            'success': True,
-            'id': next_id,
-            'card_type': data.get('card_type', ''),
-            'last_digits': last_digits,
-            'machine': data.get('machine', ''),
-            'vendor': data.get('vendor', ''),
-            'brand': data.get('brand', ''),
-            'sale_type': data.get('sale_type', ''),
-            'costing': costing,
-            'selling_price': selling,
-            'profit': selling - costing,
-            'sale_month': data.get('sale_month', ''),
-            'created_at': now
-        }
+        # Pull exact column names dynamically from Google Sheets
+        row[2] = last_digits
+        try:
+            headers = ws.row_values(1)
+        except Exception:
+            headers = ['id', 'card_type', 'last_digits', 'machine', 'vendor', 'brand', 'sale_type', 'costing', 'selling_price', 'profit', 'sale_month', 'created_at']
+            
+        new_order = dict(zip(headers, row))
+        new_order['success'] = True
         return jsonify(new_order)
         
     except Exception as e:
