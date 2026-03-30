@@ -215,13 +215,15 @@ def del_main(id): return delete_master_table('main_orders', id)
 
 # ── Secondary Orders API (Unchanged) ──────────────────────────────────────────
 @app.route('/api/secondary-orders', methods=['GET', 'POST'])
-def api_secondary_orders():
+def api_sec_orders():
     ws = SHEET.worksheet('secondary_orders')
     if request.method == 'GET':
-        orders = ws.get_all_records()
-        for o in orders:
-            if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
-        return jsonify(list(reversed(orders)))
+        try:
+            records = ws.get_all_records()
+        except Exception:
+            records = []
+        return jsonify(list(reversed(records)))
+    # ... keep your POST logic ...
     
     data = request.json
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
