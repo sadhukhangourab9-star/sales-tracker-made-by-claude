@@ -229,6 +229,7 @@ def api_main_orders():
         ws.append_row(row)
         
         new_order = {
+            'success': True,  # <--- THIS WAS MISSING
             'id': next_id, 'card_type': data.get('card_type', ''), 
             'last_digits': last_digits, 'platform': data.get('platform', ''), 
             'account': data.get('account', ''), 'order_name': data.get('order_name', ''), 
@@ -322,6 +323,7 @@ def api_secondary_orders():
         ws.append_row(row)
         
         new_order = {
+            'success': True,  # <--- THIS WAS MISSING
             'id': next_id, 'card_type': data.get('card_type', ''), 
             'last_digits': last_digits, 'platform': data.get('platform', ''), 
             'account': data.get('account', ''), 'order_name': data.get('order_name', ''), 
@@ -412,7 +414,8 @@ def api_offline_orders():
         ]
         ws.append_row(row)
         
-        new_order = {
+       new_order = {
+            'success': True,  # <--- THIS WAS MISSING
             'id': next_id, 'card_type': data.get('card_type', ''), 
             'last_digits': last_digits, 'machine': data.get('machine', ''), 
             'vendor': data.get('vendor', ''), 'brand': data.get('brand', ''), 
