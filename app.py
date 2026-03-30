@@ -247,8 +247,35 @@ def bulk_del_main():
         ws.delete_row(r_idx)
     return jsonify({'success': True})
 
-@app.route('/api/main-orders/<int:id>', methods=['DELETE'])
-def del_main(id): return delete_master_table('main_orders', id)
+@app.route('/api/main-orders/<int:id>', methods=['DELETE', 'PUT'])
+def modify_main(id):
+    # Handle Delete
+    if request.method == 'DELETE':
+        return delete_master_table('main_orders', id)
+        
+    # Handle Edit (PUT)
+    if not SHEET: return jsonify({'success': False})
+    data = request.json
+    ws = SHEET.worksheet('main_orders')
+    try:
+        # Find the row with this ID
+        cell = ws.find(str(id), in_column=1)
+        
+        # Calculate new numbers
+        cost = float(data.get('costing', 0))
+        sell = float(data.get('selling_price', 0))
+        profit = sell - cost
+        
+        # Update Google Sheets (Columns: 9=Cost, 10=Sell, 11=Profit, 13=Batch)
+        ws.update_cell(cell.row, 9, cost)
+        ws.update_cell(cell.row, 10, sell)
+        ws.update_cell(cell.row, 11, profit) 
+        ws.update_cell(cell.row, 13, data.get('sale_batch', 'Current Sale'))
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print("Edit Error:", e)
+        return jsonify({'success': False})
 
 # ── Secondary Orders API (Unchanged) ──────────────────────────────────────────
 @app.route('/api/secondary-orders', methods=['GET', 'POST'])
@@ -330,8 +357,32 @@ def bulk_del_sec():
         ws.delete_row(r_idx)
     return jsonify({'success': True})
 
-@app.route('/api/secondary-orders/<int:id>', methods=['DELETE'])
-def del_sec(id): return delete_master_table('secondary_orders', id)
+@app.route('/api/secondary-orders/<int:id>', methods=['DELETE', 'PUT'])
+def modify_sec(id):
+    # Handle Delete
+    if request.method == 'DELETE':
+        return delete_master_table('secondary_orders', id)
+        
+    # Handle Edit (PUT)
+    if not SHEET: return jsonify({'success': False})
+    data = request.json
+    ws = SHEET.worksheet('secondary_orders')
+    try:
+        cell = ws.find(str(id), in_column=1)
+        
+        cost = float(data.get('costing', 0))
+        sell = float(data.get('selling_price', 0))
+        profit = sell - cost
+        
+        ws.update_cell(cell.row, 9, cost)
+        ws.update_cell(cell.row, 10, sell)
+        ws.update_cell(cell.row, 11, profit)
+        ws.update_cell(cell.row, 13, data.get('sale_batch', 'Current Sale'))
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print("Edit Error:", e)
+        return jsonify({'success': False})
 
 # ── Offline Orders API (NEW) ──────────────────────────────────────────────────
 @app.route('/api/offline-orders', methods=['GET', 'POST'])
