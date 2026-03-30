@@ -462,7 +462,7 @@ async function openEdit(id) {
 }
 
 async function saveEdit() {
-  const id = document.getElementById('e_id').value;
+  const id = parseInt(document.getElementById('e_id').value);
   const payload = {
     last_digits:   document.getElementById('e_digits').value.trim(),
     card_type:     document.getElementById('e_bank').value.trim(),
@@ -476,15 +476,18 @@ async function saveEdit() {
     selling_price: document.getElementById('e_selling_price').value || null,
     sale_batch:    document.getElementById('e_sale_batch').value.trim() || 'Current Sale'
   };
-  
+
   const res = await api(`/api/main-orders/${id}`, 'PUT', payload);
-  if (res.error) { showToast(res.error, 'error'); return; }
-  
-  const idx = allOrders.findIndex(x => x.id === res.id);
-  if (idx !== -1) allOrders[idx] = res;
-  
+  if (!res.success) { showToast('Update failed. Please try again.', 'error'); return; }
+
+  // Instantly update the local array — no refresh needed
+  const idx = allOrders.findIndex(x => x.id === id);
+  if (idx !== -1) {
+    allOrders[idx] = { ...allOrders[idx], ...res };
+  }
+
   populateSaleFilter();
-  filterTable(); 
+  filterTable();
   editModal.hide();
   showToast('Order updated!');
 }
