@@ -193,8 +193,13 @@ def bulk_del_main():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', [])
     ws = SHEET.worksheet('main_orders')
-    records = safe_get_records(ws)
-    # Find the row numbers for the selected IDs and delete them from bottom to top
+    
+    # FIX: Using your original data-fetching method
+    try:
+        records = ws.get_all_records()
+    except Exception:
+        records = []
+        
     rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
     for r_idx in sorted(rows_to_delete, reverse=True): 
         ws.delete_row(r_idx)
@@ -231,7 +236,13 @@ def bulk_del_sec():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', [])
     ws = SHEET.worksheet('secondary_orders')
-    records = safe_get_records(ws)
+    
+    # FIX: Using your original data-fetching method
+    try:
+        records = ws.get_all_records()
+    except Exception:
+        records = []
+        
     rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
     for r_idx in sorted(rows_to_delete, reverse=True): 
         ws.delete_row(r_idx)
