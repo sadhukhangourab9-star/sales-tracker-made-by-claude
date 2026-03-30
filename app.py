@@ -186,6 +186,7 @@ def api_variants():
 @app.route('/api/variants/<int:var_id>', methods=['DELETE'])
 def del_variant(var_id): return delete_master_table('variants', var_id)
 
+
 # ── Main Orders API ───────────────────────────────────────────────
 @app.route('/api/main-orders', methods=['GET', 'POST'])
 def api_main_orders():
@@ -201,7 +202,6 @@ def api_main_orders():
             if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
         return jsonify(list(reversed(records)))
     
-    # ── POST: Saving a New Order ──
     try:
         data = request.json
         next_id = get_next_id(ws)
@@ -218,7 +218,7 @@ def api_main_orders():
             
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
-        safe_digits = "'" + last_digits if last_digits else ""
+        safe_digits = f"'{last_digits}" if last_digits else ""
         
         row = [
             next_id, data.get('card_type', ''), safe_digits, data.get('platform', ''), 
@@ -228,16 +228,10 @@ def api_main_orders():
         ]
         ws.append_row(row)
         
-        new_order = {
-            'success': True,
-            'id': next_id, 'card_type': data.get('card_type', ''), 
-            'last_digits': last_digits, 'platform': data.get('platform', ''), 
-            'account': data.get('account', ''), 'order_name': data.get('order_name', ''), 
-            'model': data.get('model', ''), 'variant': data.get('variant', ''), 
-            'costing': costing, 'selling_price': selling, 'profit': selling - costing, 
-            'delivery_date': data.get('delivery_date', ''), 
-            'sale_batch': data.get('sale_batch', 'Current Sale'), 'created_at': now
-        }
+        # Dynamically map headers for the UI
+        row[2] = last_digits
+        new_order = dict(zip(ws.row_values(1), row))
+        new_order['success'] = True
         return jsonify(new_order)
         
     except Exception as e:
@@ -281,6 +275,7 @@ def modify_main(id):
         print("Edit Error:", e)
         return jsonify({'success': False})
 
+
 # ── Secondary Orders API ──────────────────────────────────────────
 @app.route('/api/secondary-orders', methods=['GET', 'POST'])
 def api_secondary_orders():
@@ -312,7 +307,7 @@ def api_secondary_orders():
             
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
-        safe_digits = "'" + last_digits if last_digits else ""
+        safe_digits = f"'{last_digits}" if last_digits else ""
         
         row = [
             next_id, data.get('card_type', ''), safe_digits, data.get('platform', ''), 
@@ -322,16 +317,10 @@ def api_secondary_orders():
         ]
         ws.append_row(row)
         
-        new_order = {
-            'success': True,
-            'id': next_id, 'card_type': data.get('card_type', ''), 
-            'last_digits': last_digits, 'platform': data.get('platform', ''), 
-            'account': data.get('account', ''), 'order_name': data.get('order_name', ''), 
-            'model': data.get('model', ''), 'variant': data.get('variant', ''), 
-            'costing': costing, 'selling_price': selling, 'profit': selling - costing, 
-            'delivery_date': data.get('delivery_date', ''), 
-            'sale_batch': data.get('sale_batch', 'Current Sale'), 'created_at': now
-        }
+        # Dynamically map headers for the UI
+        row[2] = last_digits
+        new_order = dict(zip(ws.row_values(1), row))
+        new_order['success'] = True
         return jsonify(new_order)
         
     except Exception as e:
@@ -374,6 +363,7 @@ def modify_sec(id):
         print("Edit Error:", e)
         return jsonify({'success': False})
 
+
 # ── Offline Orders API ──────────────────────────────────────────────────
 @app.route('/api/offline-orders', methods=['GET', 'POST'])
 def api_offline_orders():
@@ -414,15 +404,10 @@ def api_offline_orders():
         ]
         ws.append_row(row)
         
-        new_order = {
-            'success': True,
-            'id': next_id, 'card_type': data.get('card_type', ''), 
-            'last_digits': last_digits, 'machine': data.get('machine', ''), 
-            'vendor': data.get('vendor', ''), 'brand': data.get('brand', ''), 
-            'sale_type': data.get('sale_type', ''), 'costing': costing, 
-            'selling_price': selling, 'profit': selling - costing, 
-            'sale_month': data.get('sale_month', ''), 'created_at': now
-        }
+        # Dynamically map headers for the UI
+        row[2] = last_digits
+        new_order = dict(zip(ws.row_values(1), row))
+        new_order['success'] = True
         return jsonify(new_order)
         
     except Exception as e:
@@ -456,7 +441,6 @@ def modify_offline(id):
         sell = float(data.get('selling_price', 0) or 0)
         profit = sell - cost
         
-        # Update Offline Google Sheets (Columns: 8=Cost, 9=Sell, 10=Profit)
         ws.update_cell(cell.row, 8, cost)
         ws.update_cell(cell.row, 9, sell)
         ws.update_cell(cell.row, 10, profit)
@@ -465,11 +449,13 @@ def modify_offline(id):
         print("Edit Error:", e)
         return jsonify({'success': False})
 
+
 # ── PWA Setup ─────────────────────────────────────────────────────────────────
 @app.route('/manifest.json')
 def serve_manifest(): return send_file('static/manifest.json', mimetype='application/manifest+json')
 @app.route('/sw.js')
 def serve_sw(): return send_file('static/sw.js', mimetype='application/javascript')
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
