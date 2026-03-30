@@ -96,16 +96,13 @@
 {% block scripts %}
 <script>
 let allOrders = [];
-let allCards = [];
 
 async function init() {
   document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
   
-  const [machines, vendors, brands, cards] = await Promise.all([
-    api('/api/machines'), api('/api/vendors'), api('/api/brands'), api('/api/cards')
+  const [machines, vendors, brands] = await Promise.all([
+    api('/api/machines'), api('/api/vendors'), api('/api/brands')
   ]);
-  
-  allCards = cards;
   
   machines.forEach(m => document.getElementById('f_machine').innerHTML += `<option value="${m.name}">${m.name}</option>`);
   vendors.forEach(v => document.getElementById('f_vendor').innerHTML += `<option value="${v.name}">${v.name}</option>`);
@@ -123,16 +120,15 @@ function toggleForm() {
 let digitTimer = null;
 function onDigitsInput(val) {
   clearTimeout(digitTimer);
-  if (val.length >= 4) digitTimer = setTimeout(() => {
-    const match = allCards.find(c => String(c.last_digits) === val.trim());
-    document.getElementById('f_bank').value = match ? match.card_type : '';
-  }, 500);
+  if (val.length >= 4) digitTimer = setTimeout(() => lookupCard(val, document.getElementById('f_bank')), 500);
 }
 
 async function submitOrder() {
+  // 1. Grab the button and save its original text
   const btn = document.getElementById('saveSaleBtn');
   const originalText = btn.innerHTML;
   
+  // 2. Disable it and show the loading spinner
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right: 6px;" role="status" aria-hidden="true"></span>Saving...';
 
@@ -144,11 +140,12 @@ async function submitOrder() {
     brand: document.getElementById('f_brand').value,
     sale_type: document.getElementById('f_type').value,
     sale_month: document.getElementById('f_month').value,
-    costing: document.getElementById('f_costing').value || 0,
-    selling_price: document.getElementById('f_selling').value || 0
+    costing: document.getElementById('f_costing').value,
+    selling_price: document.getElementById('f_selling').value
   };
   
   try {
+    // 3. Send data to the server
     const res = await api('/api/offline-orders', 'POST', payload);
     if(res.success !== false) {
       allOrders.unshift(res);
@@ -157,6 +154,7 @@ async function submitOrder() {
       ['f_digits','f_bank','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
     }
   } finally {
+    // 4. No matter what happens (success or error), turn the button back on
     btn.disabled = false;
     btn.innerHTML = originalText;
   }
@@ -174,11 +172,11 @@ function filterTable() {
   
   let profit = 0;
   const html = filtered.map(o => {
-    profit += parseFloat(o.profit || 0);
+    profit += parseFloat(o.profit);
     return `<tr>
       <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
       <td><span class="badge-card" style="background:var(--navy3);">${o.sale_month}</span></td>
-      <td style="color:var(--muted);">${(o.created_at || '').split(' ')[0]}</td>
+      <td style="color:var(--muted);">${o.created_at.split(' ')[0]}</td>
       <td><code style="color:var(--accent2);">•••• ${o.last_digits}</code></td>
       <td>${cardBadge(o.card_type)}</td>
       <td>${o.machine}</td><td>${o.vendor}</td><td style="font-weight:bold;">${o.brand}</td>
