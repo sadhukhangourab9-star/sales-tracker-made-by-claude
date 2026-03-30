@@ -166,32 +166,69 @@ def del_variant(var_id): return delete_master_table('variants', var_id)
 
 # ── Main Orders API (Unchanged) ───────────────────────────────────────────────
 @app.route('/api/main-orders', methods=['GET', 'POST'])
-def api_main_orders(): # (Your function name here might be api_main, leave your name as is)
+def api_main_orders():
+    if not SHEET: return jsonify([])
     ws = SHEET.worksheet('main_orders')
     
     if request.method == 'GET':
-        # FIX: Try to get records, but don't crash if the sheet is empty
         try:
             records = ws.get_all_records()
         except Exception:
             records = []
-            
+        for o in records:
+            if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
         return jsonify(list(reversed(records)))
+    
+    # ── POST: Saving a New Order ──
+    try:
+        data = request.json
         
-    # ... KEEP YOUR EXISTING POST LOGIC BELOW THIS LINE ...
-    
-    data = request.json
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    new_id = get_next_id(ws)
-    last_digits = str(data.get('last_digits', ''))
-    costing, selling_price = float(data.get('costing') or 0), float(data.get('selling_price') or 0)
-    
-    row = [new_id, data.get('card_type', ''), f"'{last_digits}" if last_digits else "", data.get('platform', ''), 
-           data.get('account', ''), data.get('order_name', ''), data.get('model', ''), data.get('variant', ''), 
-           costing, selling_price, selling_price - costing, data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now]
-    ws.append_row(row)
-    row[2] = last_digits
-    return jsonify(dict(zip(ws.row_values(1), row)))
+        # 1. Safely calculate the Next ID
+        try:
+            records = ws.get_all_records()
+            next_id = max([int(r.get('id', 0) or 0) for r in records]) + 1 if records else 1
+        except Exception:
+            next_id = 1
+            
+        # 2. Safely handle blank prices (converts blanks to 0.0)
+        try:
+            costing = float(data.get('costing') or 0)
+        except ValueError:
+            costing = 0.0
+            
+        try:
+            selling = float(data.get('selling_price') or 0)
+        except ValueError:
+            selling = 0.0
+            
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        last_digits = str(data.get('last_digits', ''))
+        safe_digits = "'" + last_digits if last_digits else ""
+        
+        # 3. Build the row and save
+        row = [
+            next_id, 
+            data.get('card_type', ''), 
+            safe_digits, 
+            data.get('platform', ''), 
+            data.get('account', ''), 
+            data.get('order_name', ''), 
+            data.get('model', ''), 
+            data.get('variant', ''), 
+            costing, 
+            selling, 
+            selling - costing, 
+            data.get('delivery_date', ''), 
+            data.get('sale_batch', 'Current Sale'), 
+            now
+        ]
+        
+        ws.append_row(row)
+        return jsonify({'success': True, 'id': next_id})
+        
+    except Exception as e:
+        print(f"Main Orders POST Error: {e}")
+        return jsonify({'success': False}), 500
 
 @app.route('/api/main-orders/bulk-delete', methods=['POST'])
 def bulk_del_main():
@@ -215,28 +252,66 @@ def del_main(id): return delete_master_table('main_orders', id)
 
 # ── Secondary Orders API (Unchanged) ──────────────────────────────────────────
 @app.route('/api/secondary-orders', methods=['GET', 'POST'])
-def api_sec_orders():
+def api_secondary_orders():
+    if not SHEET: return jsonify([])
     ws = SHEET.worksheet('secondary_orders')
+    
     if request.method == 'GET':
         try:
             records = ws.get_all_records()
         except Exception:
             records = []
+        for o in records:
+            if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
         return jsonify(list(reversed(records)))
-    # ... keep your POST logic ...
     
-    data = request.json
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    new_id = get_next_id(ws)
-    last_digits = str(data.get('last_digits', ''))
-    costing, selling_price = float(data.get('costing') or 0), float(data.get('selling_price') or 0)
-    
-    row = [new_id, data.get('card_type', ''), f"'{last_digits}" if last_digits else "", data.get('platform', ''), 
-           data.get('order_name', ''), data.get('model', ''), data.get('variant', ''), 
-           costing, selling_price, selling_price - costing, data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now]
-    ws.append_row(row)
-    row[2] = last_digits
-    return jsonify(dict(zip(ws.row_values(1), row)))
+    # ── POST: Saving a New Order ──
+    try:
+        data = request.json
+        
+        try:
+            records = ws.get_all_records()
+            next_id = max([int(r.get('id', 0) or 0) for r in records]) + 1 if records else 1
+        except Exception:
+            next_id = 1
+            
+        try:
+            costing = float(data.get('costing') or 0)
+        except ValueError:
+            costing = 0.0
+            
+        try:
+            selling = float(data.get('selling_price') or 0)
+        except ValueError:
+            selling = 0.0
+            
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        last_digits = str(data.get('last_digits', ''))
+        safe_digits = "'" + last_digits if last_digits else ""
+        
+        row = [
+            next_id, 
+            data.get('card_type', ''), 
+            safe_digits, 
+            data.get('platform', ''), 
+            data.get('account', ''), 
+            data.get('order_name', ''), 
+            data.get('model', ''), 
+            data.get('variant', ''), 
+            costing, 
+            selling, 
+            selling - costing, 
+            data.get('delivery_date', ''), 
+            data.get('sale_batch', 'Current Sale'), 
+            now
+        ]
+        
+        ws.append_row(row)
+        return jsonify({'success': True, 'id': next_id})
+        
+    except Exception as e:
+        print(f"Secondary Orders POST Error: {e}")
+        return jsonify({'success': False}), 500
 
 @app.route('/api/secondary-orders/bulk-delete', methods=['POST'])
 def bulk_del_sec():
