@@ -426,11 +426,12 @@ async function openEdit(id) {
 }
 
 async function saveEdit() {
-  const id = document.getElementById('e_id').value;
+  const id = parseInt(document.getElementById('e_id').value);
   const payload = {
     last_digits:   document.getElementById('e_digits').value.trim(),
     card_type:     document.getElementById('e_bank').value.trim(),
     platform:      document.getElementById('e_platform').value,
+    account:       '',   // secondary orders don't have account field in the edit modal
     order_name:    document.getElementById('e_order_name').value,
     model:         document.getElementById('e_model').value.trim(),
     variant:       document.getElementById('e_variant').value,
@@ -439,11 +440,20 @@ async function saveEdit() {
     selling_price: document.getElementById('e_selling_price').value || null,
     sale_batch:    document.getElementById('e_sale_batch').value.trim() || 'Current Sale'
   };
+
   const res = await api(`/api/secondary-orders/${id}`, 'PUT', payload);
-  if (res.error) { showToast(res.error, 'error'); return; }
-  const idx = allOrders.findIndex(x => x.id === res.id);
-  if (idx !== -1) allOrders[idx] = res;
-  populateSaleFilter(); filterTable(); editModal.hide(); showToast('Order updated!');
+  if (!res.success) { showToast('Update failed. Please try again.', 'error'); return; }
+
+  // Instantly update the local array — no refresh needed
+  const idx = allOrders.findIndex(x => x.id === id);
+  if (idx !== -1) {
+    allOrders[idx] = { ...allOrders[idx], ...res };
+  }
+
+  populateSaleFilter();
+  filterTable();
+  editModal.hide();
+  showToast('Order updated!');
 }
 
 async function del(id) {
