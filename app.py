@@ -188,6 +188,18 @@ def api_main_orders():
     row[2] = last_digits
     return jsonify(dict(zip(ws.row_values(1), row)))
 
+@app.route('/api/main-orders/bulk-delete', methods=['POST'])
+def bulk_del_main():
+    if not SHEET: return jsonify({'success': False})
+    ids = request.json.get('ids', [])
+    ws = SHEET.worksheet('main_orders')
+    records = safe_get_records(ws)
+    # Find the row numbers for the selected IDs and delete them from bottom to top
+    rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
+    for r_idx in sorted(rows_to_delete, reverse=True): 
+        ws.delete_row(r_idx)
+    return jsonify({'success': True})
+
 @app.route('/api/main-orders/<int:id>', methods=['DELETE'])
 def del_main(id): return delete_master_table('main_orders', id)
 
@@ -213,6 +225,17 @@ def api_secondary_orders():
     ws.append_row(row)
     row[2] = last_digits
     return jsonify(dict(zip(ws.row_values(1), row)))
+
+@app.route('/api/secondary-orders/bulk-delete', methods=['POST'])
+def bulk_del_sec():
+    if not SHEET: return jsonify({'success': False})
+    ids = request.json.get('ids', [])
+    ws = SHEET.worksheet('secondary_orders')
+    records = safe_get_records(ws)
+    rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
+    for r_idx in sorted(rows_to_delete, reverse=True): 
+        ws.delete_row(r_idx)
+    return jsonify({'success': True})
 
 @app.route('/api/secondary-orders/<int:id>', methods=['DELETE'])
 def del_sec(id): return delete_master_table('secondary_orders', id)
