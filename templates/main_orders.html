@@ -489,15 +489,26 @@ async function saveEdit() {
   showToast('Order updated!');
 }
 
-async function deleteOrder(id) {
-  if (!confirm('Delete this order?')) return;
-  const res = await api(`/api/main-orders/${id}`, 'DELETE');
-  if (res.success) {
-    allOrders = allOrders.filter(o => o.id !== id);
-    populateSaleFilter();
-    filterTable();
-    showToast('Order deleted.');
-  }
+async function del(id) {
+  if(!confirm("Delete this order?")) return;
+  // Using native fetch to ensure the delete command goes through
+  await fetch(`/api/main-orders/${id}`, { method: 'DELETE' });
+  allOrders = allOrders.filter(o => o.id !== id);
+  filterTable();
+}
+
+async function bulkDelete() {
+  const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
+  if(!confirm(`Delete ${ids.length} orders?`)) return;
+  
+  await fetch('/api/main-orders/bulk-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+  });
+  
+  allOrders = allOrders.filter(o => !ids.includes(o.id));
+  filterTable();
 }
 
 function onCheckChange() {
