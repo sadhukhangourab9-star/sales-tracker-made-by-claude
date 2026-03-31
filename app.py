@@ -307,7 +307,6 @@ def modify_main(id):
 
 
 # ── Secondary Orders API ──────────────────────────────────────────
-# ── Secondary Orders API ──────────────────────────────────────────
 @app.route('/api/secondary-orders', methods=['GET', 'POST'])
 def api_secondary_orders():
     if not SHEET: return jsonify([])
@@ -513,12 +512,25 @@ def modify_offline(id):
         cost = float(data.get('costing', 0) or 0)
         sell = float(data.get('selling_price', 0) or 0)
         profit = sell - cost
-        
-        # Update Offline Google Sheets (Columns: 8=Cost, 9=Sell, 10=Profit)
-        ws.update_cell(cell.row, 8, cost)
-        ws.update_cell(cell.row, 9, sell)
-        ws.update_cell(cell.row, 10, profit)
-        return jsonify({'success': True})
+        last_digits = str(data.get('last_digits', ''))
+        safe_digits = f"'{last_digits}" if last_digits else ""
+
+        # Columns: B=card_type, C=last_digits, D=machine, E=vendor, F=brand,
+        #          G=sale_type, H=costing, I=selling, J=profit, K=sale_month
+        ws.update(f'B{cell.row}:K{cell.row}', [[
+            data.get('card_type', ''), safe_digits, data.get('machine', ''),
+            data.get('vendor', ''), data.get('brand', ''), data.get('sale_type', ''),
+            cost, sell, profit, data.get('sale_month', '')
+        ]])
+
+        return jsonify({
+            'success': True, 'id': id,
+            'card_type': data.get('card_type', ''), 'last_digits': last_digits,
+            'machine': data.get('machine', ''), 'vendor': data.get('vendor', ''),
+            'brand': data.get('brand', ''), 'sale_type': data.get('sale_type', ''),
+            'costing': cost, 'selling_price': sell, 'profit': profit,
+            'sale_month': data.get('sale_month', '')
+        })
     except Exception as e:
         print("Edit Error:", e)
         return jsonify({'success': False})
