@@ -254,6 +254,22 @@ def bulk_del_main():
         ws.delete_row(r_idx)
     return jsonify({'success': True})
 
+@app.route('/api/main-orders/bulk-update-sale', methods=['POST'])
+def bulk_sale_main():
+    if not SHEET: return jsonify({'success': False})
+    ids = request.json.get('ids', [])
+    new_batch = request.json.get('sale_batch', 'Current Sale')
+    ws = SHEET.worksheet('main_orders')
+    try:
+        records = ws.get_all_records()
+        for i, r in enumerate(records):
+            if r.get('id') in ids:
+                ws.update_cell(i + 2, 13, new_batch)
+        return jsonify({'success': True})
+    except Exception as e:
+        print("Bulk Sale Error:", e)
+        return jsonify({'success': False})
+
 @app.route('/api/main-orders/<int:id>', methods=['DELETE', 'PUT'])
 def modify_main(id):
     if request.method == 'DELETE':
@@ -355,6 +371,22 @@ def bulk_del_sec():
     for r_idx in sorted(rows_to_delete, reverse=True): 
         ws.delete_row(r_idx)
     return jsonify({'success': True})
+
+@app.route('/api/secondary-orders/bulk-update-sale', methods=['POST'])
+def bulk_sale_sec():
+    if not SHEET: return jsonify({'success': False})
+    ids = request.json.get('ids', [])
+    new_batch = request.json.get('sale_batch', 'Current Sale')
+    ws = SHEET.worksheet('secondary_orders')
+    try:
+        records = ws.get_all_records()
+        for i, r in enumerate(records):
+            if r.get('id') in ids:
+                ws.update_cell(i + 2, 13, new_batch)
+        return jsonify({'success': True})
+    except Exception as e:
+        print("Bulk Sale Error:", e)
+        return jsonify({'success': False})
 
 @app.route('/api/secondary-orders/<int:id>', methods=['DELETE', 'PUT'])
 def modify_sec(id):
