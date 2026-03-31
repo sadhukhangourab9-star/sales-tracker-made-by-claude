@@ -307,6 +307,7 @@ def modify_main(id):
 
 
 # ── Secondary Orders API ──────────────────────────────────────────
+# ── Secondary Orders API ──────────────────────────────────────────
 @app.route('/api/secondary-orders', methods=['GET', 'POST'])
 def api_secondary_orders():
     if not SHEET: return jsonify([])
@@ -325,33 +326,44 @@ def api_secondary_orders():
         data = request.json
         next_id = get_next_id(ws)
             
-        try: costing = float(data.get('costing') or 0)
-        except ValueError: costing = 0.0
+        try:
+            costing = float(data.get('costing') or 0)
+        except ValueError:
+            costing = 0.0
             
-        try: selling = float(data.get('selling_price') or 0)
-        except ValueError: selling = 0.0
+        try:
+            selling = float(data.get('selling_price') or 0)
+        except ValueError:
+            selling = 0.0
             
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
         
         row = [
-            next_id, data.get('card_type', ''), safe_digits, data.get('platform', ''), 
-            data.get('account', ''), data.get('order_name', ''), data.get('model', ''), 
-            data.get('variant', ''), costing, selling, selling - costing, 
+            next_id, data.get('card_type', ''), safe_digits, data.get('platform', ''),
+            data.get('order_name', ''), data.get('model', ''),
+            data.get('variant', ''), costing, selling, selling - costing,
             data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now
         ]
         ws.append_row(row)
         
-        # Pull exact column names dynamically from Google Sheets
-        row[2] = last_digits
-        try:
-            headers = ws.row_values(1)
-        except Exception:
-            headers = ['id', 'card_type', 'last_digits', 'platform', 'account', 'order_name', 'model', 'variant', 'costing', 'selling_price', 'profit', 'delivery_date', 'sale_batch', 'created_at']
-        
-        new_order = dict(zip(headers, row))
-        new_order['success'] = True
+        new_order = {
+            'success': True,
+            'id': next_id,
+            'card_type': data.get('card_type', ''),
+            'last_digits': last_digits,
+            'platform': data.get('platform', ''),
+            'order_name': data.get('order_name', ''),
+            'model': data.get('model', ''),
+            'variant': data.get('variant', ''),
+            'costing': costing,
+            'selling_price': selling,
+            'profit': selling - costing,
+            'delivery_date': data.get('delivery_date', ''),
+            'sale_batch': data.get('sale_batch', 'Current Sale'),
+            'created_at': now
+        }
         return jsonify(new_order)
         
     except Exception as e:
@@ -382,7 +394,7 @@ def bulk_sale_sec():
         records = ws.get_all_records()
         for i, r in enumerate(records):
             if r.get('id') in ids:
-                ws.update_cell(i + 2, 13, new_batch)
+                ws.update_cell(i + 2, 12, new_batch)
         return jsonify({'success': True})
     except Exception as e:
         print("Bulk Sale Error:", e)
@@ -403,9 +415,9 @@ def modify_sec(id):
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
 
-        ws.update(f'B{cell.row}:M{cell.row}', [[
+        ws.update(f'B{cell.row}:L{cell.row}', [[
             data.get('card_type', ''), safe_digits, data.get('platform', ''),
-            data.get('account', ''), data.get('order_name', ''), data.get('model', ''),
+            data.get('order_name', ''), data.get('model', ''),
             data.get('variant', ''), cost, sell, profit,
             data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
         ]])
@@ -413,7 +425,7 @@ def modify_sec(id):
         return jsonify({
             'success': True, 'id': id,
             'card_type': data.get('card_type', ''), 'last_digits': last_digits,
-            'platform': data.get('platform', ''), 'account': data.get('account', ''),
+            'platform': data.get('platform', ''),
             'order_name': data.get('order_name', ''), 'model': data.get('model', ''),
             'variant': data.get('variant', ''), 'costing': cost, 'selling_price': sell,
             'profit': profit, 'delivery_date': data.get('delivery_date', ''),
