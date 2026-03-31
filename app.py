@@ -269,7 +269,6 @@ def modify_main(id):
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
 
-        # Update ALL editable columns B–M in one batch API call (fast)
         ws.update(f'B{cell.row}:M{cell.row}', [[
             data.get('card_type', ''), safe_digits, data.get('platform', ''),
             data.get('account', ''), data.get('order_name', ''), data.get('model', ''),
@@ -277,7 +276,6 @@ def modify_main(id):
             data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
         ]])
 
-        # Return the full updated record so the frontend can update instantly
         return jsonify({
             'success': True, 'id': id,
             'card_type': data.get('card_type', ''), 'last_digits': last_digits,
@@ -373,7 +371,6 @@ def modify_sec(id):
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
 
-        # Update ALL editable columns B–M in one batch API call (fast)
         ws.update(f'B{cell.row}:M{cell.row}', [[
             data.get('card_type', ''), safe_digits, data.get('platform', ''),
             data.get('account', ''), data.get('order_name', ''), data.get('model', ''),
