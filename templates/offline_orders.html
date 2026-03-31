@@ -1,535 +1,218 @@
-from flask import Flask, render_template, request, jsonify, send_file
-import os, io, json, csv
-from datetime import datetime
-import openpyxl
-from openpyxl.styles import Font, PatternFill
-import gspread
-from google.oauth2.service_account import Credentials
+{% extends 'base.html' %}
+{% set active = 'offline' %}
+{% block title %}Offline Sales — OrderTrack{% endblock %}
 
-app = Flask(__name__)
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Offline Sales Tracker</div>
+    <div class="page-subtitle">Track physical swiping, machines, and EMI conversions</div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <div class="stat-pill"><strong id="totalCount">0</strong> Sales</div>
+    <div class="stat-pill" id="totalProfit" style="color:var(--green);font-weight:600;">Profit: ₹0</div>
+  </div>
+</div>
 
-# ── Google Sheets Setup ───────────────────────────────────────────────────────
-SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'OrderTrack_DB')
-creds_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
-SHEET = None
+<button class="toggle-form-btn" onclick="toggleForm()">
+  <i class="bi bi-plus-circle"></i> <span id="formToggleText">Add New Offline Sale</span>
+</button>
 
-if creds_json:
-    try:
-        creds_dict = json.loads(creds_json)
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        client = gspread.authorize(creds)
-        SHEET = client.open(SHEET_NAME)
-    except Exception as e:
-        print(f"Failed to connect to Google Sheets: {e}")
+<div class="card-panel" id="addFormPanel" style="display:none; border-left: 4px solid var(--accent2);">
+  <div class="row g-3">
+    <div class="col-md-2">
+      <label class="form-label">Card Number *</label>
+      <input type="text" id="f_digits" class="form-control" placeholder="Last 4-5 digits" maxlength="5" oninput="onDigitsInput(this.value)"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Bank</label>
+      <input type="text" id="f_bank" class="form-control" readonly placeholder="Auto-filled"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Machine *</label>
+      <select id="f_machine" class="form-select"><option value="">Select</option></select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Vendor *</label>
+      <select id="f_vendor" class="form-select"><option value="">Select</option></select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Brand / Model *</label>
+      <select id="f_brand" class="form-select"><option value="">Select</option></select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Sale Type *</label>
+      <select id="f_type" class="form-select">
+        <option value="INSTANT">INSTANT</option>
+        <option value="EMI">EMI</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Sale Month *</label>
+      <input type="month" id="f_month" class="form-control"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Costing (₹)</label>
+      <input type="number" id="f_costing" class="form-control" placeholder="0.00"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Selling Price (₹)</label>
+      <input type="number" id="f_selling" class="form-control" placeholder="0.00"/>
+    </div>
 
-def get_next_id(ws):
-    try:
-        records = ws.get_all_records()
-        if not records: return 1
-        return max([int(r.get('id', 0) or 0) for r in records]) + 1
-    except Exception:
-        return 1
+    <div class="col-12 mt-3">
+      <button id="saveSaleBtn" class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Sale</button>
+    </div>
+  </div>
+</div>
 
-# ── Page Routes ──────────────────────────────────────────────────────────────
-@app.route('/')
-def main_orders(): return render_template('main_orders.html')
+<div class="toolbar" style="display:flex; justify-content:space-between; align-items:center;">
+  <div style="display:flex; gap:10px;">
+    <input type="text" class="search-input" id="searchInput" placeholder="Search..." oninput="filterTable()"/>
+    <input type="month" id="filterMonth" class="form-select" style="width:160px;" onchange="filterTable()"/>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">Delete (<span id="selCount">0</span>)</button>
+  </div>
+</div>
 
-@app.route('/secondary')
-def secondary_orders(): return render_template('secondary_orders.html')
+<div class="card-panel" style="padding:0;overflow:hidden;">
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"/></th>
+          <th>Sale Month</th><th>Date Entered</th><th>Card #</th><th>Bank</th>
+          <th>Machine</th><th>Vendor</th><th>Brand</th><th>Type</th>
+          <th>Costing</th><th>Sell Price</th><th>Profit</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
 
-@app.route('/offline')
-def offline_orders(): return render_template('offline_orders.html')
+{% block scripts %}
+<script>
+let allOrders = [];
 
-@app.route('/inventory')
-def inventory(): return render_template('inventory.html')
+async function init() {
+  document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
+  
+  const [machines, vendors, brands] = await Promise.all([
+    api('/api/machines'), api('/api/vendors'), api('/api/brands')
+  ]);
+  
+  machines.forEach(m => document.getElementById('f_machine').innerHTML += `<option value="${m.name}">${m.name}</option>`);
+  vendors.forEach(v => document.getElementById('f_vendor').innerHTML += `<option value="${v.name}">${v.name}</option>`);
+  brands.forEach(b => document.getElementById('f_brand').innerHTML += `<option value="${b.name}">${b.name}</option>`);
 
-@app.route('/dashboard')
-def dashboard(): return render_template('dashboard.html')
+  allOrders = await api('/api/offline-orders');
+  filterTable();
+}
 
-@app.route('/settings')
-def settings(): return render_template('settings.html')
+function toggleForm() {
+  const panel = document.getElementById('addFormPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
 
-# ── Settings APIs (Cards, Platforms, Models, Variants, SecNames) ──────────────
-@app.route('/api/cards', methods=['GET', 'POST'])
-def manage_cards():
-    if not SHEET: return jsonify([])
-    ws = SHEET.worksheet('cards')
-    if request.method == 'GET':
-        try:
-            cards = ws.get_all_records()
-        except Exception:
-            cards = []
-        for c in cards:
-            if str(c.get('last_digits', '')).startswith("'"): c['last_digits'] = str(c['last_digits'])[1:]
-        return jsonify(list(reversed(cards)))
-    
-    data = request.json
-    new_id = get_next_id(ws)
-    last_digits = str(data.get('last_digits', ''))
-    save_digits = f"'{last_digits}" if last_digits else ""
-    ws.append_row([new_id, data.get('card_type', ''), save_digits])
-    return jsonify({'success': True})
+let digitTimer = null;
+function onDigitsInput(val) {
+  clearTimeout(digitTimer);
+  if (val.length >= 4) digitTimer = setTimeout(() => lookupCard(val, document.getElementById('f_bank')), 500);
+}
 
-@app.route('/api/cards/<int:card_id>', methods=['DELETE'])
-def delete_card(card_id):
-    ws = SHEET.worksheet('cards')
-    try:
-        cell = ws.find(str(card_id), in_column=1)
-        ws.delete_rows(cell.row)
-    except: pass
-    return jsonify({'success': True})
+async function submitOrder() {
+  // 1. Grab the button and save its original text
+  const btn = document.getElementById('saveSaleBtn');
+  const originalText = btn.innerHTML;
+  
+  // 2. Disable it and show the loading spinner
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right: 6px;" role="status" aria-hidden="true"></span>Saving...';
 
-@app.route('/api/card-lookup')
-def card_lookup():
-    digits = request.args.get('digits', '').strip()
-    if digits.startswith("'"): digits = digits[1:]
-    if not SHEET: return jsonify({'found': False})
-    ws = SHEET.worksheet('cards')
-    try:
-        records = ws.get_all_records()
-    except Exception:
-        records = []
-    for row in records:
-        db_digits = str(row.get('last_digits', ''))
-        if db_digits.startswith("'"): db_digits = db_digits[1:]
-        if db_digits == digits: return jsonify({'card_type': row.get('card_type'), 'found': True})
-    return jsonify({'found': False})
+  const payload = {
+    last_digits: document.getElementById('f_digits').value,
+    card_type: document.getElementById('f_bank').value,
+    machine: document.getElementById('f_machine').value,
+    vendor: document.getElementById('f_vendor').value,
+    brand: document.getElementById('f_brand').value,
+    sale_type: document.getElementById('f_type').value,
+    sale_month: document.getElementById('f_month').value,
+    costing: document.getElementById('f_costing').value,
+    selling_price: document.getElementById('f_selling').value
+  };
+  
+  try {
+    // 3. Send data to the server
+    const res = await api('/api/offline-orders', 'POST', payload);
+    if(res.success !== false) {
+      allOrders.unshift(res);
+      filterTable();
+      showToast("Offline Sale Saved!");
+      ['f_digits','f_bank','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
+    }
+  } finally {
+    // 4. No matter what happens (success or error), turn the button back on
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+}
 
-# Generic Master Data Handler for simple ID/Name tables
-def handle_master_table(table_name, req, field_name='name'):
-    if not SHEET: return jsonify([])
-    ws = SHEET.worksheet(table_name)
-    if req.method == 'GET':
-        try:
-            return jsonify(ws.get_all_records())
-        except Exception:
-            return jsonify([])
-    data = req.json
-    new_id = get_next_id(ws)
-    ws.append_row([new_id, data.get(field_name, '')])
-    return jsonify({'success': True})
+function filterTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const m = document.getElementById('filterMonth').value;
+  
+  let filtered = allOrders.filter(o => {
+    const matchSearch = Object.values(o).join(' ').toLowerCase().includes(q);
+    const matchMonth = m ? o.sale_month === m : true;
+    return matchSearch && matchMonth;
+  });
+  
+  let profit = 0;
+  const html = filtered.map(o => {
+    profit += parseFloat(o.profit);
+    return `<tr>
+      <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
+      <td><span class="badge-card" style="background:var(--navy3);">${o.sale_month}</span></td>
+      <td style="color:var(--muted);">${o.created_at.split(' ')[0]}</td>
+      <td><code style="color:var(--accent2);">•••• ${o.last_digits}</code></td>
+      <td>${cardBadge(o.card_type)}</td>
+      <td>${o.machine}</td><td>${o.vendor}</td><td style="font-weight:bold;">${o.brand}</td>
+      <td>${o.sale_type}</td>
+      <td style="color:var(--muted)">${formatCost(o.costing)}</td>
+      <td>${formatCost(o.selling_price)}</td>
+      <td style="color:${o.profit >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:bold;">${formatCost(o.profit)}</td>
+      <td><button class="btn-sm btn-outline-danger" onclick="del(${o.id})"><i class="bi bi-trash"></i></button></td>
+    </tr>`;
+  }).join('');
+  
+  document.getElementById('tableBody').innerHTML = html;
+  document.getElementById('totalCount').textContent = filtered.length;
+  document.getElementById('totalProfit').textContent = `Profit: ${formatCost(profit)}`;
+}
 
-def delete_master_table(table_name, item_id):
-    ws = SHEET.worksheet(table_name)
-    try:
-        cell = ws.find(str(item_id), in_column=1)
-        ws.delete_rows(cell.row)
-    except: pass
-    return jsonify({'success': True})
+async function del(id) {
+  if(!confirm("Delete this?")) return;
+  await api(`/api/offline-orders/${id}`, 'DELETE');
+  allOrders = allOrders.filter(o => o.id !== id);
+  filterTable();
+}
 
-@app.route('/api/platforms', methods=['GET', 'POST'])
-def api_platforms(): return handle_master_table('platforms', request, 'platform_name')
-@app.route('/api/platforms/<int:id>', methods=['DELETE'])
-def api_del_platforms(id): return delete_master_table('platforms', id)
-
-@app.route('/api/models', methods=['GET', 'POST'])
-def api_models(): return handle_master_table('models', request, 'model_name')
-@app.route('/api/models/<int:id>', methods=['DELETE'])
-def api_del_models(id): return delete_master_table('models', id)
-
-@app.route('/api/sec-order-names', methods=['GET', 'POST'])
-def api_sec_names(): return handle_master_table('sec_order_names', request, 'name')
-@app.route('/api/sec-order-names/<int:id>', methods=['DELETE'])
-def api_del_sec_names(id): return delete_master_table('sec_order_names', id)
-
-@app.route('/api/machines', methods=['GET', 'POST'])
-def api_machines(): return handle_master_table('machines', request, 'name')
-@app.route('/api/machines/<int:id>', methods=['DELETE'])
-def api_del_machines(id): return delete_master_table('machines', id)
-
-@app.route('/api/vendors', methods=['GET', 'POST'])
-def api_vendors(): return handle_master_table('vendors', request, 'name')
-@app.route('/api/vendors/<int:id>', methods=['DELETE'])
-def api_del_vendors(id): return delete_master_table('vendors', id)
-
-@app.route('/api/brands', methods=['GET', 'POST'])
-def api_brands(): return handle_master_table('brands', request, 'name')
-@app.route('/api/brands/<int:id>', methods=['DELETE'])
-def api_del_brands(id): return delete_master_table('brands', id)
-
-@app.route('/api/platform-names')
-def platform_names():
-    if not SHEET: return jsonify([])
-    try:
-        records = SHEET.worksheet('platforms').get_all_records()
-    except Exception:
-        records = []
-    return jsonify(sorted(list(set([r['platform_name'] for r in records if r.get('platform_name')]))))
-
-@app.route('/api/variants', methods=['GET', 'POST'])
-def api_variants():
-    if not SHEET: return jsonify([])
-    ws = SHEET.worksheet('variants')
-    if request.method == 'GET':
-        model_name = request.args.get('model')
-        try:
-            variants = ws.get_all_records()
-        except Exception:
-            variants = []
-            
-        if model_name:
-            try:
-                models = SHEET.worksheet('models').get_all_records()
-            except Exception:
-                models = []
-            m_id = next((m['id'] for m in models if m['model_name'] == model_name), None)
-            if m_id: return jsonify([v for v in variants if v['model_id'] == m_id])
-            return jsonify([])
-        return jsonify(variants)
-        
-    data = request.json
-    new_id = get_next_id(ws)
-    ws.append_row([new_id, data.get('model_id'), data.get('variant_name', ''), data.get('costing', '')])
-    return jsonify({'success': True})
-
-@app.route('/api/variants/<int:var_id>', methods=['DELETE'])
-def del_variant(var_id): return delete_master_table('variants', var_id)
-
-
-# ── Main Orders API ───────────────────────────────────────────────
-@app.route('/api/main-orders', methods=['GET', 'POST'])
-def api_main_orders():
-    if not SHEET: return jsonify([])
-    ws = SHEET.worksheet('main_orders')
-    
-    if request.method == 'GET':
-        try:
-            records = ws.get_all_records()
-        except Exception:
-            records = []
-        for o in records:
-            if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
-        return jsonify(list(reversed(records)))
-    
-    try:
-        data = request.json
-        next_id = get_next_id(ws)
-            
-        try: costing = float(data.get('costing') or 0)
-        except ValueError: costing = 0.0
-            
-        try: selling = float(data.get('selling_price') or 0)
-        except ValueError: selling = 0.0
-            
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        last_digits = str(data.get('last_digits', ''))
-        safe_digits = f"'{last_digits}" if last_digits else ""
-        
-        row = [
-            next_id, data.get('card_type', ''), safe_digits, data.get('platform', ''), 
-            data.get('account', ''), data.get('order_name', ''), data.get('model', ''), 
-            data.get('variant', ''), costing, selling, selling - costing, 
-            data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now
-        ]
-        ws.append_row(row)
-        
-        # Pull exact column names dynamically from Google Sheets
-        row[2] = last_digits
-        try:
-            headers = ws.row_values(1)
-        except Exception:
-            headers = ['id', 'card_type', 'last_digits', 'platform', 'account', 'order_name', 'model', 'variant', 'costing', 'selling_price', 'profit', 'delivery_date', 'sale_batch', 'created_at']
-            
-        new_order = dict(zip(headers, row))
-        new_order['success'] = True
-        return jsonify(new_order)
-        
-    except Exception as e:
-        print(f"Main Orders POST Error: {e}")
-        return jsonify({'success': False}), 500
-
-@app.route('/api/main-orders/bulk-delete', methods=['POST'])
-def bulk_del_main():
-    if not SHEET: return jsonify({'success': False})
-    ids = request.json.get('ids', [])
-    ws = SHEET.worksheet('main_orders')
-    try:
-        records = ws.get_all_records()
-    except Exception:
-        records = []
-        
-    rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
-    for r_idx in sorted(rows_to_delete, reverse=True): 
-        ws.delete_row(r_idx)
-    return jsonify({'success': True})
-
-@app.route('/api/main-orders/bulk-update-sale', methods=['POST'])
-def bulk_sale_main():
-    if not SHEET: return jsonify({'success': False})
-    ids = request.json.get('ids', [])
-    new_batch = request.json.get('sale_batch', 'Current Sale')
-    ws = SHEET.worksheet('main_orders')
-    try:
-        records = ws.get_all_records()
-        for i, r in enumerate(records):
-            if r.get('id') in ids:
-                ws.update_cell(i + 2, 13, new_batch)
-        return jsonify({'success': True})
-    except Exception as e:
-        print("Bulk Sale Error:", e)
-        return jsonify({'success': False})
-
-@app.route('/api/main-orders/<int:id>', methods=['DELETE', 'PUT'])
-def modify_main(id):
-    if request.method == 'DELETE':
-        return delete_master_table('main_orders', id)
-    if not SHEET: return jsonify({'success': False})
-    data = request.json
-    ws = SHEET.worksheet('main_orders')
-    try:
-        cell = ws.find(str(id), in_column=1)
-        cost = float(data.get('costing', 0) or 0)
-        sell = float(data.get('selling_price', 0) or 0)
-        profit = sell - cost
-        last_digits = str(data.get('last_digits', ''))
-        safe_digits = f"'{last_digits}" if last_digits else ""
-
-        ws.update(f'B{cell.row}:M{cell.row}', [[
-            data.get('card_type', ''), safe_digits, data.get('platform', ''),
-            data.get('account', ''), data.get('order_name', ''), data.get('model', ''),
-            data.get('variant', ''), cost, sell, profit,
-            data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
-        ]])
-
-        return jsonify({
-            'success': True, 'id': id,
-            'card_type': data.get('card_type', ''), 'last_digits': last_digits,
-            'platform': data.get('platform', ''), 'account': data.get('account', ''),
-            'order_name': data.get('order_name', ''), 'model': data.get('model', ''),
-            'variant': data.get('variant', ''), 'costing': cost, 'selling_price': sell,
-            'profit': profit, 'delivery_date': data.get('delivery_date', ''),
-            'sale_batch': data.get('sale_batch', 'Current Sale')
-        })
-    except Exception as e:
-        print("Edit Error:", e)
-        return jsonify({'success': False})
-
-
-# ── Secondary Orders API ──────────────────────────────────────────
-# ── Secondary Orders API ──────────────────────────────────────────
-@app.route('/api/secondary-orders', methods=['GET', 'POST'])
-def api_secondary_orders():
-    if not SHEET: return jsonify([])
-    ws = SHEET.worksheet('secondary_orders')
-    
-    if request.method == 'GET':
-        try:
-            records = ws.get_all_records()
-        except Exception:
-            records = []
-        for o in records:
-            if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
-        return jsonify(list(reversed(records)))
-    
-    try:
-        data = request.json
-        next_id = get_next_id(ws)
-            
-        try:
-            costing = float(data.get('costing') or 0)
-        except ValueError:
-            costing = 0.0
-            
-        try:
-            selling = float(data.get('selling_price') or 0)
-        except ValueError:
-            selling = 0.0
-            
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        last_digits = str(data.get('last_digits', ''))
-        safe_digits = f"'{last_digits}" if last_digits else ""
-        
-        row = [
-            next_id, data.get('card_type', ''), safe_digits, data.get('platform', ''),
-            data.get('order_name', ''), data.get('model', ''),
-            data.get('variant', ''), costing, selling, selling - costing,
-            data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now
-        ]
-        ws.append_row(row)
-        
-        new_order = {
-            'success': True,
-            'id': next_id,
-            'card_type': data.get('card_type', ''),
-            'last_digits': last_digits,
-            'platform': data.get('platform', ''),
-            'order_name': data.get('order_name', ''),
-            'model': data.get('model', ''),
-            'variant': data.get('variant', ''),
-            'costing': costing,
-            'selling_price': selling,
-            'profit': selling - costing,
-            'delivery_date': data.get('delivery_date', ''),
-            'sale_batch': data.get('sale_batch', 'Current Sale'),
-            'created_at': now
-        }
-        return jsonify(new_order)
-        
-    except Exception as e:
-        print(f"Secondary Orders POST Error: {e}")
-        return jsonify({'success': False}), 500
-
-@app.route('/api/secondary-orders/bulk-delete', methods=['POST'])
-def bulk_del_sec():
-    if not SHEET: return jsonify({'success': False})
-    ids = request.json.get('ids', [])
-    ws = SHEET.worksheet('secondary_orders')
-    try:
-        records = ws.get_all_records()
-    except Exception:
-        records = []
-    rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
-    for r_idx in sorted(rows_to_delete, reverse=True): 
-        ws.delete_row(r_idx)
-    return jsonify({'success': True})
-
-@app.route('/api/secondary-orders/bulk-update-sale', methods=['POST'])
-def bulk_sale_sec():
-    if not SHEET: return jsonify({'success': False})
-    ids = request.json.get('ids', [])
-    new_batch = request.json.get('sale_batch', 'Current Sale')
-    ws = SHEET.worksheet('secondary_orders')
-    try:
-        records = ws.get_all_records()
-        for i, r in enumerate(records):
-            if r.get('id') in ids:
-                ws.update_cell(i + 2, 12, new_batch)
-        return jsonify({'success': True})
-    except Exception as e:
-        print("Bulk Sale Error:", e)
-        return jsonify({'success': False})
-
-@app.route('/api/secondary-orders/<int:id>', methods=['DELETE', 'PUT'])
-def modify_sec(id):
-    if request.method == 'DELETE':
-        return delete_master_table('secondary_orders', id)
-    if not SHEET: return jsonify({'success': False})
-    data = request.json
-    ws = SHEET.worksheet('secondary_orders')
-    try:
-        cell = ws.find(str(id), in_column=1)
-        cost = float(data.get('costing', 0) or 0)
-        sell = float(data.get('selling_price', 0) or 0)
-        profit = sell - cost
-        last_digits = str(data.get('last_digits', ''))
-        safe_digits = f"'{last_digits}" if last_digits else ""
-
-        ws.update(f'B{cell.row}:L{cell.row}', [[
-            data.get('card_type', ''), safe_digits, data.get('platform', ''),
-            data.get('order_name', ''), data.get('model', ''),
-            data.get('variant', ''), cost, sell, profit,
-            data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
-        ]])
-
-        return jsonify({
-            'success': True, 'id': id,
-            'card_type': data.get('card_type', ''), 'last_digits': last_digits,
-            'platform': data.get('platform', ''),
-            'order_name': data.get('order_name', ''), 'model': data.get('model', ''),
-            'variant': data.get('variant', ''), 'costing': cost, 'selling_price': sell,
-            'profit': profit, 'delivery_date': data.get('delivery_date', ''),
-            'sale_batch': data.get('sale_batch', 'Current Sale')
-        })
-    except Exception as e:
-        print("Edit Error:", e)
-        return jsonify({'success': False})
-
-
-# ── Offline Orders API ──────────────────────────────────────────────────
-@app.route('/api/offline-orders', methods=['GET', 'POST'])
-def api_offline_orders():
-    if not SHEET: return jsonify([])
-    ws = SHEET.worksheet('offline_orders')
-    
-    if request.method == 'GET':
-        try:
-            records = ws.get_all_records()
-        except Exception:
-            records = []
-        for o in records:
-            if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
-        return jsonify(list(reversed(records)))
-    
-    try:
-        data = request.json
-        next_id = get_next_id(ws)
-        
-        try: costing = float(data.get('costing') or 0)
-        except ValueError: costing = 0.0
-            
-        try: selling = float(data.get('selling_price') or 0)
-        except ValueError: selling = 0.0
-            
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        last_digits = str(data.get('last_digits', ''))
-        safe_digits = f"'{last_digits}" if last_digits else ""
-        
-        row = [
-            next_id, data.get('card_type', ''), safe_digits, data.get('machine', ''), 
-            data.get('vendor', ''), data.get('brand', ''), data.get('sale_type', ''),
-            costing, selling, selling - costing, data.get('sale_month', ''), now
-        ]
-        ws.append_row(row)
-        
-        # Pull exact column names dynamically from Google Sheets
-        row[2] = last_digits
-        try:
-            headers = ws.row_values(1)
-        except Exception:
-            headers = ['id', 'card_type', 'last_digits', 'machine', 'vendor', 'brand', 'sale_type', 'costing', 'selling_price', 'profit', 'sale_month', 'created_at']
-            
-        new_order = dict(zip(headers, row))
-        new_order['success'] = True
-        return jsonify(new_order)
-        
-    except Exception as e:
-        print(f"Offline POST Error: {e}")
-        return jsonify({'success': False}), 500
-
-@app.route('/api/offline-orders/bulk-delete', methods=['POST'])
-def bulk_del_offline():
-    if not SHEET: return jsonify({'success': False})
-    ids = request.json.get('ids', [])
-    ws = SHEET.worksheet('offline_orders')
-    try:
-        records = ws.get_all_records()
-    except Exception:
-        records = []
-    rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
-    for r_idx in sorted(rows_to_delete, reverse=True): 
-        ws.delete_row(r_idx)
-    return jsonify({'success': True})
-
-@app.route('/api/offline-orders/<int:id>', methods=['DELETE', 'PUT'])
-def modify_offline(id):
-    if request.method == 'DELETE':
-        return delete_master_table('offline_orders', id)
-    if not SHEET: return jsonify({'success': False})
-    data = request.json
-    ws = SHEET.worksheet('offline_orders')
-    try:
-        cell = ws.find(str(id), in_column=1)
-        cost = float(data.get('costing', 0) or 0)
-        sell = float(data.get('selling_price', 0) or 0)
-        profit = sell - cost
-        
-        # Update Offline Google Sheets (Columns: 8=Cost, 9=Sell, 10=Profit)
-        ws.update_cell(cell.row, 8, cost)
-        ws.update_cell(cell.row, 9, sell)
-        ws.update_cell(cell.row, 10, profit)
-        return jsonify({'success': True})
-    except Exception as e:
-        print("Edit Error:", e)
-        return jsonify({'success': False})
-
-
-# ── PWA Setup ─────────────────────────────────────────────────────────────────
-@app.route('/manifest.json')
-def serve_manifest(): return send_file('static/manifest.json', mimetype='application/manifest+json')
-@app.route('/sw.js')
-def serve_sw(): return send_file('static/sw.js', mimetype='application/javascript')
-
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+function toggleSelectAll(cb) { document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked); checkBulk(); }
+function checkBulk() { 
+  const c = document.querySelectorAll('.row-check:checked').length;
+  document.getElementById('selCount').textContent = c;
+  document.getElementById('bulkDeleteBtn').style.display = c ? 'inline-block' : 'none';
+}
+async function bulkDelete() {
+  const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
+  if(!confirm(`Delete ${ids.length} sales?`)) return;
+  await api('/api/offline-orders/bulk-delete', 'POST', {ids});
+  allOrders = allOrders.filter(o => !ids.includes(o.id));
+  filterTable();
+}
+init();
+</script>
+{% endblock %}
