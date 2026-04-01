@@ -550,7 +550,8 @@ async function promptBulkSale() {
 }
 
 function exportOrders(fmt) {
-  window.location.href = `/api/main-orders/export?format=${fmt}`;
+  const sale = document.getElementById('filterSale').value;
+  window.location.href = `/api/main-orders/export?format=${fmt}&sale=${encodeURIComponent(sale)}`;
 }
 
 init();
