@@ -72,7 +72,9 @@
     <input type="month" id="filterMonth" class="form-select" style="width:160px;" onchange="filterTable()"/>
   </div>
   <div class="toolbar-right">
-    <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">Delete (<span id="selCount">0</span>)</button>
+    <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">
+      <i class="bi bi-trash3"></i> Delete (<span id="selCount">0</span>)
+    </button>
   </div>
 </div>
 
@@ -82,20 +84,91 @@
       <thead>
         <tr>
           <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"/></th>
-          <th>Sale Month</th><th>Date Entered</th><th>Card #</th><th>Bank</th>
-          <th>Machine</th><th>Vendor</th><th>Brand</th><th>Type</th>
-          <th>Costing</th><th>Sell Price</th><th>Profit</th><th>Action</th>
+          <th>Sale Month</th>
+          <th>Date Entered</th>
+          <th>Card #</th>
+          <th>Bank</th>
+          <th>Machine</th>
+          <th>Vendor</th>
+          <th>Brand</th>
+          <th>Type</th>
+          <th>Costing</th>
+          <th>Sell Price</th>
+          <th>Profit</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="tableBody"></tbody>
     </table>
   </div>
 </div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Offline Sale</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="e_id"/>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Card Number</label>
+            <input type="text" id="e_digits" class="form-control" maxlength="5" oninput="onEditDigitsInput(this.value)"/>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Bank</label>
+            <input type="text" id="e_bank" class="form-control" readonly/>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Machine</label>
+            <select id="e_machine" class="form-select"><option value="">Select</option></select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Vendor</label>
+            <select id="e_vendor" class="form-select"><option value="">Select</option></select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Brand</label>
+            <select id="e_brand" class="form-select"><option value="">Select</option></select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Sale Type</label>
+            <select id="e_type" class="form-select">
+              <option value="INSTANT">INSTANT</option>
+              <option value="EMI">EMI</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Sale Month</label>
+            <input type="month" id="e_month" class="form-control"/>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Costing (₹)</label>
+            <input type="number" id="e_costing" class="form-control" step="0.01"/>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Selling Price (₹)</label>
+            <input type="number" id="e_selling" class="form-control" step="0.01"/>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-primary-custom" onclick="saveEdit()"><i class="bi bi-check-lg"></i> Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
 let allOrders = [];
+const editModal = new bootstrap.Modal(document.getElementById('editModal'));
 
 async function init() {
   document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
@@ -114,57 +187,66 @@ async function init() {
 
 function toggleForm() {
   const panel = document.getElementById('addFormPanel');
-  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  const btn = document.getElementById('formToggleText');
+  const visible = panel.style.display !== 'none';
+  panel.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? 'Add New Offline Sale' : 'Hide Form';
 }
 
+// ── Digit Lookup ──────────────────────────────────────────────────
 let digitTimer = null;
 function onDigitsInput(val) {
   clearTimeout(digitTimer);
   if (val.length >= 4) digitTimer = setTimeout(() => lookupCard(val, document.getElementById('f_bank')), 500);
+  else document.getElementById('f_bank').value = '';
 }
 
+let editDigitTimer = null;
+function onEditDigitsInput(val) {
+  clearTimeout(editDigitTimer);
+  if (val.length >= 4) editDigitTimer = setTimeout(() => lookupCard(val, document.getElementById('e_bank')), 500);
+  else document.getElementById('e_bank').value = '';
+}
+
+// ── Add New Sale ──────────────────────────────────────────────────
 async function submitOrder() {
-  // 1. Grab the button and save its original text
   const btn = document.getElementById('saveSaleBtn');
   const originalText = btn.innerHTML;
-  
-  // 2. Disable it and show the loading spinner
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right: 6px;" role="status" aria-hidden="true"></span>Saving...';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right:6px;" role="status" aria-hidden="true"></span>Saving...';
 
   const payload = {
-    last_digits: document.getElementById('f_digits').value,
-    card_type: document.getElementById('f_bank').value,
-    machine: document.getElementById('f_machine').value,
-    vendor: document.getElementById('f_vendor').value,
-    brand: document.getElementById('f_brand').value,
-    sale_type: document.getElementById('f_type').value,
-    sale_month: document.getElementById('f_month').value,
-    costing: document.getElementById('f_costing').value,
+    last_digits:   document.getElementById('f_digits').value,
+    card_type:     document.getElementById('f_bank').value,
+    machine:       document.getElementById('f_machine').value,
+    vendor:        document.getElementById('f_vendor').value,
+    brand:         document.getElementById('f_brand').value,
+    sale_type:     document.getElementById('f_type').value,
+    sale_month:    document.getElementById('f_month').value,
+    costing:       document.getElementById('f_costing').value,
     selling_price: document.getElementById('f_selling').value
   };
   
   try {
-    // 3. Send data to the server
     const res = await api('/api/offline-orders', 'POST', payload);
-    if(res.success !== false) {
+    if (res.success !== false) {
       allOrders.unshift(res);
       filterTable();
-      showToast("Offline Sale Saved!");
+      showToast('Offline Sale Saved!');
       ['f_digits','f_bank','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
     }
   } finally {
-    // 4. No matter what happens (success or error), turn the button back on
     btn.disabled = false;
     btn.innerHTML = originalText;
   }
 }
 
+// ── Render Table ──────────────────────────────────────────────────
 function filterTable() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   const m = document.getElementById('filterMonth').value;
   
-  let filtered = allOrders.filter(o => {
+  const filtered = allOrders.filter(o => {
     const matchSearch = Object.values(o).join(' ').toLowerCase().includes(q);
     const matchMonth = m ? o.sale_month === m : true;
     return matchSearch && matchMonth;
@@ -172,47 +254,122 @@ function filterTable() {
   
   let profit = 0;
   const html = filtered.map(o => {
-    profit += parseFloat(o.profit);
+    profit += parseFloat(o.profit) || 0;
+    const pColor = parseFloat(o.profit) >= 0 ? 'var(--green)' : 'var(--red)';
     return `<tr>
       <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
-      <td><span class="badge-card" style="background:var(--navy3);">${o.sale_month}</span></td>
-      <td style="color:var(--muted);">${o.created_at.split(' ')[0]}</td>
-      <td><code style="color:var(--accent2);">•••• ${o.last_digits}</code></td>
+      <td><span class="badge-card" style="background:var(--navy3);">${o.sale_month || '—'}</span></td>
+      <td style="color:var(--muted);">${(o.created_at || '').split(' ')[0]}</td>
+      <td><code style="color:var(--accent2);">•••• ${o.last_digits || '—'}</code></td>
       <td>${cardBadge(o.card_type)}</td>
-      <td>${o.machine}</td><td>${o.vendor}</td><td style="font-weight:bold;">${o.brand}</td>
-      <td>${o.sale_type}</td>
+      <td>${o.machine || '—'}</td>
+      <td>${o.vendor || '—'}</td>
+      <td style="font-weight:bold;">${o.brand || '—'}</td>
+      <td>${o.sale_type || '—'}</td>
       <td style="color:var(--muted)">${formatCost(o.costing)}</td>
-      <td>${formatCost(o.selling_price)}</td>
-      <td style="color:${o.profit >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:bold;">${formatCost(o.profit)}</td>
-      <td><button class="btn-sm btn-outline-danger" onclick="del(${o.id})"><i class="bi bi-trash"></i></button></td>
+      <td style="font-weight:600;">${formatCost(o.selling_price)}</td>
+      <td style="color:${pColor}; font-weight:bold;">${formatCost(o.profit)}</td>
+      <td>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})"><i class="bi bi-pencil"></i></button>
+          <button class="btn-danger-custom" style="padding:4px 9px;" onclick="del(${o.id})"><i class="bi bi-trash"></i></button>
+        </div>
+      </td>
     </tr>`;
   }).join('');
   
-  document.getElementById('tableBody').innerHTML = html;
+  document.getElementById('tableBody').innerHTML = html || '<tr><td colspan="13"><div class="empty-state"><i class="bi bi-inbox"></i><p>No sales found.</p></div></td></tr>';
   document.getElementById('totalCount').textContent = filtered.length;
   document.getElementById('totalProfit').textContent = `Profit: ${formatCost(profit)}`;
 }
 
+// ── Edit ──────────────────────────────────────────────────────────
+async function openEdit(id) {
+  const o = allOrders.find(x => x.id === id);
+  if (!o) return;
+
+  document.getElementById('e_id').value = o.id;
+  document.getElementById('e_digits').value = o.last_digits || '';
+  document.getElementById('e_bank').value = o.card_type || '';
+  document.getElementById('e_type').value = o.sale_type || 'INSTANT';
+  document.getElementById('e_month').value = o.sale_month || '';
+  document.getElementById('e_costing').value = o.costing || '';
+  document.getElementById('e_selling').value = o.selling_price || '';
+
+  const [machines, vendors, brands] = await Promise.all([
+    api('/api/machines'), api('/api/vendors'), api('/api/brands')
+  ]);
+
+  const eMachine = document.getElementById('e_machine');
+  const eVendor  = document.getElementById('e_vendor');
+  const eBrand   = document.getElementById('e_brand');
+
+  eMachine.innerHTML = '<option value="">Select</option>';
+  eVendor.innerHTML  = '<option value="">Select</option>';
+  eBrand.innerHTML   = '<option value="">Select</option>';
+
+  machines.forEach(m => eMachine.innerHTML += `<option value="${m.name}" ${m.name === o.machine ? 'selected' : ''}>${m.name}</option>`);
+  vendors.forEach(v  => eVendor.innerHTML  += `<option value="${v.name}" ${v.name === o.vendor  ? 'selected' : ''}>${v.name}</option>`);
+  brands.forEach(b   => eBrand.innerHTML   += `<option value="${b.name}" ${b.name === o.brand   ? 'selected' : ''}>${b.name}</option>`);
+
+  editModal.show();
+}
+
+async function saveEdit() {
+  const id = parseInt(document.getElementById('e_id').value);
+  const payload = {
+    last_digits:   document.getElementById('e_digits').value.trim(),
+    card_type:     document.getElementById('e_bank').value.trim(),
+    machine:       document.getElementById('e_machine').value,
+    vendor:        document.getElementById('e_vendor').value,
+    brand:         document.getElementById('e_brand').value,
+    sale_type:     document.getElementById('e_type').value,
+    sale_month:    document.getElementById('e_month').value,
+    costing:       document.getElementById('e_costing').value || 0,
+    selling_price: document.getElementById('e_selling').value || 0
+  };
+
+  const res = await api(`/api/offline-orders/${id}`, 'PUT', payload);
+  if (!res.success) { showToast('Update failed.', 'error'); return; }
+
+  const idx = allOrders.findIndex(x => x.id === id);
+  if (idx !== -1) allOrders[idx] = { ...allOrders[idx], ...res };
+
+  filterTable();
+  editModal.hide();
+  showToast('Sale updated!');
+}
+
+// ── Delete ────────────────────────────────────────────────────────
 async function del(id) {
-  if(!confirm("Delete this?")) return;
+  if (!confirm('Delete this sale?')) return;
   await api(`/api/offline-orders/${id}`, 'DELETE');
   allOrders = allOrders.filter(o => o.id !== id);
   filterTable();
 }
 
-function toggleSelectAll(cb) { document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked); checkBulk(); }
-function checkBulk() { 
-  const c = document.querySelectorAll('.row-check:checked').length;
-  document.getElementById('selCount').textContent = c;
-  document.getElementById('bulkDeleteBtn').style.display = c ? 'inline-block' : 'none';
+// ── Bulk Delete ───────────────────────────────────────────────────
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked);
+  checkBulk();
 }
+
+function checkBulk() {
+  const count = document.querySelectorAll('.row-check:checked').length;
+  document.getElementById('selCount').textContent = count;
+  document.getElementById('bulkDeleteBtn').style.display = count ? 'inline-flex' : 'none';
+}
+
 async function bulkDelete() {
   const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
-  if(!confirm(`Delete ${ids.length} sales?`)) return;
-  await api('/api/offline-orders/bulk-delete', 'POST', {ids});
+  if (!ids.length || !confirm(`Delete ${ids.length} sales?`)) return;
+  await api('/api/offline-orders/bulk-delete', 'POST', { ids });
   allOrders = allOrders.filter(o => !ids.includes(o.id));
   filterTable();
+  document.getElementById('selectAll').checked = false;
+  checkBulk();
 }
+
 init();
 </script>
 {% endblock %}
