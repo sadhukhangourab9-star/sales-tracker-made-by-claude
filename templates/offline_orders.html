@@ -59,21 +59,31 @@
       <label class="form-label">Selling Price (₹)</label>
       <input type="number" id="f_selling" class="form-control" placeholder="0.00"/>
     </div>
-
     <div class="col-12 mt-3">
-      <button id="saveSaleBtn" class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Sale</button>
+      <button id="saveSaleBtn" class="btn-primary-custom" onclick="submitOrder()">
+        <i class="bi bi-check-lg"></i> Save Sale
+      </button>
     </div>
   </div>
 </div>
 
 <div class="toolbar" style="display:flex; justify-content:space-between; align-items:center;">
   <div style="display:flex; gap:10px;">
-    <input type="text" class="search-input" id="searchInput" placeholder="Search..." oninput="filterTable()"/>
+    <div class="search-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search..." oninput="filterTable()"/>
+    </div>
     <input type="month" id="filterMonth" class="form-select" style="width:160px;" onchange="filterTable()"/>
   </div>
   <div class="toolbar-right">
     <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">
       <i class="bi bi-trash3"></i> Delete (<span id="selCount">0</span>)
+    </button>
+    <button class="btn-outline-custom" onclick="exportOrders('csv')">
+      <i class="bi bi-filetype-csv"></i> CSV
+    </button>
+    <button class="btn-outline-custom" onclick="exportOrders('excel')">
+      <i class="bi bi-file-earmark-excel"></i> Excel
     </button>
   </div>
 </div>
@@ -100,6 +110,13 @@
       </thead>
       <tbody id="tableBody"></tbody>
     </table>
+  </div>
+  <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px; border-top:1px solid var(--border);">
+    <span id="pageInfo" style="color:var(--muted); font-size:12px; font-weight:600;">0 - 0 of 0</span>
+    <div style="display:flex; gap:8px;">
+      <button id="btnPrev" onclick="changePage(-1)" class="btn-outline-custom" disabled>Previous</button>
+      <button id="btnNext" onclick="changePage(1)" class="btn-outline-custom" disabled>Next</button>
+    </div>
   </div>
 </div>
 
@@ -157,7 +174,9 @@
       </div>
       <div class="modal-footer">
         <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn-primary-custom" onclick="saveEdit()"><i class="bi bi-check-lg"></i> Save Changes</button>
+        <button class="btn-primary-custom" onclick="saveEdit()">
+          <i class="bi bi-check-lg"></i> Save Changes
+        </button>
       </div>
     </div>
   </div>
@@ -168,18 +187,22 @@
 {% block scripts %}
 <script>
 let allOrders = [];
+let filteredOrders = [];
+let currentPage = 1;
+const PAGE_SIZE = 50;
 const editModal = new bootstrap.Modal(document.getElementById('editModal'));
 
+// ── Init ──────────────────────────────────────────────────────────
 async function init() {
   document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
-  
+
   const [machines, vendors, brands] = await Promise.all([
     api('/api/machines'), api('/api/vendors'), api('/api/brands')
   ]);
-  
+
   machines.forEach(m => document.getElementById('f_machine').innerHTML += `<option value="${m.name}">${m.name}</option>`);
-  vendors.forEach(v => document.getElementById('f_vendor').innerHTML += `<option value="${v.name}">${v.name}</option>`);
-  brands.forEach(b => document.getElementById('f_brand').innerHTML += `<option value="${b.name}">${b.name}</option>`);
+  vendors.forEach(v  => document.getElementById('f_vendor').innerHTML  += `<option value="${v.name}">${v.name}</option>`);
+  brands.forEach(b   => document.getElementById('f_brand').innerHTML   += `<option value="${b.name}">${b.name}</option>`);
 
   allOrders = await api('/api/offline-orders');
   filterTable();
@@ -187,7 +210,7 @@ async function init() {
 
 function toggleForm() {
   const panel = document.getElementById('addFormPanel');
-  const btn = document.getElementById('formToggleText');
+  const btn   = document.getElementById('formToggleText');
   const visible = panel.style.display !== 'none';
   panel.style.display = visible ? 'none' : 'block';
   btn.textContent = visible ? 'Add New Offline Sale' : 'Hide Form';
@@ -210,14 +233,9 @@ function onEditDigitsInput(val) {
 
 // ── Add New Sale ──────────────────────────────────────────────────
 async function submitOrder() {
-  const btn = document.getElementById('saveSaleBtn');
-  const originalText = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right:6px;" role="status" aria-hidden="true"></span>Saving...';
-
   const payload = {
-    last_digits:   document.getElementById('f_digits').value,
-    card_type:     document.getElementById('f_bank').value,
+    last_digits:   document.getElementById('f_digits').value.trim(),
+    card_type:     document.getElementById('f_bank').value.trim(),
     machine:       document.getElementById('f_machine').value,
     vendor:        document.getElementById('f_vendor').value,
     brand:         document.getElementById('f_brand').value,
@@ -226,7 +244,17 @@ async function submitOrder() {
     costing:       document.getElementById('f_costing').value,
     selling_price: document.getElementById('f_selling').value
   };
-  
+
+  if (!payload.last_digits || !payload.machine || !payload.vendor || !payload.brand || !payload.sale_month) {
+    showToast('Please fill: Card Number, Machine, Vendor, Brand and Sale Month', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('saveSaleBtn');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right:6px;" role="status" aria-hidden="true"></span>Saving...';
+
   try {
     const res = await api('/api/offline-orders', 'POST', payload);
     if (res.success !== false) {
@@ -241,20 +269,42 @@ async function submitOrder() {
   }
 }
 
-// ── Render Table ──────────────────────────────────────────────────
+// ── Filter & Render ───────────────────────────────────────────────
 function filterTable() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   const m = document.getElementById('filterMonth').value;
-  
-  const filtered = allOrders.filter(o => {
+
+  filteredOrders = allOrders.filter(o => {
     const matchSearch = Object.values(o).join(' ').toLowerCase().includes(q);
-    const matchMonth = m ? o.sale_month === m : true;
+    const matchMonth  = m ? o.sale_month === m : true;
     return matchSearch && matchMonth;
   });
-  
-  let profit = 0;
-  const html = filtered.map(o => {
-    profit += parseFloat(o.profit) || 0;
+
+  currentPage = 1;
+  renderTable();
+  updateStats();
+}
+
+function renderTable() {
+  const body = document.getElementById('tableBody');
+
+  if (!filteredOrders.length) {
+    body.innerHTML = '<tr><td colspan="13"><div class="empty-state"><i class="bi bi-inbox"></i><p>No sales found.</p></div></td></tr>';
+    document.getElementById('pageInfo').textContent = '0 - 0 of 0';
+    document.getElementById('btnPrev').disabled = true;
+    document.getElementById('btnNext').disabled = true;
+    return;
+  }
+
+  const start    = (currentPage - 1) * PAGE_SIZE;
+  const end      = Math.min(start + PAGE_SIZE, filteredOrders.length);
+  const pageData = filteredOrders.slice(start, end);
+
+  document.getElementById('pageInfo').textContent = `${start + 1} - ${end} of ${filteredOrders.length}`;
+  document.getElementById('btnPrev').disabled = currentPage === 1;
+  document.getElementById('btnNext').disabled = end >= filteredOrders.length;
+
+  body.innerHTML = pageData.map(o => {
     const pColor = parseFloat(o.profit) >= 0 ? 'var(--green)' : 'var(--red)';
     return `<tr>
       <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
@@ -272,15 +322,29 @@ function filterTable() {
       <td>
         <div style="display:flex;gap:6px;">
           <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})"><i class="bi bi-pencil"></i></button>
-          <button class="btn-danger-custom" style="padding:4px 9px;" onclick="del(${o.id})"><i class="bi bi-trash"></i></button>
+          <button class="btn-danger-custom"  style="padding:4px 9px;" onclick="del(${o.id})"><i class="bi bi-trash"></i></button>
         </div>
       </td>
     </tr>`;
   }).join('');
-  
-  document.getElementById('tableBody').innerHTML = html || '<tr><td colspan="13"><div class="empty-state"><i class="bi bi-inbox"></i><p>No sales found.</p></div></td></tr>';
-  document.getElementById('totalCount').textContent = filtered.length;
-  document.getElementById('totalProfit').textContent = `Profit: ${formatCost(profit)}`;
+}
+
+function changePage(dir) {
+  currentPage += dir;
+  renderTable();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function updateStats() {
+  const totalProfit = filteredOrders.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  document.getElementById('totalCount').textContent  = filteredOrders.length;
+  document.getElementById('totalProfit').textContent = `Profit: ${formatCost(totalProfit)}`;
+}
+
+// ── Export ────────────────────────────────────────────────────────
+function exportOrders(fmt) {
+  const month = document.getElementById('filterMonth').value;
+  window.location.href = `/api/offline-orders/export?format=${fmt}&month=${encodeURIComponent(month)}`;
 }
 
 // ── Edit ──────────────────────────────────────────────────────────
@@ -288,11 +352,11 @@ async function openEdit(id) {
   const o = allOrders.find(x => x.id === id);
   if (!o) return;
 
-  document.getElementById('e_id').value = o.id;
-  document.getElementById('e_digits').value = o.last_digits || '';
-  document.getElementById('e_bank').value = o.card_type || '';
-  document.getElementById('e_type').value = o.sale_type || 'INSTANT';
-  document.getElementById('e_month').value = o.sale_month || '';
+  document.getElementById('e_id').value      = o.id;
+  document.getElementById('e_digits').value  = o.last_digits || '';
+  document.getElementById('e_bank').value    = o.card_type || '';
+  document.getElementById('e_type').value    = o.sale_type || 'INSTANT';
+  document.getElementById('e_month').value   = o.sale_month || '';
   document.getElementById('e_costing').value = o.costing || '';
   document.getElementById('e_selling').value = o.selling_price || '';
 
@@ -363,11 +427,14 @@ function checkBulk() {
 async function bulkDelete() {
   const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
   if (!ids.length || !confirm(`Delete ${ids.length} sales?`)) return;
-  await api('/api/offline-orders/bulk-delete', 'POST', { ids });
-  allOrders = allOrders.filter(o => !ids.includes(o.id));
-  filterTable();
-  document.getElementById('selectAll').checked = false;
-  checkBulk();
+  const res = await api('/api/offline-orders/bulk-delete', 'POST', { ids });
+  if (res.success !== false) {
+    allOrders = allOrders.filter(o => !ids.includes(o.id));
+    filterTable();
+    document.getElementById('selectAll').checked = false;
+    checkBulk();
+    showToast(`${ids.length} sales deleted.`);
+  }
 }
 
 init();
