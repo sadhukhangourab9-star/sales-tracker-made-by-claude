@@ -629,6 +629,68 @@ def bulk_del_offline():
         ws.delete_row(r_idx)
     return jsonify({'success': True})
 
+@app.route('/api/offline-orders/export')
+def export_offline():
+    if not SHEET: return "No sheet connected", 500
+    fmt = request.args.get('format', 'csv')
+    month_filter = request.args.get('month', '')
+
+    try:
+        records = SHEET.worksheet('offline_orders').get_all_records()
+    except Exception:
+        records = []
+
+    for o in records:
+        if str(o.get('last_digits', '')).startswith("'"):
+            o['last_digits'] = str(o['last_digits'])[1:]
+
+    if month_filter:
+        records = [r for r in records if r.get('sale_month', '') == month_filter]
+
+    headers = ['id','card_type','last_digits','machine','vendor','brand',
+               'sale_type','costing','selling_price','profit','sale_month','created_at']
+
+    if fmt == 'csv':
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=headers, extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(records)
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'offline_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'
+        )
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Offline Sales"
+
+        header_fill = PatternFill("solid", fgColor="1A2D45")
+        header_font = Font(bold=True, color="2ECC8F")
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+
+        for r in records:
+            ws.append([r.get(h, '') for h in headers])
+
+        for col in ws.columns:
+            max_len = max((len(str(cell.value or '')) for cell in col), default=10)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'offline_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+        )
+
 @app.route('/api/offline-orders/<int:id>', methods=['DELETE', 'PUT'])
 def modify_offline(id):
     if request.method == 'DELETE':
