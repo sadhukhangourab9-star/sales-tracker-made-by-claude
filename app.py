@@ -270,6 +270,71 @@ def bulk_sale_main():
         print("Bulk Sale Error:", e)
         return jsonify({'success': False})
 
+@app.route('/api/main-orders/export')
+def export_main():
+    if not SHEET: return "No sheet connected", 500
+    fmt = request.args.get('format', 'csv')
+    sale_filter = request.args.get('sale', '')
+    
+    try:
+        records = SHEET.worksheet('main_orders').get_all_records()
+    except Exception:
+        records = []
+    
+    for o in records:
+        if str(o.get('last_digits', '')).startswith("'"): 
+            o['last_digits'] = str(o['last_digits'])[1:]
+    
+    if sale_filter and sale_filter != 'ALL':
+        records = [r for r in records if r.get('sale_batch', '') == sale_filter]
+
+    headers = ['id','card_type','last_digits','platform','account','order_name',
+               'model','variant','costing','selling_price','profit','delivery_date',
+               'sale_batch','created_at']
+
+    if fmt == 'csv':
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=headers, extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(records)
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'main_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'
+        )
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Main Orders"
+
+        # Header row styling
+        header_fill = PatternFill("solid", fgColor="1A2D45")
+        header_font = Font(bold=True, color="5BB8F5")
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+
+        for r in records:
+            ws.append([r.get(h, '') for h in headers])
+
+        # Auto-fit column widths
+        for col in ws.columns:
+            max_len = max((len(str(cell.value or '')) for cell in col), default=10)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'main_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+        )
+
 @app.route('/api/main-orders/<int:id>', methods=['DELETE', 'PUT'])
 def modify_main(id):
     if request.method == 'DELETE':
@@ -399,6 +464,69 @@ def bulk_sale_sec():
     except Exception as e:
         print("Bulk Sale Error:", e)
         return jsonify({'success': False})
+
+@app.route('/api/secondary-orders/export')
+def export_secondary():
+    if not SHEET: return "No sheet connected", 500
+    fmt = request.args.get('format', 'csv')
+    sale_filter = request.args.get('sale', '')
+
+    try:
+        records = SHEET.worksheet('secondary_orders').get_all_records()
+    except Exception:
+        records = []
+
+    for o in records:
+        if str(o.get('last_digits', '')).startswith("'"):
+            o['last_digits'] = str(o['last_digits'])[1:]
+
+    if sale_filter and sale_filter != 'ALL':
+        records = [r for r in records if r.get('sale_batch', '') == sale_filter]
+
+    headers = ['id','card_type','last_digits','platform','order_name','model',
+               'variant','costing','selling_price','profit','delivery_date',
+               'sale_batch','created_at']
+
+    if fmt == 'csv':
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=headers, extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(records)
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'secondary_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'
+        )
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Secondary Orders"
+
+        header_fill = PatternFill("solid", fgColor="1A2D45")
+        header_font = Font(bold=True, color="5BB8F5")
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+
+        for r in records:
+            ws.append([r.get(h, '') for h in headers])
+
+        for col in ws.columns:
+            max_len = max((len(str(cell.value or '')) for cell in col), default=10)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'secondary_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+        )
 
 @app.route('/api/secondary-orders/<int:id>', methods=['DELETE', 'PUT'])
 def modify_sec(id):
