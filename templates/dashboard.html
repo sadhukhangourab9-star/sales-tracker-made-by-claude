@@ -1,95 +1,623 @@
 {% extends 'base.html' %}
 {% set active = 'dashboard' %}
-{% block title %}God Dashboard — OrderTrack{% endblock %}
+{% block title %}Dashboard — OrderTrack{% endblock %}
 
 {% block content %}
-<div class="page-title">Enterprise Dashboard (2-Way Split)</div>
-
-<div class="row g-4 mb-4">
-  <div class="col-md-6">
-    <div class="card-panel text-center" style="border-top: 4px solid var(--accent2);">
-      <h6 style="color:var(--muted);text-transform:uppercase;">Total Online Profit (Main + Sec)</h6>
-      <h2 id="onlineProfit" style="color:var(--accent2);font-family:'Space Grotesk',sans-serif;">₹0</h2>
-    </div>
+<div class="page-header">
+  <div>
+    <div class="page-title">Enterprise Dashboard</div>
+    <div class="page-subtitle">Live financial overview across all sales channels</div>
   </div>
-  <div class="col-md-6">
-    <div class="card-panel text-center" style="border-top: 4px solid var(--green);">
-      <h6 style="color:var(--muted);text-transform:uppercase;">Total Offline Profit (Swiping)</h6>
-      <h2 id="offlineProfit" style="color:var(--green);font-family:'Space Grotesk',sans-serif;">₹0</h2>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <button class="btn-outline-custom" onclick="initDashboard()">
+      <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+  </div>
+</div>
+
+<!-- ── Filters ── -->
+<div class="card-panel" style="padding:16px 20px; margin-bottom:20px;">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label">From Month</label>
+      <input type="month" id="f_from" class="form-control" onchange="applyFilters()"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">To Month</label>
+      <input type="month" id="f_to" class="form-control" onchange="applyFilters()"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Sale Batch</label>
+      <select id="f_batch" class="form-select" onchange="applyFilters()">
+        <option value="ALL">All Batches</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Channel</label>
+      <select id="f_channel" class="form-select" onchange="applyFilters()">
+        <option value="ALL">All Channels</option>
+        <option value="online">Online Only</option>
+        <option value="offline">Offline Only</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button class="btn-outline-custom w-100" onclick="clearFilters()">
+        <i class="bi bi-x-circle"></i> Clear Filters
+      </button>
     </div>
   </div>
 </div>
 
-<div class="row g-4">
+<!-- ── KPI Cards ── -->
+<div class="row g-3 mb-4" id="kpiRow">
+  <div class="col-md-3">
+    <div class="card-panel text-center m-0" style="border-top:4px solid var(--accent2);">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Total Orders</div>
+      <div id="kpi_orders" style="font-size:28px;font-weight:700;font-family:'Space Grotesk',sans-serif;color:var(--accent2);">0</div>
+      <div id="kpi_orders_sub" style="font-size:11px;color:var(--muted);margin-top:4px;">main + secondary + offline</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card-panel text-center m-0" style="border-top:4px solid var(--green);">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Total Profit</div>
+      <div id="kpi_profit" style="font-size:28px;font-weight:700;font-family:'Space Grotesk',sans-serif;color:var(--green);">₹0</div>
+      <div id="kpi_profit_sub" style="font-size:11px;color:var(--muted);margin-top:4px;">online + offline combined</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card-panel text-center m-0" style="border-top:4px solid var(--amber);">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Total Spend</div>
+      <div id="kpi_spend" style="font-size:28px;font-weight:700;font-family:'Space Grotesk',sans-serif;color:var(--amber);">₹0</div>
+      <div id="kpi_spend_sub" style="font-size:11px;color:var(--muted);margin-top:4px;">total capital deployed</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card-panel text-center m-0" style="border-top:4px solid var(--red);">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Avg Profit / Order</div>
+      <div id="kpi_avg" style="font-size:28px;font-weight:700;font-family:'Space Grotesk',sans-serif;color:var(--red);">₹0</div>
+      <div id="kpi_avg_sub" style="font-size:11px;color:var(--muted);margin-top:4px;">across filtered orders</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Channel Split ── -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card-panel m-0 text-center" style="border-left:4px solid var(--accent2);">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Online Profit (Main + Secondary)</div>
+      <div id="kpi_online" style="font-size:24px;font-weight:700;font-family:'Space Grotesk',sans-serif;color:var(--accent2);">₹0</div>
+      <div style="display:flex;justify-content:center;gap:24px;margin-top:10px;">
+        <div style="font-size:12px;color:var(--muted);">Main: <span id="kpi_main" style="color:var(--text);font-weight:600;">₹0</span></div>
+        <div style="font-size:12px;color:var(--muted);">Secondary: <span id="kpi_sec" style="color:var(--text);font-weight:600;">₹0</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card-panel m-0 text-center" style="border-left:4px solid var(--green);">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Offline Profit (Swiping)</div>
+      <div id="kpi_offline" style="font-size:24px;font-weight:700;font-family:'Space Grotesk',sans-serif;color:var(--green);">₹0</div>
+      <div style="display:flex;justify-content:center;gap:24px;margin-top:10px;">
+        <div style="font-size:12px;color:var(--muted);">INSTANT: <span id="kpi_instant" style="color:var(--text);font-weight:600;">₹0</span></div>
+        <div style="font-size:12px;color:var(--muted);">EMI: <span id="kpi_emi" style="color:var(--text);font-weight:600;">₹0</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Charts Row 1 ── -->
+<div class="row g-3 mb-4">
   <div class="col-lg-8">
-    <div class="card-panel">
-      <div class="card-panel-title"><i class="bi bi-bar-chart-fill"></i> Profit Timeline (Online vs Offline)</div>
-      <canvas id="monthlyChart" height="100"></canvas>
+    <div class="card-panel m-0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div class="card-panel-title m-0"><i class="bi bi-bar-chart-fill"></i> Monthly Profit Timeline</div>
+        <select id="chartTypeToggle" class="form-select" style="width:130px;font-size:12px;" onchange="rebuildMonthlyChart()">
+          <option value="bar">Stacked Bar</option>
+          <option value="line">Line Chart</option>
+        </select>
+      </div>
+      <canvas id="monthlyChart" height="110"></canvas>
     </div>
   </div>
   <div class="col-lg-4">
-    <div class="card-panel">
-      <div class="card-panel-title"><i class="bi bi-credit-card-fill"></i> Top Banks (Global)</div>
-      <canvas id="cardChart" height="220"></canvas>
+    <div class="card-panel m-0">
+      <div class="card-panel-title"><i class="bi bi-pie-chart-fill"></i> Channel Split</div>
+      <canvas id="channelChart" height="200"></canvas>
     </div>
   </div>
 </div>
+
+<!-- ── Charts Row 2 ── -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-4">
+    <div class="card-panel m-0">
+      <div class="card-panel-title"><i class="bi bi-credit-card-fill"></i> Top Banks by Usage</div>
+      <canvas id="cardChart" height="220"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card-panel m-0">
+      <div class="card-panel-title"><i class="bi bi-phone-fill"></i> Top Models by Orders</div>
+      <canvas id="modelChart" height="220"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card-panel m-0">
+      <div class="card-panel-title"><i class="bi bi-shop-window"></i> Top Platforms by Profit</div>
+      <canvas id="platformChart" height="220"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ── Sale Batch Breakdown Table ── -->
+<div class="card-panel">
+  <div class="card-panel-title"><i class="bi bi-table"></i> Sale Batch Breakdown</div>
+  <div class="data-table-wrap">
+    <table class="data-table" id="batchTable">
+      <thead>
+        <tr>
+          <th>Sale Batch</th>
+          <th>Orders</th>
+          <th>Total Spend</th>
+          <th>Total Revenue</th>
+          <th>Total Profit</th>
+          <th>Avg Profit</th>
+          <th>Margin %</th>
+        </tr>
+      </thead>
+      <tbody id="batchTableBody">
+        <tr><td colspan="7" style="text-align:center;color:var(--muted);">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-let mChart = null, cChart = null;
+// ── Chart instances ───────────────────────────────────────────────
+let charts = {};
 
+// ── Raw data ─────────────────────────────────────────────────────
+let rawMain = [], rawSec = [], rawOff = [];
+
+// ── Filtered data ─────────────────────────────────────────────────
+let fMain = [], fSec = [], fOff = [];
+
+// ── Chart.js global dark theme defaults ──────────────────────────
+Chart.defaults.color = '#8fa3bc';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.08)';
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+
+const COLORS = ['#3b9ddd','#2ecc8f','#f5a623','#e74c3c','#9b59b6','#1abc9c','#e67e22','#e91e63'];
+
+// ── Init ──────────────────────────────────────────────────────────
 async function initDashboard() {
-  // Fetch from all 3 sources
+  // Show loading state
+  document.getElementById('kpi_profit').textContent = '...';
+  document.getElementById('kpi_spend').textContent = '...';
+  document.getElementById('kpi_orders').textContent = '...';
+  document.getElementById('kpi_avg').textContent = '...';
+
   const [main, sec, off] = await Promise.all([
-    api('/api/main-orders'), api('/api/secondary-orders'), api('/api/offline-orders')
+    api('/api/main-orders'),
+    api('/api/secondary-orders'),
+    api('/api/offline-orders')
   ]);
-  
-  const online = [...main, ...sec];
-  
-  // Calculate Totals
-  const onProfit = online.reduce((s, o) => s + (parseFloat(o.profit)||0), 0);
-  const offProfit = off.reduce((s, o) => s + (parseFloat(o.profit)||0), 0);
-  document.getElementById('onlineProfit').textContent = formatCost(onProfit);
-  document.getElementById('offlineProfit').textContent = formatCost(offProfit);
 
-  // Crunch Monthly Data
-  const monthly = {};
-  online.forEach(o => {
-    const m = (o.delivery_date || o.created_at).substring(0, 7);
-    if(m.length===7) { if(!monthly[m]) monthly[m] = {on:0, off:0}; monthly[m].on += parseFloat(o.profit)||0; }
-  });
-  off.forEach(o => {
-    const m = o.sale_month || o.created_at.substring(0, 7);
-    if(m.length===7) { if(!monthly[m]) monthly[m] = {on:0, off:0}; monthly[m].off += parseFloat(o.profit)||0; }
-  });
+  rawMain = main;
+  rawSec  = sec;
+  rawOff  = off;
 
-  // Crunch Cards
-  const cards = {};
-  [...online, ...off].forEach(o => {
-    if(o.card_type) { cards[o.card_type] = (cards[o.card_type] || 0) + 1; }
-  });
+  // Populate batch filter from online orders
+  const batches = [...new Set([...main, ...sec].map(o => o.sale_batch || 'Current Sale'))].sort();
+  const sel = document.getElementById('f_batch');
+  sel.innerHTML = '<option value="ALL">All Batches</option>';
+  batches.forEach(b => sel.innerHTML += `<option value="${b}">${b}</option>`);
 
-  // Draw Bar Chart
-  const labels = Object.keys(monthly).sort();
-  mChart = new Chart(document.getElementById('monthlyChart'), {
-    type: 'bar',
-    data: { labels: labels, datasets: [
-      { label: 'Online Profit', data: labels.map(l => monthly[l].on), backgroundColor: '#5bb8f5' },
-      { label: 'Offline Profit', data: labels.map(l => monthly[l].off), backgroundColor: '#2ecc8f' }
-    ]},
-    options: { scales: { x: { stacked: true }, y: { stacked: true } } }
+  applyFilters();
+}
+
+// ── Filters ───────────────────────────────────────────────────────
+function applyFilters() {
+  const from    = document.getElementById('f_from').value;
+  const to      = document.getElementById('f_to').value;
+  const batch   = document.getElementById('f_batch').value;
+  const channel = document.getElementById('f_channel').value;
+
+  function inRange(dateStr) {
+    if (!dateStr) return true;
+    const m = dateStr.substring(0, 7);
+    if (from && m < from) return false;
+    if (to   && m > to)   return false;
+    return true;
+  }
+
+  fMain = rawMain.filter(o => {
+    const d = o.delivery_date || o.created_at || '';
+    return inRange(d) && (batch === 'ALL' || (o.sale_batch || 'Current Sale') === batch);
   });
 
-  // Draw Donut
-  cChart = new Chart(document.getElementById('cardChart'), {
-    type: 'doughnut',
-    data: { labels: Object.keys(cards), datasets: [{ data: Object.values(cards), backgroundColor: ['#3b9ddd','#2ecc8f','#f5a623','#e74c3c','#9b59b6'] }]},
-    options: { cutout: '70%', plugins: { legend: { position: 'bottom' } } }
+  fSec = rawSec.filter(o => {
+    const d = o.delivery_date || o.created_at || '';
+    return inRange(d) && (batch === 'ALL' || (o.sale_batch || 'Current Sale') === batch);
+  });
+
+  fOff = rawOff.filter(o => {
+    const m = o.sale_month || o.created_at?.substring(0, 7) || '';
+    return inRange(m + '-01');
+  });
+
+  // Apply channel filter
+  if (channel === 'online') fOff = [];
+  if (channel === 'offline') { fMain = []; fSec = []; }
+
+  renderAll();
+}
+
+function clearFilters() {
+  document.getElementById('f_from').value   = '';
+  document.getElementById('f_to').value     = '';
+  document.getElementById('f_batch').value  = 'ALL';
+  document.getElementById('f_channel').value = 'ALL';
+  applyFilters();
+}
+
+// ── Render Everything ─────────────────────────────────────────────
+function renderAll() {
+  updateKPIs();
+  rebuildMonthlyChart();
+  buildChannelChart();
+  buildCardChart();
+  buildModelChart();
+  buildPlatformChart();
+  buildBatchTable();
+}
+
+// ── KPIs ──────────────────────────────────────────────────────────
+function updateKPIs() {
+  const allOrders = [...fMain, ...fSec, ...fOff];
+  const totalOrders = allOrders.length;
+  const totalProfit = allOrders.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  const totalSpend  = [...fMain, ...fSec].reduce((s, o) => s + (parseFloat(o.costing) || 0), 0)
+                    + fOff.reduce((s, o) => s + (parseFloat(o.costing) || 0), 0);
+  const avgProfit   = totalOrders ? totalProfit / totalOrders : 0;
+
+  const onlineProfit  = [...fMain, ...fSec].reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  const mainProfit    = fMain.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  const secProfit     = fSec.reduce((s, o)  => s + (parseFloat(o.profit) || 0), 0);
+  const offlineProfit = fOff.reduce((s, o)  => s + (parseFloat(o.profit) || 0), 0);
+  const instantProfit = fOff.filter(o => o.sale_type === 'INSTANT').reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  const emiProfit     = fOff.filter(o => o.sale_type === 'EMI').reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+
+  document.getElementById('kpi_orders').textContent  = totalOrders.toLocaleString('en-IN');
+  document.getElementById('kpi_profit').textContent  = formatCost(totalProfit);
+  document.getElementById('kpi_spend').textContent   = formatCost(totalSpend);
+  document.getElementById('kpi_avg').textContent     = formatCost(Math.round(avgProfit));
+  document.getElementById('kpi_online').textContent  = formatCost(onlineProfit);
+  document.getElementById('kpi_main').textContent    = formatCost(mainProfit);
+  document.getElementById('kpi_sec').textContent     = formatCost(secProfit);
+  document.getElementById('kpi_offline').textContent = formatCost(offlineProfit);
+  document.getElementById('kpi_instant').textContent = formatCost(instantProfit);
+  document.getElementById('kpi_emi').textContent     = formatCost(emiProfit);
+
+  // Subtitle updates
+  document.getElementById('kpi_orders_sub').textContent =
+    `${fMain.length} main · ${fSec.length} sec · ${fOff.length} offline`;
+}
+
+// ── Monthly Chart ─────────────────────────────────────────────────
+let monthlyData = {};
+
+function rebuildMonthlyChart() {
+  // Crunch monthly data
+  monthlyData = {};
+  [...fMain, ...fSec].forEach(o => {
+    const m = (o.delivery_date || o.created_at || '').substring(0, 7);
+    if (m.length === 7) {
+      if (!monthlyData[m]) monthlyData[m] = { on: 0, off: 0 };
+      monthlyData[m].on += parseFloat(o.profit) || 0;
+    }
+  });
+  fOff.forEach(o => {
+    const m = o.sale_month || (o.created_at || '').substring(0, 7);
+    if (m.length === 7) {
+      if (!monthlyData[m]) monthlyData[m] = { on: 0, off: 0 };
+      monthlyData[m].off += parseFloat(o.profit) || 0;
+    }
+  });
+
+  const labels   = Object.keys(monthlyData).sort();
+  const onData   = labels.map(l => Math.round(monthlyData[l].on));
+  const offData  = labels.map(l => Math.round(monthlyData[l].off));
+  const chartType = document.getElementById('chartTypeToggle').value;
+
+  if (charts.monthly) charts.monthly.destroy();
+
+  charts.monthly = new Chart(document.getElementById('monthlyChart'), {
+    type: chartType === 'line' ? 'line' : 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Online Profit',
+          data: onData,
+          backgroundColor: chartType === 'line' ? 'rgba(91,184,245,0.15)' : '#3b9ddd',
+          borderColor: '#5bb8f5',
+          borderWidth: chartType === 'line' ? 2 : 0,
+          fill: chartType === 'line',
+          tension: 0.4,
+          pointBackgroundColor: '#5bb8f5',
+          pointRadius: chartType === 'line' ? 4 : 0,
+        },
+        {
+          label: 'Offline Profit',
+          data: offData,
+          backgroundColor: chartType === 'line' ? 'rgba(46,204,143,0.15)' : '#2ecc8f',
+          borderColor: '#2ecc8f',
+          borderWidth: chartType === 'line' ? 2 : 0,
+          fill: chartType === 'line',
+          tension: 0.4,
+          pointBackgroundColor: '#2ecc8f',
+          pointRadius: chartType === 'line' ? 4 : 0,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8fa3bc', boxWidth: 12 } },
+        tooltip: {
+          backgroundColor: '#1a2d45',
+          borderColor: 'rgba(255,255,255,0.08)',
+          borderWidth: 1,
+          titleColor: '#e8edf3',
+          bodyColor: '#8fa3bc',
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ₹${ctx.parsed.y.toLocaleString('en-IN')}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: chartType !== 'line',
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: '#8fa3bc' }
+        },
+        y: {
+          stacked: chartType !== 'line',
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: {
+            color: '#8fa3bc',
+            callback: v => '₹' + (v >= 1000 ? (v/1000).toFixed(0) + 'k' : v)
+          }
+        }
+      }
+    }
   });
 }
+
+// ── Channel Donut ─────────────────────────────────────────────────
+function buildChannelChart() {
+  const onlineProfit  = [...fMain, ...fSec].reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  const offlineProfit = fOff.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+
+  if (charts.channel) charts.channel.destroy();
+  charts.channel = new Chart(document.getElementById('channelChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Online', 'Offline'],
+      datasets: [{
+        data: [Math.max(0, onlineProfit), Math.max(0, offlineProfit)],
+        backgroundColor: ['#3b9ddd', '#2ecc8f'],
+        borderColor: '#1a2d45',
+        borderWidth: 3,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      cutout: '72%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#8fa3bc', boxWidth: 12, padding: 16 } },
+        tooltip: {
+          backgroundColor: '#1a2d45',
+          borderColor: 'rgba(255,255,255,0.08)',
+          borderWidth: 1,
+          titleColor: '#e8edf3',
+          bodyColor: '#8fa3bc',
+          callbacks: {
+            label: ctx => ` ₹${ctx.parsed.toLocaleString('en-IN')}`
+          }
+        }
+      }
+    }
+  });
+}
+
+// ── Cards Donut ───────────────────────────────────────────────────
+function buildCardChart() {
+  const cards = {};
+  [...fMain, ...fSec, ...fOff].forEach(o => {
+    if (o.card_type) cards[o.card_type] = (cards[o.card_type] || 0) + 1;
+  });
+  const sorted = Object.entries(cards).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+  if (charts.card) charts.card.destroy();
+  charts.card = new Chart(document.getElementById('cardChart'), {
+    type: 'doughnut',
+    data: {
+      labels: sorted.map(e => e[0]),
+      datasets: [{
+        data: sorted.map(e => e[1]),
+        backgroundColor: COLORS,
+        borderColor: '#1a2d45',
+        borderWidth: 3,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#8fa3bc', boxWidth: 10, padding: 10, font: { size: 11 } } },
+        tooltip: {
+          backgroundColor: '#1a2d45',
+          borderColor: 'rgba(255,255,255,0.08)',
+          borderWidth: 1,
+          titleColor: '#e8edf3',
+          bodyColor: '#8fa3bc',
+          callbacks: { label: ctx => ` ${ctx.parsed} orders` }
+        }
+      }
+    }
+  });
+}
+
+// ── Models Bar ────────────────────────────────────────────────────
+function buildModelChart() {
+  const models = {};
+  [...fMain, ...fSec].forEach(o => {
+    if (o.model) models[o.model] = (models[o.model] || 0) + 1;
+  });
+  const sorted = Object.entries(models).sort((a, b) => b[1] - a[1]).slice(0, 7);
+
+  if (charts.model) charts.model.destroy();
+  charts.model = new Chart(document.getElementById('modelChart'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(e => e[0]),
+      datasets: [{
+        label: 'Orders',
+        data: sorted.map(e => e[1]),
+        backgroundColor: COLORS,
+        borderRadius: 5,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a2d45',
+          borderColor: 'rgba(255,255,255,0.08)',
+          borderWidth: 1,
+          titleColor: '#e8edf3',
+          bodyColor: '#8fa3bc',
+          callbacks: { label: ctx => ` ${ctx.parsed.x} orders` }
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8fa3bc' } },
+        y: { grid: { display: false }, ticks: { color: '#e8edf3', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+// ── Platforms Bar ─────────────────────────────────────────────────
+function buildPlatformChart() {
+  const platforms = {};
+  [...fMain, ...fSec].forEach(o => {
+    if (o.platform) platforms[o.platform] = (platforms[o.platform] || 0) + (parseFloat(o.profit) || 0);
+  });
+  const sorted = Object.entries(platforms).sort((a, b) => b[1] - a[1]).slice(0, 7);
+
+  if (charts.platform) charts.platform.destroy();
+  charts.platform = new Chart(document.getElementById('platformChart'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(e => e[0]),
+      datasets: [{
+        label: 'Profit',
+        data: sorted.map(e => Math.round(e[1])),
+        backgroundColor: COLORS.slice(2),
+        borderRadius: 5,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a2d45',
+          borderColor: 'rgba(255,255,255,0.08)',
+          borderWidth: 1,
+          titleColor: '#e8edf3',
+          bodyColor: '#8fa3bc',
+          callbacks: { label: ctx => ` ₹${ctx.parsed.x.toLocaleString('en-IN')}` }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: {
+            color: '#8fa3bc',
+            callback: v => '₹' + (v >= 1000 ? (v/1000).toFixed(0) + 'k' : v)
+          }
+        },
+        y: { grid: { display: false }, ticks: { color: '#e8edf3', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+// ── Batch Breakdown Table ─────────────────────────────────────────
+function buildBatchTable() {
+  const online = [...fMain, ...fSec];
+  const batches = [...new Set(online.map(o => o.sale_batch || 'Current Sale'))].sort();
+
+  if (!batches.length) {
+    document.getElementById('batchTableBody').innerHTML =
+      '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">No data for selected filters.</td></tr>';
+    return;
+  }
+
+  const rows = batches.map(batch => {
+    const orders   = online.filter(o => (o.sale_batch || 'Current Sale') === batch);
+    const spend    = orders.reduce((s, o) => s + (parseFloat(o.costing) || 0), 0);
+    const revenue  = orders.reduce((s, o) => s + (parseFloat(o.selling_price) || 0), 0);
+    const profit   = orders.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+    const avg      = orders.length ? profit / orders.length : 0;
+    const margin   = revenue ? (profit / revenue * 100) : 0;
+    const pColor   = profit >= 0 ? 'var(--green)' : 'var(--red)';
+    const mColor   = margin >= 0 ? 'var(--green)' : 'var(--red)';
+
+    return `<tr>
+      <td><span class="badge-card" style="background:var(--navy);border:1px solid var(--border);">${batch}</span></td>
+      <td style="font-weight:600;">${orders.length}</td>
+      <td style="color:var(--muted);">${formatCost(spend)}</td>
+      <td style="color:var(--text);font-weight:600;">${formatCost(revenue)}</td>
+      <td style="color:${pColor};font-weight:700;">${formatCost(Math.round(profit))}</td>
+      <td style="color:var(--muted);">${formatCost(Math.round(avg))}</td>
+      <td style="color:${mColor};font-weight:600;">${margin.toFixed(1)}%</td>
+    </tr>`;
+  });
+
+  // Totals row
+  const totalOrders  = online.length;
+  const totalSpend   = online.reduce((s, o) => s + (parseFloat(o.costing) || 0), 0);
+  const totalRev     = online.reduce((s, o) => s + (parseFloat(o.selling_price) || 0), 0);
+  const totalProfit  = online.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  const totalAvg     = totalOrders ? totalProfit / totalOrders : 0;
+  const totalMargin  = totalRev ? (totalProfit / totalRev * 100) : 0;
+
+  rows.push(`<tr style="border-top:2px solid var(--border);background:rgba(59,157,221,0.05);">
+    <td style="font-weight:700;color:var(--accent2);">TOTAL</td>
+    <td style="font-weight:700;">${totalOrders}</td>
+    <td style="color:var(--muted);font-weight:600;">${formatCost(totalSpend)}</td>
+    <td style="font-weight:700;">${formatCost(totalRev)}</td>
+    <td style="color:var(--green);font-weight:700;">${formatCost(Math.round(totalProfit))}</td>
+    <td style="color:var(--muted);">${formatCost(Math.round(totalAvg))}</td>
+    <td style="color:var(--green);font-weight:700;">${totalMargin.toFixed(1)}%</td>
+  </tr>`);
+
+  document.getElementById('batchTableBody').innerHTML = rows.join('');
+}
+
+// Boot
 initDashboard();
 </script>
 {% endblock %}
