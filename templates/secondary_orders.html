@@ -499,7 +499,10 @@ async function promptBulkSale() {
   }
 }
 
-function exportOrders(fmt) { window.location.href = `/api/secondary-orders/export?format=${fmt}`; }
+function exportOrders(fmt) {
+  const sale = document.getElementById('filterSale').value;
+  window.location.href = `/api/secondary-orders/export?format=${fmt}&sale=${encodeURIComponent(sale)}`;
+}
 
 init();
 </script>
