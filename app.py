@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, send_file
-import os, io, json, csv
+import os, io, json, csv, time
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, PatternFill
@@ -23,15 +23,36 @@ if creds_json:
     except Exception as e:
         print(f"Failed to connect to Google Sheets: {e}")
 
+# ── Simple In-Memory Cache ────────────────────────────────────────────────────
+_cache = {}
+CACHE_TTL = 30  # seconds
+
+def cache_get(key):
+    if key in _cache:
+        data, ts = _cache[key]
+        if time.time() - ts < CACHE_TTL:
+            return data
+    return None
+
+def cache_set(key, data):
+    _cache[key] = (data, time.time())
+
+def cache_clear(key):
+    _cache.pop(key, None)
+
+def cache_clear_all():
+    _cache.clear()
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 def get_next_id(ws):
     try:
-        records = ws.get_all_records()
-        if not records: return 1
-        return max([int(r.get('id', 0) or 0) for r in records]) + 1
+        col = ws.col_values(1)  # Only fetch column A — much faster
+        ids = [int(x) for x in col[1:] if str(x).isdigit()]  # skip header
+        return max(ids) + 1 if ids else 1
     except Exception:
         return 1
 
-# ── Page Routes ──────────────────────────────────────────────────────────────
+# ── Page Routes ───────────────────────────────────────────────────────────────
 @app.route('/')
 def main_orders(): return render_template('main_orders.html')
 
@@ -50,25 +71,31 @@ def dashboard(): return render_template('dashboard.html')
 @app.route('/settings')
 def settings(): return render_template('settings.html')
 
-# ── Settings APIs (Cards, Platforms, Models, Variants, SecNames) ──────────────
+# ── Settings APIs ─────────────────────────────────────────────────────────────
 @app.route('/api/cards', methods=['GET', 'POST'])
 def manage_cards():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('cards')
     if request.method == 'GET':
+        cached = cache_get('cards')
+        if cached: return jsonify(cached)
         try:
             cards = ws.get_all_records()
         except Exception:
             cards = []
         for c in cards:
-            if str(c.get('last_digits', '')).startswith("'"): c['last_digits'] = str(c['last_digits'])[1:]
-        return jsonify(list(reversed(cards)))
-    
+            if str(c.get('last_digits', '')).startswith("'"): 
+                c['last_digits'] = str(c['last_digits'])[1:]
+        result = list(reversed(cards))
+        cache_set('cards', result)
+        return jsonify(result)
     data = request.json
     new_id = get_next_id(ws)
     last_digits = str(data.get('last_digits', ''))
     save_digits = f"'{last_digits}" if last_digits else ""
     ws.append_row([new_id, data.get('card_type', ''), save_digits])
+    cache_clear('cards')
+    cache_clear('card_lookup')
     return jsonify({'success': True})
 
 @app.route('/api/cards/<int:card_id>', methods=['DELETE'])
@@ -78,6 +105,8 @@ def delete_card(card_id):
         cell = ws.find(str(card_id), in_column=1)
         ws.delete_rows(cell.row)
     except: pass
+    cache_clear('cards')
+    cache_clear('card_lookup')
     return jsonify({'success': True})
 
 @app.route('/api/card-lookup')
@@ -96,18 +125,28 @@ def card_lookup():
         if db_digits == digits: return jsonify({'card_type': row.get('card_type'), 'found': True})
     return jsonify({'found': False})
 
-# Generic Master Data Handler for simple ID/Name tables
 def handle_master_table(table_name, req, field_name='name'):
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet(table_name)
     if req.method == 'GET':
+        cached = cache_get(f'master_{table_name}')
+        if cached: return jsonify(cached)
         try:
-            return jsonify(ws.get_all_records())
+            result = ws.get_all_records()
         except Exception:
-            return jsonify([])
+            result = []
+        cache_set(f'master_{table_name}', result)
+        return jsonify(result)
     data = req.json
     new_id = get_next_id(ws)
     ws.append_row([new_id, data.get(field_name, '')])
+    cache_clear(f'master_{table_name}')
+    # Also clear dependent caches
+    if table_name == 'platforms':
+        cache_clear('platform_names')
+    if table_name == 'models':
+        for k in list(_cache.keys()):
+            if k.startswith('variants'): cache_clear(k)
     return jsonify({'success': True})
 
 def delete_master_table(table_name, item_id):
@@ -116,12 +155,15 @@ def delete_master_table(table_name, item_id):
         cell = ws.find(str(item_id), in_column=1)
         ws.delete_rows(cell.row)
     except: pass
+    cache_clear(f'master_{table_name}')
     return jsonify({'success': True})
 
 @app.route('/api/platforms', methods=['GET', 'POST'])
 def api_platforms(): return handle_master_table('platforms', request, 'platform_name')
 @app.route('/api/platforms/<int:id>', methods=['DELETE'])
-def api_del_platforms(id): return delete_master_table('platforms', id)
+def api_del_platforms(id):
+    cache_clear('platform_names')
+    return delete_master_table('platforms', id)
 
 @app.route('/api/models', methods=['GET', 'POST'])
 def api_models(): return handle_master_table('models', request, 'model_name')
@@ -151,11 +193,15 @@ def api_del_brands(id): return delete_master_table('brands', id)
 @app.route('/api/platform-names')
 def platform_names():
     if not SHEET: return jsonify([])
+    cached = cache_get('platform_names')
+    if cached: return jsonify(cached)
     try:
         records = SHEET.worksheet('platforms').get_all_records()
     except Exception:
         records = []
-    return jsonify(sorted(list(set([r['platform_name'] for r in records if r.get('platform_name')]))))
+    result = sorted(list(set([r['platform_name'] for r in records if r.get('platform_name')])))
+    cache_set('platform_names', result)
+    return jsonify(result)
 
 @app.route('/api/variants', methods=['GET', 'POST'])
 def api_variants():
@@ -163,78 +209,87 @@ def api_variants():
     ws = SHEET.worksheet('variants')
     if request.method == 'GET':
         model_name = request.args.get('model')
+        cache_key = f'variants_{model_name}' if model_name else 'variants_all'
+        cached = cache_get(cache_key)
+        if cached: return jsonify(cached)
         try:
             variants = ws.get_all_records()
         except Exception:
             variants = []
-            
         if model_name:
             try:
                 models = SHEET.worksheet('models').get_all_records()
             except Exception:
                 models = []
             m_id = next((m['id'] for m in models if m['model_name'] == model_name), None)
-            if m_id: return jsonify([v for v in variants if v['model_id'] == m_id])
-            return jsonify([])
-        return jsonify(variants)
-        
+            result = [v for v in variants if v['model_id'] == m_id] if m_id else []
+        else:
+            result = variants
+        cache_set(cache_key, result)
+        return jsonify(result)
     data = request.json
     new_id = get_next_id(ws)
     ws.append_row([new_id, data.get('model_id'), data.get('variant_name', ''), data.get('costing', '')])
+    for k in list(_cache.keys()):
+        if k.startswith('variants'): cache_clear(k)
     return jsonify({'success': True})
 
 @app.route('/api/variants/<int:var_id>', methods=['DELETE'])
-def del_variant(var_id): return delete_master_table('variants', var_id)
+def del_variant(var_id):
+    for k in list(_cache.keys()):
+        if k.startswith('variants'): cache_clear(k)
+    return delete_master_table('variants', var_id)
 
 
-# ── Main Orders API ───────────────────────────────────────────────
+# ── Main Orders API ───────────────────────────────────────────────────────────
 @app.route('/api/main-orders', methods=['GET', 'POST'])
 def api_main_orders():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('main_orders')
-    
+
     if request.method == 'GET':
+        cached = cache_get('main_orders')
+        if cached: return jsonify(cached)
         try:
             records = ws.get_all_records()
         except Exception:
             records = []
         for o in records:
-            if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
-        return jsonify(list(reversed(records)))
-    
+            if str(o.get('last_digits', '')).startswith("'"): 
+                o['last_digits'] = str(o['last_digits'])[1:]
+        result = list(reversed(records))
+        cache_set('main_orders', result)
+        return jsonify(result)
+
     try:
         data = request.json
         next_id = get_next_id(ws)
-            
         try: costing = float(data.get('costing') or 0)
         except ValueError: costing = 0.0
-            
         try: selling = float(data.get('selling_price') or 0)
         except ValueError: selling = 0.0
-            
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
-        
         row = [
-            next_id, data.get('card_type', ''), safe_digits, data.get('platform', ''), 
-            data.get('account', ''), data.get('order_name', ''), data.get('model', ''), 
-            data.get('variant', ''), costing, selling, selling - costing, 
+            next_id, data.get('card_type', ''), safe_digits, data.get('platform', ''),
+            data.get('account', ''), data.get('order_name', ''), data.get('model', ''),
+            data.get('variant', ''), costing, selling, selling - costing,
             data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now
         ]
         ws.append_row(row)
-        
-        # Pull exact column names dynamically from Google Sheets
-        row[2] = last_digits
-        try:
-            headers = ws.row_values(1)
-        except Exception:
-            headers = ['id', 'card_type', 'last_digits', 'platform', 'account', 'order_name', 'model', 'variant', 'costing', 'selling_price', 'profit', 'delivery_date', 'sale_batch', 'created_at']
-            
-        new_order = dict(zip(headers, row))
-        new_order['success'] = True
+        cache_clear('main_orders')
+        new_order = {
+            'success': True, 'id': next_id,
+            'card_type': data.get('card_type', ''), 'last_digits': last_digits,
+            'platform': data.get('platform', ''), 'account': data.get('account', ''),
+            'order_name': data.get('order_name', ''), 'model': data.get('model', ''),
+            'variant': data.get('variant', ''), 'costing': costing,
+            'selling_price': selling, 'profit': selling - costing,
+            'delivery_date': data.get('delivery_date', ''),
+            'sale_batch': data.get('sale_batch', 'Current Sale'), 'created_at': now
+        }
         return jsonify(new_order)
-        
     except Exception as e:
         print(f"Main Orders POST Error: {e}")
         return jsonify({'success': False}), 500
@@ -248,11 +303,11 @@ def bulk_del_main():
         records = ws.get_all_records()
     except Exception:
         records = []
-        
     rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
-    for r_idx in sorted(rows_to_delete, reverse=True): 
+    for r_idx in sorted(rows_to_delete, reverse=True):
         ws.delete_row(r_idx)
-    return jsonify({'success': True})
+    cache_clear('main_orders')
+    return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
 @app.route('/api/main-orders/bulk-update-sale', methods=['POST'])
 def bulk_sale_main():
@@ -265,6 +320,7 @@ def bulk_sale_main():
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 ws.update_cell(i + 2, 13, new_batch)
+        cache_clear('main_orders')
         return jsonify({'success': True})
     except Exception as e:
         print("Bulk Sale Error:", e)
@@ -275,23 +331,18 @@ def export_main():
     if not SHEET: return "No sheet connected", 500
     fmt = request.args.get('format', 'csv')
     sale_filter = request.args.get('sale', '')
-    
     try:
         records = SHEET.worksheet('main_orders').get_all_records()
     except Exception:
         records = []
-    
     for o in records:
-        if str(o.get('last_digits', '')).startswith("'"): 
+        if str(o.get('last_digits', '')).startswith("'"):
             o['last_digits'] = str(o['last_digits'])[1:]
-    
     if sale_filter and sale_filter != 'ALL':
         records = [r for r in records if r.get('sale_batch', '') == sale_filter]
-
     headers = ['id','card_type','last_digits','platform','account','order_name',
                'model','variant','costing','selling_price','profit','delivery_date',
                'sale_batch','created_at']
-
     if fmt == 'csv':
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=headers, extrasaction='ignore')
@@ -308,23 +359,17 @@ def export_main():
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Main Orders"
-
-        # Header row styling
         header_fill = PatternFill("solid", fgColor="1A2D45")
         header_font = Font(bold=True, color="5BB8F5")
         ws.append(headers)
         for cell in ws[1]:
             cell.fill = header_fill
             cell.font = header_font
-
         for r in records:
             ws.append([r.get(h, '') for h in headers])
-
-        # Auto-fit column widths
         for col in ws.columns:
             max_len = max((len(str(cell.value or '')) for cell in col), default=10)
             ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
-
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -338,6 +383,7 @@ def export_main():
 @app.route('/api/main-orders/<int:id>', methods=['DELETE', 'PUT'])
 def modify_main(id):
     if request.method == 'DELETE':
+        cache_clear('main_orders')
         return delete_master_table('main_orders', id)
     if not SHEET: return jsonify({'success': False})
     data = request.json
@@ -349,14 +395,13 @@ def modify_main(id):
         profit = sell - cost
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
-
         ws.update(f'B{cell.row}:M{cell.row}', [[
             data.get('card_type', ''), safe_digits, data.get('platform', ''),
             data.get('account', ''), data.get('order_name', ''), data.get('model', ''),
             data.get('variant', ''), cost, sell, profit,
             data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
         ]])
-
+        cache_clear('main_orders')
         return jsonify({
             'success': True, 'id': id,
             'card_type': data.get('card_type', ''), 'last_digits': last_digits,
@@ -371,40 +416,36 @@ def modify_main(id):
         return jsonify({'success': False})
 
 
-# ── Secondary Orders API ──────────────────────────────────────────
-# ── Secondary Orders API ──────────────────────────────────────────
+# ── Secondary Orders API ──────────────────────────────────────────────────────
 @app.route('/api/secondary-orders', methods=['GET', 'POST'])
 def api_secondary_orders():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('secondary_orders')
-    
+
     if request.method == 'GET':
+        cached = cache_get('secondary_orders')
+        if cached: return jsonify(cached)
         try:
             records = ws.get_all_records()
         except Exception:
             records = []
         for o in records:
-            if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
-        return jsonify(list(reversed(records)))
-    
+            if str(o.get('last_digits', '')).startswith("'"): 
+                o['last_digits'] = str(o['last_digits'])[1:]
+        result = list(reversed(records))
+        cache_set('secondary_orders', result)
+        return jsonify(result)
+
     try:
         data = request.json
         next_id = get_next_id(ws)
-            
-        try:
-            costing = float(data.get('costing') or 0)
-        except ValueError:
-            costing = 0.0
-            
-        try:
-            selling = float(data.get('selling_price') or 0)
-        except ValueError:
-            selling = 0.0
-            
+        try: costing = float(data.get('costing') or 0)
+        except ValueError: costing = 0.0
+        try: selling = float(data.get('selling_price') or 0)
+        except ValueError: selling = 0.0
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
-        
         row = [
             next_id, data.get('card_type', ''), safe_digits, data.get('platform', ''),
             data.get('order_name', ''), data.get('model', ''),
@@ -412,25 +453,18 @@ def api_secondary_orders():
             data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now
         ]
         ws.append_row(row)
-        
+        cache_clear('secondary_orders')
         new_order = {
-            'success': True,
-            'id': next_id,
-            'card_type': data.get('card_type', ''),
-            'last_digits': last_digits,
+            'success': True, 'id': next_id,
+            'card_type': data.get('card_type', ''), 'last_digits': last_digits,
             'platform': data.get('platform', ''),
-            'order_name': data.get('order_name', ''),
-            'model': data.get('model', ''),
-            'variant': data.get('variant', ''),
-            'costing': costing,
-            'selling_price': selling,
-            'profit': selling - costing,
+            'order_name': data.get('order_name', ''), 'model': data.get('model', ''),
+            'variant': data.get('variant', ''), 'costing': costing,
+            'selling_price': selling, 'profit': selling - costing,
             'delivery_date': data.get('delivery_date', ''),
-            'sale_batch': data.get('sale_batch', 'Current Sale'),
-            'created_at': now
+            'sale_batch': data.get('sale_batch', 'Current Sale'), 'created_at': now
         }
         return jsonify(new_order)
-        
     except Exception as e:
         print(f"Secondary Orders POST Error: {e}")
         return jsonify({'success': False}), 500
@@ -445,9 +479,10 @@ def bulk_del_sec():
     except Exception:
         records = []
     rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
-    for r_idx in sorted(rows_to_delete, reverse=True): 
+    for r_idx in sorted(rows_to_delete, reverse=True):
         ws.delete_row(r_idx)
-    return jsonify({'success': True})
+    cache_clear('secondary_orders')
+    return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
 @app.route('/api/secondary-orders/bulk-update-sale', methods=['POST'])
 def bulk_sale_sec():
@@ -460,6 +495,7 @@ def bulk_sale_sec():
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 ws.update_cell(i + 2, 12, new_batch)
+        cache_clear('secondary_orders')
         return jsonify({'success': True})
     except Exception as e:
         print("Bulk Sale Error:", e)
@@ -470,23 +506,18 @@ def export_secondary():
     if not SHEET: return "No sheet connected", 500
     fmt = request.args.get('format', 'csv')
     sale_filter = request.args.get('sale', '')
-
     try:
         records = SHEET.worksheet('secondary_orders').get_all_records()
     except Exception:
         records = []
-
     for o in records:
         if str(o.get('last_digits', '')).startswith("'"):
             o['last_digits'] = str(o['last_digits'])[1:]
-
     if sale_filter and sale_filter != 'ALL':
         records = [r for r in records if r.get('sale_batch', '') == sale_filter]
-
     headers = ['id','card_type','last_digits','platform','order_name','model',
                'variant','costing','selling_price','profit','delivery_date',
                'sale_batch','created_at']
-
     if fmt == 'csv':
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=headers, extrasaction='ignore')
@@ -503,21 +534,17 @@ def export_secondary():
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Secondary Orders"
-
         header_fill = PatternFill("solid", fgColor="1A2D45")
         header_font = Font(bold=True, color="5BB8F5")
         ws.append(headers)
         for cell in ws[1]:
             cell.fill = header_fill
             cell.font = header_font
-
         for r in records:
             ws.append([r.get(h, '') for h in headers])
-
         for col in ws.columns:
             max_len = max((len(str(cell.value or '')) for cell in col), default=10)
             ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
-
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -531,6 +558,7 @@ def export_secondary():
 @app.route('/api/secondary-orders/<int:id>', methods=['DELETE', 'PUT'])
 def modify_sec(id):
     if request.method == 'DELETE':
+        cache_clear('secondary_orders')
         return delete_master_table('secondary_orders', id)
     if not SHEET: return jsonify({'success': False})
     data = request.json
@@ -542,14 +570,13 @@ def modify_sec(id):
         profit = sell - cost
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
-
         ws.update(f'B{cell.row}:L{cell.row}', [[
             data.get('card_type', ''), safe_digits, data.get('platform', ''),
             data.get('order_name', ''), data.get('model', ''),
             data.get('variant', ''), cost, sell, profit,
             data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
         ]])
-
+        cache_clear('secondary_orders')
         return jsonify({
             'success': True, 'id': id,
             'card_type': data.get('card_type', ''), 'last_digits': last_digits,
@@ -564,53 +591,52 @@ def modify_sec(id):
         return jsonify({'success': False})
 
 
-# ── Offline Orders API ──────────────────────────────────────────────────
+# ── Offline Orders API ────────────────────────────────────────────────────────
 @app.route('/api/offline-orders', methods=['GET', 'POST'])
 def api_offline_orders():
     if not SHEET: return jsonify([])
     ws = SHEET.worksheet('offline_orders')
-    
+
     if request.method == 'GET':
+        cached = cache_get('offline_orders')
+        if cached: return jsonify(cached)
         try:
             records = ws.get_all_records()
         except Exception:
             records = []
         for o in records:
-            if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
-        return jsonify(list(reversed(records)))
-    
+            if str(o.get('last_digits', '')).startswith("'"): 
+                o['last_digits'] = str(o['last_digits'])[1:]
+        result = list(reversed(records))
+        cache_set('offline_orders', result)
+        return jsonify(result)
+
     try:
         data = request.json
         next_id = get_next_id(ws)
-        
         try: costing = float(data.get('costing') or 0)
         except ValueError: costing = 0.0
-            
         try: selling = float(data.get('selling_price') or 0)
         except ValueError: selling = 0.0
-            
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
-        
         row = [
-            next_id, data.get('card_type', ''), safe_digits, data.get('machine', ''), 
+            next_id, data.get('card_type', ''), safe_digits, data.get('machine', ''),
             data.get('vendor', ''), data.get('brand', ''), data.get('sale_type', ''),
             costing, selling, selling - costing, data.get('sale_month', ''), now
         ]
         ws.append_row(row)
-        
-        # Pull exact column names dynamically from Google Sheets
-        row[2] = last_digits
-        try:
-            headers = ws.row_values(1)
-        except Exception:
-            headers = ['id', 'card_type', 'last_digits', 'machine', 'vendor', 'brand', 'sale_type', 'costing', 'selling_price', 'profit', 'sale_month', 'created_at']
-            
-        new_order = dict(zip(headers, row))
-        new_order['success'] = True
+        cache_clear('offline_orders')
+        new_order = {
+            'success': True, 'id': next_id,
+            'card_type': data.get('card_type', ''), 'last_digits': last_digits,
+            'machine': data.get('machine', ''), 'vendor': data.get('vendor', ''),
+            'brand': data.get('brand', ''), 'sale_type': data.get('sale_type', ''),
+            'costing': costing, 'selling_price': selling, 'profit': selling - costing,
+            'sale_month': data.get('sale_month', ''), 'created_at': now
+        }
         return jsonify(new_order)
-        
     except Exception as e:
         print(f"Offline POST Error: {e}")
         return jsonify({'success': False}), 500
@@ -625,31 +651,27 @@ def bulk_del_offline():
     except Exception:
         records = []
     rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
-    for r_idx in sorted(rows_to_delete, reverse=True): 
+    for r_idx in sorted(rows_to_delete, reverse=True):
         ws.delete_row(r_idx)
-    return jsonify({'success': True})
+    cache_clear('offline_orders')
+    return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
 @app.route('/api/offline-orders/export')
 def export_offline():
     if not SHEET: return "No sheet connected", 500
     fmt = request.args.get('format', 'csv')
     month_filter = request.args.get('month', '')
-
     try:
         records = SHEET.worksheet('offline_orders').get_all_records()
     except Exception:
         records = []
-
     for o in records:
         if str(o.get('last_digits', '')).startswith("'"):
             o['last_digits'] = str(o['last_digits'])[1:]
-
     if month_filter:
         records = [r for r in records if r.get('sale_month', '') == month_filter]
-
     headers = ['id','card_type','last_digits','machine','vendor','brand',
                'sale_type','costing','selling_price','profit','sale_month','created_at']
-
     if fmt == 'csv':
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=headers, extrasaction='ignore')
@@ -666,21 +688,17 @@ def export_offline():
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Offline Sales"
-
         header_fill = PatternFill("solid", fgColor="1A2D45")
         header_font = Font(bold=True, color="2ECC8F")
         ws.append(headers)
         for cell in ws[1]:
             cell.fill = header_fill
             cell.font = header_font
-
         for r in records:
             ws.append([r.get(h, '') for h in headers])
-
         for col in ws.columns:
             max_len = max((len(str(cell.value or '')) for cell in col), default=10)
             ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
-
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -694,6 +712,7 @@ def export_offline():
 @app.route('/api/offline-orders/<int:id>', methods=['DELETE', 'PUT'])
 def modify_offline(id):
     if request.method == 'DELETE':
+        cache_clear('offline_orders')
         return delete_master_table('offline_orders', id)
     if not SHEET: return jsonify({'success': False})
     data = request.json
@@ -705,15 +724,12 @@ def modify_offline(id):
         profit = sell - cost
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
-
-        # Columns: B=card_type, C=last_digits, D=machine, E=vendor, F=brand,
-        #          G=sale_type, H=costing, I=selling, J=profit, K=sale_month
         ws.update(f'B{cell.row}:K{cell.row}', [[
             data.get('card_type', ''), safe_digits, data.get('machine', ''),
             data.get('vendor', ''), data.get('brand', ''), data.get('sale_type', ''),
             cost, sell, profit, data.get('sale_month', '')
         ]])
-
+        cache_clear('offline_orders')
         return jsonify({
             'success': True, 'id': id,
             'card_type': data.get('card_type', ''), 'last_digits': last_digits,
