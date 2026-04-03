@@ -203,50 +203,30 @@ const PAGE_SIZE = 50;
 let modelTimer = null;
 const editModal = new bootstrap.Modal(document.getElementById('editModal'));
 
-// Cached dropdown data — loaded once at init, reused on every edit
-let cachedPlatforms = [];
-let cachedSecNames = [];
-let cachedModels = [];
-
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   document.getElementById('f_delivery_date').value = '';
   document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
 
   const platforms = await api('/api/platform-names');
-  cachedPlatforms = platforms; // ← cache it
   ['f_platform','e_platform'].forEach(id => {
     const sel = document.getElementById(id);
     sel.innerHTML = '<option value="">Select Platform</option>';
-    platforms.forEach(p => { 
-      const opt = document.createElement('option'); 
-      opt.value = opt.textContent = p; 
-      sel.appendChild(opt); 
-    });
+    platforms.forEach(p => { const opt = document.createElement('option'); opt.value = opt.textContent = p; sel.appendChild(opt); });
   });
 
   const models = await api('/api/models');
-  cachedModels = models; // ← cache it
   ['modelList','eModelList'].forEach(id => {
     const dl = document.getElementById(id);
     dl.innerHTML = '';
-    models.forEach(m => { 
-      const opt = document.createElement('option'); 
-      opt.value = m.model_name; 
-      dl.appendChild(opt); 
-    });
+    models.forEach(m => { const opt = document.createElement('option'); opt.value = m.model_name; dl.appendChild(opt); });
   });
 
   const secNames = await api('/api/sec-order-names');
-  cachedSecNames = secNames; // ← cache it
   ['f_order_name','e_order_name'].forEach(id => {
     const sel = document.getElementById(id);
     sel.innerHTML = '<option value="">Select Order Name</option>';
-    secNames.forEach(n => { 
-      const opt = document.createElement('option'); 
-      opt.value = opt.textContent = n.name; 
-      sel.appendChild(opt); 
-    });
+    secNames.forEach(n => { const opt = document.createElement('option'); opt.value = opt.textContent = n.name; sel.appendChild(opt); });
   });
 
   await loadOrders();
@@ -409,37 +389,25 @@ async function submitOrder() {
 async function openEdit(id) {
   const o = allOrders.find(x => x.id === id);
   if (!o) return;
-
   document.getElementById('e_id').value = o.id;
   document.getElementById('e_digits').value = o.last_digits || '';
-  document.getElementById('e_bank').value = o.card_type || '';
+  document.getElementById('e_bank').value = o.card_type || ''; 
   document.getElementById('e_model').value = o.model || '';
   document.getElementById('e_delivery_date').value = o.delivery_date || '';
   document.getElementById('e_costing').value = o.costing || '';
   document.getElementById('e_selling_price').value = o.selling_price || '';
   document.getElementById('e_sale_batch').value = o.sale_batch || 'Current Sale';
 
-  // Use cached platforms — no API call needed
+  const platforms = await api('/api/platform-names');
   const ePlat = document.getElementById('e_platform');
   ePlat.innerHTML = '<option value="">Select Platform</option>';
-  cachedPlatforms.forEach(p => { 
-    const opt = document.createElement('option'); 
-    opt.value = opt.textContent = p; 
-    if (p === o.platform) opt.selected = true; 
-    ePlat.appendChild(opt); 
-  });
+  platforms.forEach(p => { const opt = document.createElement('option'); opt.value = opt.textContent = p; if (p === o.platform) opt.selected = true; ePlat.appendChild(opt); });
 
-  // Use cached sec order names — no API call needed
+  const secNames = await api('/api/sec-order-names');
   const eName = document.getElementById('e_order_name');
   eName.innerHTML = '<option value="">Select Order Name</option>';
-  cachedSecNames.forEach(n => { 
-    const opt = document.createElement('option'); 
-    opt.value = opt.textContent = n.name; 
-    if (n.name === o.order_name) opt.selected = true; 
-    eName.appendChild(opt); 
-  });
+  secNames.forEach(n => { const opt = document.createElement('option'); opt.value = opt.textContent = n.name; if (n.name === o.order_name) opt.selected = true; eName.appendChild(opt); });
 
-  // Variants need a fetch since they depend on the specific model
   if (o.model) {
     const variants = await api(`/api/variants?model=${encodeURIComponent(o.model)}`);
     const eVar = document.getElementById('e_variant');
@@ -448,9 +416,7 @@ async function openEdit(id) {
       const opt = document.createElement('option');
       const vName = typeof v === 'object' ? v.variant_name : v;
       const vCost = typeof v === 'object' ? (v.costing || '') : '';
-      opt.value = vName; 
-      opt.textContent = vName; 
-      opt.setAttribute('data-costing', vCost);
+      opt.value = vName; opt.textContent = vName; opt.setAttribute('data-costing', vCost);
       if (vName === o.variant) opt.selected = true;
       eVar.appendChild(opt);
     });
