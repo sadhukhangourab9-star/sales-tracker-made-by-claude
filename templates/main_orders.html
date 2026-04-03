@@ -206,16 +206,11 @@
 {% block scripts %}
 <script>
 let allOrders = [];
-let allOrders = [];
 let filteredOrders = []; 
 let currentPage = 1;
 const PAGE_SIZE = 50;
 let modelTimer = null;
 const editModal = new bootstrap.Modal(document.getElementById('editModal'));
-
-// Cached dropdown data — loaded once at init, reused on every edit
-let cachedPlatforms = [];
-let cachedModels = [];
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
@@ -223,7 +218,6 @@ async function init() {
   document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
 
   const platforms = await api('/api/platform-names');
-  cachedPlatforms = platforms; // ← cache it
   ['f_platform','e_platform'].forEach(id => {
     const sel = document.getElementById(id);
     sel.innerHTML = '<option value="">Select Platform</option>';
@@ -235,7 +229,6 @@ async function init() {
   });
 
   const models = await api('/api/models');
-  cachedModels = models; // ← cache it
   ['modelList','eModelList'].forEach(id => {
     const dl = document.getElementById(id);
     dl.innerHTML = '';
@@ -428,11 +421,10 @@ async function submitOrder() {
 async function openEdit(id) {
   const o = allOrders.find(x => x.id === id);
   if (!o) return;
-
   document.getElementById('e_id').value = o.id;
   document.getElementById('e_digits').value = o.last_digits || '';
-  document.getElementById('e_bank').value = o.card_type || '';
-  document.getElementById('e_account').value = o.account || '';
+  document.getElementById('e_bank').value = o.card_type || ''; 
+  document.getElementById('e_account').value = o.account || ''; 
   document.getElementById('e_order_name').value = o.order_name || '';
   document.getElementById('e_model').value = o.model || '';
   document.getElementById('e_delivery_date').value = o.delivery_date || '';
@@ -440,17 +432,16 @@ async function openEdit(id) {
   document.getElementById('e_selling_price').value = o.selling_price || '';
   document.getElementById('e_sale_batch').value = o.sale_batch || 'Current Sale';
 
-  // Use cached platforms — no API call needed
+  const platforms = await api('/api/platform-names');
   const ePlat = document.getElementById('e_platform');
   ePlat.innerHTML = '<option value="">Select Platform</option>';
-  cachedPlatforms.forEach(p => {
+  platforms.forEach(p => {
     const opt = document.createElement('option');
     opt.value = opt.textContent = p;
     if (p === o.platform) opt.selected = true;
     ePlat.appendChild(opt);
   });
 
-  // Variants need a fetch since they depend on the specific model
   if (o.model) {
     const variants = await api(`/api/variants?model=${encodeURIComponent(o.model)}`);
     const eVar = document.getElementById('e_variant');
