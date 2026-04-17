@@ -285,22 +285,20 @@
     .data-table th:nth-child(1), .data-table td:nth-child(1) {
       position: sticky;
       left: 0;
-      background: var(--navy2); /* Solid color prevents text bleed */
+      background: var(--navy2);
       z-index: 2;
     }
     .data-table th:nth-child(2), .data-table td:nth-child(2) {
       position: sticky;
-      left: 38px; /* Leaves room for the checkbox */
+      left: 38px;
       background: var(--navy2);
       border-right: 1px solid var(--border);
       z-index: 2;
     }
-    /* Ensure headers stay above scrolling rows */
     .data-table thead th:nth-child(1), .data-table thead th:nth-child(2) {
       background: var(--navy3);
       z-index: 3;
     }
-    /* Hover effect fix for sticky columns */
     .data-table tbody tr:hover td:nth-child(1), .data-table tbody tr:hover td:nth-child(2) {
       background: var(--navy3);
     }
@@ -388,7 +386,7 @@
     });
   }
 
-  // Variant lookup helper
+  // Variant lookup helper — now also stores selling_price in data-selling
   async function lookupVariants(modelName, variantSelect) {
     variantSelect.innerHTML = '<option value="">Loading...</option>';
     try {
@@ -396,16 +394,40 @@
       variantSelect.innerHTML = '<option value="">Select Variant</option>';
       variants.forEach(v => {
         const opt = document.createElement('option');
-        const vName = typeof v === 'object' ? v.variant_name : v;
-        const vCost = typeof v === 'object' ? (v.costing || '') : '';
-        
+        const vName  = typeof v === 'object' ? v.variant_name : v;
+        const vCost  = typeof v === 'object' ? (v.costing       || '') : '';
+        const vSell  = typeof v === 'object' ? (v.selling_price || '') : '';
         opt.value = vName;
         opt.textContent = vName;
-        opt.setAttribute('data-costing', vCost); 
+        opt.setAttribute('data-costing', vCost);
+        opt.setAttribute('data-selling', vSell);
         variantSelect.appendChild(opt);
       });
     } catch (e) {
       variantSelect.innerHTML = '<option value="">Error loading variants</option>';
+    }
+  }
+
+  // onVariantChange — auto-fills BOTH costing AND selling price from variant defaults.
+  // costingInputId e.g. 'f_costing' → selling price id derived as 'f_selling_price'
+  // Also works for 'e_costing' → 'e_selling_price' in edit modals.
+  function onVariantChange(selectElem, costingInputId) {
+    const selectedOpt = selectElem.options[selectElem.selectedIndex];
+    if (!selectedOpt) return;
+
+    // Auto-fill costing
+    const cost = selectedOpt.getAttribute('data-costing');
+    if (cost !== null && cost !== '') {
+      document.getElementById(costingInputId).value = cost;
+    }
+
+    // Auto-fill selling price — derive the sell field id from the cost field id
+    const sell = selectedOpt.getAttribute('data-selling');
+    if (sell !== null && sell !== '') {
+      // 'f_costing' → 'f_selling_price' | 'e_costing' → 'e_selling_price'
+      const sellInputId = costingInputId.replace('costing', 'selling_price');
+      const sellEl = document.getElementById(sellInputId);
+      if (sellEl) sellEl.value = sell;
     }
   }
 
