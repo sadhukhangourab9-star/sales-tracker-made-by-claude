@@ -227,9 +227,16 @@ def api_variants():
             result = variants
         cache_set(cache_key, result)
         return jsonify(result)
+    # POST — now saves selling_price as column 5
     data = request.json
     new_id = get_next_id(ws)
-    ws.append_row([new_id, data.get('model_id'), data.get('variant_name', ''), data.get('costing', '')])
+    ws.append_row([
+        new_id,
+        data.get('model_id'),
+        data.get('variant_name', ''),
+        data.get('costing', ''),
+        data.get('selling_price', '')   # ← new column E
+    ])
     for k in list(_cache.keys()):
         if k.startswith('variants'): cache_clear(k)
     return jsonify({'success': True})
