@@ -59,24 +59,29 @@
         </div>
       </div>
 
+      <!-- Variant add form — Cost + Sell Price side by side -->
       <div class="row g-2 mb-3">
         <div class="col-4">
           <label class="form-label" style="font-size:10px;">MODEL</label>
           <select id="v_model_sel" class="form-select"></select>
         </div>
-        <div class="col-5">
+        <div class="col-8">
           <label class="form-label" style="font-size:10px;">VARIANT NAME</label>
           <input type="text" id="v_name" class="form-control" placeholder="e.g. 256GB Blue">
         </div>
-        <div class="col-3">
-          <label class="form-label" style="font-size:10px;">COST (₹)</label>
+        <div class="col-6">
+          <label class="form-label" style="font-size:10px;">COST PRICE (₹)</label>
           <input type="number" id="v_cost" class="form-control" placeholder="0">
+        </div>
+        <div class="col-6">
+          <label class="form-label" style="font-size:10px;">SELL PRICE (₹) <span style="color:var(--accent2);">↓ auto-fills orders</span></label>
+          <input type="number" id="v_sell" class="form-control" placeholder="0">
         </div>
         <div class="col-12 mt-2">
           <button class="btn-success-custom w-100 justify-content-center" onclick="addVariant()"><i class="bi bi-plus"></i> Add Variant</button>
         </div>
       </div>
-      <ul class="list-group list-group-flush" id="list_models" style="max-height: 250px; overflow-y: auto; font-size:13px;"></ul>
+      <ul class="list-group list-group-flush" id="list_models" style="max-height: 300px; overflow-y: auto; font-size:13px;"></ul>
     </div>
 
     <div class="card-panel m-0">
@@ -165,7 +170,7 @@ async function loadSettings() {
   drawList(vends, 'list_vendors', 'vendors', v => v.name);
   drawList(brands, 'list_brands', 'brands', b => b.name);
 
-  // Custom Render for Models & Variants (Grouping variants under models)
+  // Custom Render for Models & Variants — shows Cost + Sell Price per variant
   let modelHtml = '';
   models.forEach(m => {
     const mVars = vars.filter(v => v.model_id === m.id);
@@ -175,12 +180,19 @@ async function loadSettings() {
           <strong style="color:var(--accent2);">${m.model_name}</strong>
           <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delItem('models', ${m.id})"><i class="bi bi-trash"></i></button>
         </div>
-        ${mVars.map(v => `
+        ${mVars.map(v => {
+          const sellDisplay = v.selling_price ? `<span style="color:var(--green);">sell ₹${v.selling_price}</span>` : '<span style="color:var(--muted);font-style:italic;">no sell price</span>';
+          return `
           <div class="d-flex justify-content-between align-items-center ps-3 py-1" style="font-size:11px; border-left: 2px solid var(--border);">
-            <span>${v.variant_name} <span style="color:var(--muted)">(₹${v.costing})</span></span>
+            <span>
+              ${v.variant_name}
+              <span style="color:var(--muted);margin-left:6px;">cost ₹${v.costing || 0}</span>
+              <span style="margin-left:6px;">·</span>
+              <span style="margin-left:6px;">${sellDisplay}</span>
+            </span>
             <button class="btn btn-sm text-danger p-0" onclick="delItem('variants', ${v.id})"><i class="bi bi-x"></i></button>
-          </div>
-        `).join('')}
+          </div>`;
+        }).join('')}
       </li>`;
   });
   document.getElementById('list_models').innerHTML = modelHtml;
@@ -193,7 +205,7 @@ async function loadSettings() {
 // --- Add Functions ---
 async function addSimple(endpoint, inputId, payloadKey) {
   const val = document.getElementById(inputId).value.trim();
-  if(!val) return showToast('Please enter a value', true);
+  if(!val) return showToast('Please enter a value', 'error');
   await api(`/api/${endpoint}`, 'POST', {[payloadKey]: val});
   document.getElementById(inputId).value = '';
   loadSettings();
@@ -202,7 +214,7 @@ async function addSimple(endpoint, inputId, payloadKey) {
 async function addCard() {
   const d = document.getElementById('c_digits').value.trim();
   const b = document.getElementById('c_bank').value.trim().toUpperCase();
-  if(!d || !b) return showToast('Enter both digits and bank name', true);
+  if(!d || !b) return showToast('Enter both digits and bank name', 'error');
   await api('/api/cards', 'POST', {last_digits: d, card_type: b});
   document.getElementById('c_digits').value = ''; document.getElementById('c_bank').value = '';
   loadSettings();
@@ -211,20 +223,29 @@ async function addCard() {
 async function addPlatform() {
   const p = document.getElementById('p_name').value.trim();
   const a = document.getElementById('p_acc').value.trim();
-  if(!p || !a) return showToast('Enter platform and account', true);
+  if(!p || !a) return showToast('Enter platform and account', 'error');
   await api('/api/platforms', 'POST', {platform_name: p, account_name: a});
   document.getElementById('p_name').value = ''; document.getElementById('p_acc').value = '';
   loadSettings();
 }
 
 async function addVariant() {
-  const m = document.getElementById('v_model_sel').value;
-  const n = document.getElementById('v_name').value.trim();
-  const c = document.getElementById('v_cost').value;
-  if(!m || !n) return showToast('Select model and enter variant name', true);
-  await api('/api/variants', 'POST', {model_id: parseInt(m), variant_name: n, costing: c});
-  document.getElementById('v_name').value = ''; document.getElementById('v_cost').value = '';
+  const m    = document.getElementById('v_model_sel').value;
+  const n    = document.getElementById('v_name').value.trim();
+  const cost = document.getElementById('v_cost').value;
+  const sell = document.getElementById('v_sell').value;
+  if(!m || !n) return showToast('Select model and enter variant name', 'error');
+  await api('/api/variants', 'POST', {
+    model_id:      parseInt(m),
+    variant_name:  n,
+    costing:       cost,
+    selling_price: sell   // ← now saved alongside costing
+  });
+  document.getElementById('v_name').value = '';
+  document.getElementById('v_cost').value = '';
+  document.getElementById('v_sell').value = '';
   loadSettings();
+  showToast('Variant added — sell price will auto-fill in orders');
 }
 
 // --- Delete Function ---
