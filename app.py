@@ -268,12 +268,13 @@ def del_variant(var_id):
 
 @app.route('/api/variants/<int:var_id>/sync-sell-price', methods=['POST'])
 def sync_variant_sell_price(var_id):
-    """Push the variant's sell price to ALL existing orders that use this variant,
-    recalculating profit = selling_price - costing for each row."""
+    """Push the variant's sell price to existing orders that match BOTH variant_name
+    AND costing, so two variants with the same name but different costs stay separate."""
     if not SHEET: return jsonify({'success': False})
     data = request.json
-    variant_name = data.get('variant_name', '')
-    new_sell     = data.get('selling_price', '')
+    variant_name  = data.get('variant_name', '')
+    new_sell      = data.get('selling_price', '')
+    match_costing = data.get('costing', '')          # ← must also match costing
     if not variant_name or new_sell == '':
         return jsonify({'success': False, 'error': 'variant_name and selling_price required'})
     try:
@@ -281,12 +282,18 @@ def sync_variant_sell_price(var_id):
     except (ValueError, TypeError):
         return jsonify({'success': False, 'error': 'invalid selling_price'})
 
+    # Parse the costing to match against — if blank, fall back to name-only (safe default)
+    try:
+        match_cost_f = float(match_costing) if match_costing != '' else None
+    except (ValueError, TypeError):
+        match_cost_f = None
+
     updated = 0
     errors  = []
 
     for sheet_name, variant_col, sell_col, profit_col, cost_col in [
-        ('main_orders',      8, 10, 11, 9),    # variant=H, sell=J, profit=K, cost=I
-        ('secondary_orders', 7,  9, 10, 8),    # variant=G, sell=I, profit=J, cost=H
+        ('main_orders',      8, 10, 11, 9),    # variant=H(8), costing=I(9), sell=J(10), profit=K(11)
+        ('secondary_orders', 7,  9, 10, 8),    # variant=G(7), costing=H(8), sell=I(9),  profit=J(10)
     ]:
         try:
             ws = SHEET.worksheet(sheet_name)
@@ -294,15 +301,23 @@ def sync_variant_sell_price(var_id):
             if not all_rows: continue
             for row_idx, row in enumerate(all_rows[1:], start=2):  # skip header
                 cell_variant = row[variant_col - 1] if len(row) >= variant_col else ''
-                if cell_variant.strip() == variant_name.strip():
-                    try:
-                        cost_val = float(row[cost_col - 1]) if len(row) >= cost_col and row[cost_col - 1] else 0.0
-                    except (ValueError, TypeError):
-                        cost_val = 0.0
-                    profit = new_sell_f - cost_val
-                    ws.update_cell(row_idx, sell_col,   new_sell_f)
-                    ws.update_cell(row_idx, profit_col, round(profit, 2))
-                    updated += 1
+                if cell_variant.strip() != variant_name.strip():
+                    continue
+
+                # Parse this row's costing
+                try:
+                    row_cost_f = float(row[cost_col - 1]) if len(row) >= cost_col and row[cost_col - 1] else 0.0
+                except (ValueError, TypeError):
+                    row_cost_f = 0.0
+
+                # Only update rows whose costing matches the variant's costing
+                if match_cost_f is not None and round(row_cost_f, 2) != round(match_cost_f, 2):
+                    continue
+
+                profit = new_sell_f - row_cost_f
+                ws.update_cell(row_idx, sell_col,   new_sell_f)
+                ws.update_cell(row_idx, profit_col, round(profit, 2))
+                updated += 1
         except Exception as e:
             errors.append(f"{sheet_name}: {e}")
 
