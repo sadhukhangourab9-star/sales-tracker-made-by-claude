@@ -160,17 +160,14 @@ async function loadSettings() {
     api('/api/sec-order-names'), api('/api/machines'), api('/api/vendors'), api('/api/brands')
   ]);
 
-  // Render Online Data
   drawList(cards, 'list_cards', 'cards', c => `<code style="color:var(--accent2)">•••• ${c.last_digits}</code> <span class="ms-2">${c.card_type}</span>`);
   drawList(plats, 'list_platforms', 'platforms', p => `<b>${p.platform_name}</b> <span style="color:var(--muted)">(${p.account_name})</span>`);
   drawList(secs, 'list_sec', 'sec-order-names', s => s.name);
-  
-  // Render Offline Data
   drawList(machs, 'list_machines', 'machines', m => m.name);
   drawList(vends, 'list_vendors', 'vendors', v => v.name);
   drawList(brands, 'list_brands', 'brands', b => b.name);
 
-  // Custom Render for Models & Variants — shows Cost + Sell Price per variant
+  // Models & Variants — shows cost + sell price with edit button per variant
   let modelHtml = '';
   models.forEach(m => {
     const mVars = vars.filter(v => v.model_id === m.id);
@@ -181,25 +178,129 @@ async function loadSettings() {
           <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delItem('models', ${m.id})"><i class="bi bi-trash"></i></button>
         </div>
         ${mVars.map(v => {
-          const sellDisplay = v.selling_price ? `<span style="color:var(--green);">sell ₹${v.selling_price}</span>` : '<span style="color:var(--muted);font-style:italic;">no sell price</span>';
+          const hasSell = v.selling_price !== '' && v.selling_price != null && v.selling_price != 0;
+          const sellDisplay = hasSell
+            ? `<span style="color:var(--green);font-weight:600;">sell ₹${v.selling_price}</span>`
+            : `<span style="color:var(--amber);font-style:italic;">no sell price</span>`;
           return `
-          <div class="d-flex justify-content-between align-items-center ps-3 py-1" style="font-size:11px; border-left: 2px solid var(--border);">
-            <span>
-              ${v.variant_name}
-              <span style="color:var(--muted);margin-left:6px;">cost ₹${v.costing || 0}</span>
-              <span style="margin-left:6px;">·</span>
-              <span style="margin-left:6px;">${sellDisplay}</span>
-            </span>
-            <button class="btn btn-sm text-danger p-0" onclick="delItem('variants', ${v.id})"><i class="bi bi-x"></i></button>
+          <div style="border-left:2px solid var(--border);margin-top:4px;">
+            <div class="d-flex justify-content-between align-items-center ps-3 py-1" style="font-size:12px;">
+              <span>
+                <span style="font-weight:600;">${v.variant_name}</span>
+                <span style="color:var(--muted);margin:0 6px;">·</span>
+                <span style="color:var(--muted);">cost ₹${v.costing || 0}</span>
+                <span style="color:var(--muted);margin:0 6px;">·</span>
+                ${sellDisplay}
+              </span>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <button class="btn-outline-custom" style="padding:3px 8px;font-size:11px;" 
+                  onclick="toggleEditPanel(${v.id})" title="Edit sell price">
+                  <i class="bi bi-pencil"></i> Edit
+                </button>
+                <button class="btn btn-sm text-danger p-0" onclick="delItem('variants', ${v.id})"><i class="bi bi-x-lg"></i></button>
+              </div>
+            </div>
+            <!-- Inline edit panel — hidden by default -->
+            <div id="edit_panel_${v.id}" style="display:none; background:var(--navy); border-radius:8px; padding:12px; margin:6px 10px 8px 12px;">
+              <div class="row g-2 align-items-end">
+                <div class="col-5">
+                  <label class="form-label" style="font-size:10px;">SELL PRICE (₹)</label>
+                  <input type="number" id="edit_sell_${v.id}" class="form-control" 
+                    value="${v.selling_price || ''}" placeholder="Enter sell price"/>
+                </div>
+                <div class="col-4">
+                  <button class="btn-success-custom w-100 justify-content-center" 
+                    onclick="saveVariantSell(${v.id}, '${v.variant_name.replace(/'/g, "\\'")}')">
+                    <i class="bi bi-check-lg"></i> Save
+                  </button>
+                </div>
+                <div class="col-3">
+                  <button class="btn-outline-custom w-100 justify-content-center" 
+                    onclick="toggleEditPanel(${v.id})">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+              <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+                <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">
+                  <i class="bi bi-info-circle"></i>
+                  Save first, then sync to push this price to all existing orders with <strong style="color:var(--text);">"${v.variant_name}"</strong>.
+                </div>
+                <button class="btn-primary-custom" style="font-size:11px;padding:6px 12px;"
+                  onclick="syncSellPrice(${v.id}, '${v.variant_name.replace(/'/g, "\\'")}')">
+                  <i class="bi bi-arrow-repeat"></i> Sync to All Existing Orders
+                </button>
+              </div>
+            </div>
           </div>`;
         }).join('')}
       </li>`;
   });
-  document.getElementById('list_models').innerHTML = modelHtml;
+  document.getElementById('list_models').innerHTML = modelHtml || '<li class="list-group-item" style="background:transparent;color:var(--muted);font-size:13px;">No models added yet.</li>';
 
   // Populate Model Dropdown for Variant form
   const vSel = document.getElementById('v_model_sel');
   vSel.innerHTML = '<option value="">Select...</option>' + models.map(m => `<option value="${m.id}">${m.model_name}</option>`).join('');
+}
+
+// Toggle the inline edit panel for a variant
+function toggleEditPanel(varId) {
+  const panel = document.getElementById(`edit_panel_${varId}`);
+  if (!panel) return;
+  const isVisible = panel.style.display !== 'none';
+  // Close all open panels first
+  document.querySelectorAll('[id^="edit_panel_"]').forEach(p => p.style.display = 'none');
+  if (!isVisible) panel.style.display = 'block';
+}
+
+// Save just the sell price on the variant master
+async function saveVariantSell(varId, variantName) {
+  const sellInput = document.getElementById(`edit_sell_${varId}`);
+  const sell = sellInput.value.trim();
+  if (sell === '') { showToast('Enter a sell price first', 'error'); return; }
+
+  const res = await api(`/api/variants/${varId}`, 'PUT', { selling_price: sell });
+  if (!res.success) { showToast('Failed to save', 'error'); return; }
+
+  showToast(`Sell price saved for ${variantName}`);
+  loadSettings();
+}
+
+// Sync the current sell price in the input to ALL existing orders with this variant
+async function syncSellPrice(varId, variantName) {
+  const sellInput = document.getElementById(`edit_sell_${varId}`);
+  const sell = sellInput.value.trim();
+  if (sell === '') { showToast('Enter and save a sell price first', 'error'); return; }
+
+  if (!confirm(`Push ₹${sell} as sell price to ALL existing Main & Secondary orders with variant "${variantName}"?\n\nThis will also recalculate their profit. Cannot be undone.`)) return;
+
+  // Show loading state
+  const btn = event.target.closest('button');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
+
+  try {
+    const res = await api(`/api/variants/${varId}/sync-sell-price`, 'POST', {
+      variant_name:  variantName,
+      selling_price: sell
+    });
+
+    if (res.success) {
+      const msg = res.updated > 0
+        ? `Updated ${res.updated} order(s) with sell price ₹${sell}`
+        : `No orders found with variant "${variantName}"`;
+      showToast(msg);
+      if (res.errors && res.errors.length) {
+        console.warn('Sync warnings:', res.errors);
+      }
+    } else {
+      showToast(res.error || 'Sync failed', 'error');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
 }
 
 // --- Add Functions ---
@@ -239,13 +340,13 @@ async function addVariant() {
     model_id:      parseInt(m),
     variant_name:  n,
     costing:       cost,
-    selling_price: sell   // ← now saved alongside costing
+    selling_price: sell
   });
   document.getElementById('v_name').value = '';
   document.getElementById('v_cost').value = '';
   document.getElementById('v_sell').value = '';
   loadSettings();
-  showToast('Variant added — sell price will auto-fill in orders');
+  showToast('Variant added');
 }
 
 // --- Delete Function ---
@@ -255,7 +356,6 @@ async function delItem(endpoint, id) {
   loadSettings();
 }
 
-// Boot up
 loadSettings();
 </script>
 {% endblock %}
