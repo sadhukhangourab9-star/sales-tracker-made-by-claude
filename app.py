@@ -241,11 +241,74 @@ def api_variants():
         if k.startswith('variants'): cache_clear(k)
     return jsonify({'success': True})
 
-@app.route('/api/variants/<int:var_id>', methods=['DELETE'])
+@app.route('/api/variants/<int:var_id>', methods=['DELETE', 'PUT'])
 def del_variant(var_id):
-    for k in list(_cache.keys()):
-        if k.startswith('variants'): cache_clear(k)
-    return delete_master_table('variants', var_id)
+    if request.method == 'DELETE':
+        for k in list(_cache.keys()):
+            if k.startswith('variants'): cache_clear(k)
+        return delete_master_table('variants', var_id)
+    # PUT — update selling_price (and optionally costing) on the variant row
+    if not SHEET: return jsonify({'success': False})
+    data = request.json
+    ws = SHEET.worksheet('variants')
+    try:
+        cell = ws.find(str(var_id), in_column=1)
+        # Read existing row to preserve model_id, variant_name, costing unless sent
+        row = ws.row_values(cell.row)
+        new_cost = data.get('costing',       row[3] if len(row) > 3 else '')
+        new_sell = data.get('selling_price', row[4] if len(row) > 4 else '')
+        ws.update(f'D{cell.row}:E{cell.row}', [[new_cost, new_sell]])
+        for k in list(_cache.keys()):
+            if k.startswith('variants'): cache_clear(k)
+        return jsonify({'success': True, 'costing': new_cost, 'selling_price': new_sell})
+    except Exception as e:
+        print("Variant PUT error:", e)
+        return jsonify({'success': False})
+
+
+@app.route('/api/variants/<int:var_id>/sync-sell-price', methods=['POST'])
+def sync_variant_sell_price(var_id):
+    """Push the variant's sell price to ALL existing orders that use this variant,
+    recalculating profit = selling_price - costing for each row."""
+    if not SHEET: return jsonify({'success': False})
+    data = request.json
+    variant_name = data.get('variant_name', '')
+    new_sell     = data.get('selling_price', '')
+    if not variant_name or new_sell == '':
+        return jsonify({'success': False, 'error': 'variant_name and selling_price required'})
+    try:
+        new_sell_f = float(new_sell)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'invalid selling_price'})
+
+    updated = 0
+    errors  = []
+
+    for sheet_name, variant_col, sell_col, profit_col, cost_col in [
+        ('main_orders',      8, 10, 11, 9),    # variant=H, sell=J, profit=K, cost=I
+        ('secondary_orders', 7,  9, 10, 8),    # variant=G, sell=I, profit=J, cost=H
+    ]:
+        try:
+            ws = SHEET.worksheet(sheet_name)
+            all_rows = ws.get_all_values()
+            if not all_rows: continue
+            for row_idx, row in enumerate(all_rows[1:], start=2):  # skip header
+                cell_variant = row[variant_col - 1] if len(row) >= variant_col else ''
+                if cell_variant.strip() == variant_name.strip():
+                    try:
+                        cost_val = float(row[cost_col - 1]) if len(row) >= cost_col and row[cost_col - 1] else 0.0
+                    except (ValueError, TypeError):
+                        cost_val = 0.0
+                    profit = new_sell_f - cost_val
+                    ws.update_cell(row_idx, sell_col,   new_sell_f)
+                    ws.update_cell(row_idx, profit_col, round(profit, 2))
+                    updated += 1
+        except Exception as e:
+            errors.append(f"{sheet_name}: {e}")
+
+    cache_clear('main_orders')
+    cache_clear('secondary_orders')
+    return jsonify({'success': True, 'updated': updated, 'errors': errors})
 
 
 # ── Main Orders API ───────────────────────────────────────────────────────────
