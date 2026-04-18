@@ -227,7 +227,7 @@ async function loadSettings() {
                   Save first, then sync to push this price to all existing orders with <strong style="color:var(--text);">"${v.variant_name}"</strong>.
                 </div>
                 <button class="btn-primary-custom" style="font-size:11px;padding:6px 12px;"
-                  onclick="syncSellPrice(${v.id}, '${v.variant_name.replace(/'/g, "\\'")}')">
+                  onclick="syncSellPrice(${v.id}, '${v.variant_name.replace(/'/g, "\'")}', '${v.costing || 0}')">
                   <i class="bi bi-arrow-repeat"></i> Sync to All Existing Orders
                 </button>
               </div>
@@ -266,15 +266,14 @@ async function saveVariantSell(varId, variantName) {
   loadSettings();
 }
 
-// Sync the current sell price in the input to ALL existing orders with this variant
-async function syncSellPrice(varId, variantName) {
+// Sync the current sell price in the input to ALL existing orders with this variant+costing pair
+async function syncSellPrice(varId, variantName, varCosting) {
   const sellInput = document.getElementById(`edit_sell_${varId}`);
   const sell = sellInput.value.trim();
   if (sell === '') { showToast('Enter and save a sell price first', 'error'); return; }
 
-  if (!confirm(`Push ₹${sell} as sell price to ALL existing Main & Secondary orders with variant "${variantName}"?\n\nThis will also recalculate their profit. Cannot be undone.`)) return;
+  if (!confirm(`Push ₹${sell} as sell price to all existing orders where:\n  Variant = "${variantName}"\n  Costing = ₹${varCosting}\n\nProfit will be recalculated. Cannot be undone.`)) return;
 
-  // Show loading state
   const btn = event.target.closest('button');
   const orig = btn.innerHTML;
   btn.disabled = true;
@@ -283,17 +282,16 @@ async function syncSellPrice(varId, variantName) {
   try {
     const res = await api(`/api/variants/${varId}/sync-sell-price`, 'POST', {
       variant_name:  variantName,
-      selling_price: sell
+      selling_price: sell,
+      costing:       varCosting        // ← passed so backend matches exact cost tier
     });
 
     if (res.success) {
       const msg = res.updated > 0
-        ? `Updated ${res.updated} order(s) with sell price ₹${sell}`
-        : `No orders found with variant "${variantName}"`;
+        ? `Updated ${res.updated} order(s) — variant "${variantName}" @ ₹${varCosting}`
+        : `No orders found matching variant "${variantName}" with costing ₹${varCosting}`;
       showToast(msg);
-      if (res.errors && res.errors.length) {
-        console.warn('Sync warnings:', res.errors);
-      }
+      if (res.errors && res.errors.length) console.warn('Sync warnings:', res.errors);
     } else {
       showToast(res.error || 'Sync failed', 'error');
     }
