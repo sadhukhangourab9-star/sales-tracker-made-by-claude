@@ -411,6 +411,53 @@ def bulk_sale_main():
         print("Bulk Sale Error:", e)
         return jsonify({'success': False})
 
+@app.route('/api/main-orders/bulk-set-sell', methods=['POST'])
+def bulk_sell_main():
+    if not SHEET: return jsonify({'success': False})
+    ids       = request.json.get('ids', [])
+    new_sell  = request.json.get('selling_price')
+    if not ids or new_sell is None: return jsonify({'success': False})
+    try: new_sell_f = float(new_sell)
+    except (ValueError, TypeError): return jsonify({'success': False, 'error': 'invalid price'})
+    ws = SHEET.worksheet('main_orders')
+    try:
+        records = ws.get_all_records()
+        updated = 0
+        for i, r in enumerate(records):
+            if r.get('id') in ids:
+                row_num = i + 2
+                try: cost = float(r.get('costing') or 0)
+                except: cost = 0.0
+                profit = round(new_sell_f - cost, 2)
+                ws.update_cell(row_num, 10, new_sell_f)
+                ws.update_cell(row_num, 11, profit)
+                updated += 1
+        cache_clear('main_orders')
+        return jsonify({'success': True, 'updated': updated})
+    except Exception as e:
+        print("Bulk Sell Error:", e)
+        return jsonify({'success': False})
+
+@app.route('/api/main-orders/bulk-set-delivery', methods=['POST'])
+def bulk_delivery_main():
+    if not SHEET: return jsonify({'success': False})
+    ids      = request.json.get('ids', [])
+    new_date = request.json.get('delivery_date', '')
+    if not ids or not new_date: return jsonify({'success': False})
+    ws = SHEET.worksheet('main_orders')
+    try:
+        records = ws.get_all_records()
+        updated = 0
+        for i, r in enumerate(records):
+            if r.get('id') in ids:
+                ws.update_cell(i + 2, 12, new_date)
+                updated += 1
+        cache_clear('main_orders')
+        return jsonify({'success': True, 'updated': updated})
+    except Exception as e:
+        print("Bulk Delivery Error:", e)
+        return jsonify({'success': False})
+
 @app.route('/api/main-orders/export')
 def export_main():
     if not SHEET: return "No sheet connected", 500
@@ -584,6 +631,53 @@ def bulk_sale_sec():
         return jsonify({'success': True})
     except Exception as e:
         print("Bulk Sale Error:", e)
+        return jsonify({'success': False})
+
+@app.route('/api/secondary-orders/bulk-set-sell', methods=['POST'])
+def bulk_sell_sec():
+    if not SHEET: return jsonify({'success': False})
+    ids       = request.json.get('ids', [])
+    new_sell  = request.json.get('selling_price')
+    if not ids or new_sell is None: return jsonify({'success': False})
+    try: new_sell_f = float(new_sell)
+    except (ValueError, TypeError): return jsonify({'success': False, 'error': 'invalid price'})
+    ws = SHEET.worksheet('secondary_orders')
+    try:
+        records = ws.get_all_records()
+        updated = 0
+        for i, r in enumerate(records):
+            if r.get('id') in ids:
+                row_num = i + 2
+                try: cost = float(r.get('costing') or 0)
+                except: cost = 0.0
+                profit = round(new_sell_f - cost, 2)
+                ws.update_cell(row_num, 9,  new_sell_f)
+                ws.update_cell(row_num, 10, profit)
+                updated += 1
+        cache_clear('secondary_orders')
+        return jsonify({'success': True, 'updated': updated})
+    except Exception as e:
+        print("Bulk Sell Sec Error:", e)
+        return jsonify({'success': False})
+
+@app.route('/api/secondary-orders/bulk-set-delivery', methods=['POST'])
+def bulk_delivery_sec():
+    if not SHEET: return jsonify({'success': False})
+    ids      = request.json.get('ids', [])
+    new_date = request.json.get('delivery_date', '')
+    if not ids or not new_date: return jsonify({'success': False})
+    ws = SHEET.worksheet('secondary_orders')
+    try:
+        records = ws.get_all_records()
+        updated = 0
+        for i, r in enumerate(records):
+            if r.get('id') in ids:
+                ws.update_cell(i + 2, 11, new_date)
+                updated += 1
+        cache_clear('secondary_orders')
+        return jsonify({'success': True, 'updated': updated})
+    except Exception as e:
+        print("Bulk Delivery Sec Error:", e)
         return jsonify({'success': False})
 
 @app.route('/api/secondary-orders/export')
@@ -827,6 +921,67 @@ def modify_offline(id):
         print("Edit Error:", e)
         return jsonify({'success': False})
 
+
+
+# ── Auto-Setup Route ──────────────────────────────────────────────────────────
+SHEET_SCHEMA = {
+    'main_orders': [
+        'id','card_type','last_digits','platform','account','order_name',
+        'model','variant','costing','selling_price','profit','delivery_date',
+        'sale_batch','created_at'
+    ],
+    'secondary_orders': [
+        'id','card_type','last_digits','platform','order_name','model',
+        'variant','costing','selling_price','profit','delivery_date',
+        'sale_batch','created_at'
+    ],
+    'offline_orders': [
+        'id','card_type','last_digits','machine','vendor','brand',
+        'sale_type','costing','selling_price','profit','sale_month','created_at'
+    ],
+    'cards':     ['id','card_type','last_digits'],
+    'platforms': ['id','platform_name','account_name'],
+    'models':    ['id','model_name'],
+    'variants':  ['id','model_id','variant_name','costing','selling_price'],
+    'sec_order_names': ['id','name'],
+    'machines':  ['id','name'],
+    'vendors':   ['id','name'],
+    'brands':    ['id','name'],
+}
+
+@app.route('/setup')
+def setup_page():
+    return render_template('setup.html')
+
+@app.route('/api/setup', methods=['POST'])
+def run_setup():
+    if not SHEET:
+        return jsonify({'success': False, 'error': 'Not connected to Google Sheets. Check GOOGLE_CREDENTIALS_JSON env var.'})
+    
+    results = []
+    existing_titles = [ws.title for ws in SHEET.worksheets()]
+    
+    for tab_name, headers in SHEET_SCHEMA.items():
+        try:
+            if tab_name in existing_titles:
+                ws = SHEET.worksheet(tab_name)
+                # Check if headers match — fix if row 1 is blank or wrong
+                existing_headers = ws.row_values(1)
+                if existing_headers == headers:
+                    results.append({'tab': tab_name, 'status': 'ok', 'msg': 'Already correct'})
+                else:
+                    ws.update('A1', [headers])
+                    results.append({'tab': tab_name, 'status': 'fixed', 'msg': f'Headers updated ({len(headers)} columns)'})
+            else:
+                ws = SHEET.add_worksheet(title=tab_name, rows=1000, cols=len(headers) + 2)
+                ws.append_row(headers)
+                results.append({'tab': tab_name, 'status': 'created', 'msg': f'Created with {len(headers)} columns'})
+        except Exception as e:
+            results.append({'tab': tab_name, 'status': 'error', 'msg': str(e)})
+    
+    cache_clear_all()
+    all_ok = all(r['status'] in ('ok', 'created', 'fixed') for r in results)
+    return jsonify({'success': all_ok, 'results': results})
 
 # ── PWA Setup ─────────────────────────────────────────────────────────────────
 @app.route('/manifest.json')
