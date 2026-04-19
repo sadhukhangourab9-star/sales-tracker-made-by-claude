@@ -66,7 +66,6 @@
       <label class="form-label">11. Sale Batch</label>
       <input type="text" id="f_sale_batch" class="form-control" value="Current Sale" placeholder="e.g. Sale 1"/>
     </div>
-
     <div class="col-12 d-flex gap-2 mt-2">
       <button class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Order</button>
       <button class="btn-outline-custom" onclick="clearForm()"><i class="bi bi-x-lg"></i> Clear</button>
@@ -84,8 +83,13 @@
       <option value="ALL">All Sales</option>
     </select>
   </div>
-  
   <div class="toolbar-right">
+    <button class="btn-success-custom" id="bulkSellBtn" onclick="openBulkSell()" style="display:none;">
+      <i class="bi bi-currency-rupee"></i> Set Sell Price
+    </button>
+    <button class="btn-outline-custom" id="bulkDeliveryBtn" onclick="openBulkDelivery()" style="display:none;">
+      <i class="bi bi-calendar-check"></i> Set Delivery
+    </button>
     <button class="btn-success-custom" id="bulkSaleBtn" onclick="promptBulkSale()" style="display:none;">
       <i class="bi bi-tags"></i> Assign Sale
     </button>
@@ -132,6 +136,7 @@
   </div>
 </div>
 
+<!-- ── Edit Modal ── -->
 <div class="modal fade" id="editModal" tabindex="-1">
   <div class="modal-dialog modal-xl">
     <div class="modal-content">
@@ -192,6 +197,53 @@
     </div>
   </div>
 </div>
+
+<!-- ── Bulk Set Sell Price Modal ── -->
+<div class="modal fade" id="bulkSellModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-currency-rupee me-2"></i>Set Sell Price</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
+          Apply one selling price to <strong id="bulkSellCount" style="color:var(--text);">0</strong> selected orders. Profit will be recalculated automatically.
+        </p>
+        <label class="form-label">Selling Price (₹)</label>
+        <input type="number" id="bulk_sell_price" class="form-control" placeholder="e.g. 21450" step="0.01"/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-success-custom" onclick="applyBulkSell()"><i class="bi bi-check-lg"></i> Apply to Selected</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Bulk Set Delivery Date Modal ── -->
+<div class="modal fade" id="bulkDeliveryModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-calendar-check me-2"></i>Set Delivery Date</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
+          Apply one delivery date to <strong id="bulkDeliveryCount" style="color:var(--text);">0</strong> selected orders.
+        </p>
+        <label class="form-label">Delivery Date</label>
+        <input type="date" id="bulk_delivery_date" class="form-control"/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-primary-custom" onclick="applyBulkDelivery()"><i class="bi bi-check-lg"></i> Apply to Selected</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -201,7 +253,9 @@ let filteredOrders = [];
 let currentPage = 1;
 const PAGE_SIZE = 50;
 let modelTimer = null;
-const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+const editModal      = new bootstrap.Modal(document.getElementById('editModal'));
+const bulkSellModal  = new bootstrap.Modal(document.getElementById('bulkSellModal'));
+const bulkDelivModal = new bootstrap.Modal(document.getElementById('bulkDeliveryModal'));
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
@@ -241,27 +295,26 @@ async function loadOrders() {
 // ── Pagination & Rendering ────────────────────────────────────────────────────
 function renderTable() {
   const body = document.getElementById('secTableBody');
-  if (!filteredOrders.length) { 
-    body.innerHTML = '<tr><td colspan="14"><div class="empty-state"><i class="bi bi-inbox"></i><p>No secondary orders found.</p></div></td></tr>'; 
+  if (!filteredOrders.length) {
+    body.innerHTML = '<tr><td colspan="14"><div class="empty-state"><i class="bi bi-inbox"></i><p>No secondary orders found.</p></div></td></tr>';
     document.getElementById('pageInfo').textContent = '0 - 0 of 0';
     document.getElementById('btnPrev').disabled = true;
     document.getElementById('btnNext').disabled = true;
-    return; 
+    return;
   }
-  
   const start = (currentPage - 1) * PAGE_SIZE;
-  const end = Math.min(start + PAGE_SIZE, filteredOrders.length);
+  const end   = Math.min(start + PAGE_SIZE, filteredOrders.length);
   const pageData = filteredOrders.slice(start, end);
-  
+
   document.getElementById('pageInfo').textContent = `${start + 1} - ${end} of ${filteredOrders.length}`;
   document.getElementById('btnPrev').disabled = currentPage === 1;
   document.getElementById('btnNext').disabled = end >= filteredOrders.length;
 
   body.innerHTML = pageData.map(o => {
-    const pColor = o.profit >= 0 ? 'var(--green)' : 'var(--red)';
+    const pColor  = o.profit >= 0 ? 'var(--green)' : 'var(--red)';
     const dateStr = (o.created_at || '—').split(' ')[0];
-    return `
-    <tr data-id="${o.id}">
+    const hasSell = o.selling_price && parseFloat(o.selling_price) > 0;
+    return `<tr data-id="${o.id}">
       <td><input type="checkbox" class="row-check" value="${o.id}" onchange="onCheckChange()"/></td>
       <td><span class="badge-card" style="background:var(--navy);border:1px solid var(--border)">${o.sale_batch||'Current Sale'}</span></td>
       <td style="color:var(--muted);font-size:12px;">${dateStr}</td>
@@ -273,26 +326,23 @@ function renderTable() {
       <td style="color:var(--muted)">${o.variant||'—'}</td>
       <td style="color:var(--muted)">${o.delivery_date||'—'}</td>
       <td style="color:var(--muted)">${formatCost(o.costing)}</td>
-      <td style="color:var(--text);font-weight:600">${formatCost(o.selling_price)}</td>
-      <td style="color:${pColor};font-weight:600">${formatCost(o.profit)}</td>
+      <td style="color:${hasSell?'var(--text)':'var(--amber)'};font-weight:600">${hasSell ? formatCost(o.selling_price) : '<span style="font-size:11px;font-style:italic;">pending</span>'}</td>
+      <td style="color:${pColor};font-weight:600">${hasSell ? formatCost(o.profit) : '—'}</td>
       <td>
         <div style="display:flex;gap:6px;">
           <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})"><i class="bi bi-pencil"></i></button>
         </div>
       </td>
-    </tr>
-  `}).join('');
+    </tr>`;
+  }).join('');
 }
 
-function changePage(dir) {
-  currentPage += dir;
-  renderTable();
-}
+function changePage(dir) { currentPage += dir; renderTable(); }
 
 function updateStats() {
   document.getElementById('totalCount').textContent = filteredOrders.length;
-  const totalCost = filteredOrders.reduce((s, o) => s + (parseFloat(o.costing)||0), 0);
-  const totalProfit = filteredOrders.reduce((s, o) => s + (parseFloat(o.profit)||0), 0);
+  const totalCost   = filteredOrders.reduce((s,o) => s + (parseFloat(o.costing)||0), 0);
+  const totalProfit = filteredOrders.reduce((s,o) => s + (parseFloat(o.profit)||0), 0);
   document.getElementById('totalCost').innerHTML = `<span style="color:var(--muted)">Spend:</span> ${formatCost(totalCost)} <span style="color:var(--muted);margin-left:8px;">Profit:</span> <span style="color:var(--green)">${formatCost(totalProfit)}</span>`;
 }
 
@@ -301,26 +351,20 @@ function populateSaleFilter() {
   const sales = [...new Set(allOrders.map(o => o.sale_batch || 'Current Sale'))].sort();
   const sel = document.getElementById('filterSale');
   const currentVal = sel.value;
-  
   sel.innerHTML = '<option value="ALL">All Sales</option>';
-  sales.forEach(s => { 
-    const opt = document.createElement('option'); opt.value = s; opt.textContent = s; sel.appendChild(opt); 
-  });
-  
-  if ([...sel.options].some(o => o.value === currentVal)) { sel.value = currentVal; }
+  sales.forEach(s => { const opt = document.createElement('option'); opt.value = s; opt.textContent = s; sel.appendChild(opt); });
+  if ([...sel.options].some(o => o.value === currentVal)) sel.value = currentVal;
 }
 
 function filterTable() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   const saleFilter = document.getElementById('filterSale').value;
-  
   filteredOrders = allOrders.filter(o => {
     const matchesSearch = Object.values(o).some(v => String(v||'').toLowerCase().includes(q));
-    const matchesSale = (saleFilter === 'ALL') || ((o.sale_batch || 'Current Sale') === saleFilter);
+    const matchesSale   = (saleFilter === 'ALL') || ((o.sale_batch || 'Current Sale') === saleFilter);
     return matchesSearch && matchesSale;
   });
-  
-  currentPage = 1; 
+  currentPage = 1;
   renderTable();
   updateStats();
 }
@@ -328,7 +372,7 @@ function filterTable() {
 // ── Form ──────────────────────────────────────────────────────────────────────
 function toggleForm() {
   const panel = document.getElementById('addFormPanel');
-  const btn = document.getElementById('formToggleText');
+  const btn   = document.getElementById('formToggleText');
   const visible = panel.style.display !== 'none';
   panel.style.display = visible ? 'none' : 'block';
   btn.textContent = visible ? 'Add New Secondary Order' : 'Hide Form';
@@ -341,33 +385,25 @@ function clearForm() {
   document.getElementById('f_variant').innerHTML = '<option value="">Select Variant</option>';
   document.getElementById('f_sale_batch').value = 'Current Sale';
   document.getElementById('f_delivery_date').value = '';
-  document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN'); 
+  document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
 }
 
 let digitTimer = null;
 function onDigitsInput(val, targetId='f_bank') {
   clearTimeout(digitTimer);
-  if (val.length >= 4) { digitTimer = setTimeout(() => lookupCard(val, document.getElementById(targetId)), 500); } 
-  else { document.getElementById(targetId).value = ''; }
+  if (val.length >= 4) digitTimer = setTimeout(() => lookupCard(val, document.getElementById(targetId)), 500);
+  else document.getElementById(targetId).value = '';
 }
 
 function onModelInput(val, variantId) {
   clearTimeout(modelTimer);
-  if (val.trim()) { modelTimer = setTimeout(() => lookupVariants(val.trim(), document.getElementById(variantId)), 600); }
-}
-
-function onVariantChange(selectElem, costingInputId) {
-  const selectedOpt = selectElem.options[selectElem.selectedIndex];
-  if (selectedOpt && selectedOpt.hasAttribute('data-costing')) {
-    const cost = selectedOpt.getAttribute('data-costing');
-    if (cost !== '') { document.getElementById(costingInputId).value = cost; }
-  }
+  if (val.trim()) modelTimer = setTimeout(() => lookupVariants(val.trim(), document.getElementById(variantId)), 600);
 }
 
 async function submitOrder() {
   const payload = {
     last_digits:   document.getElementById('f_digits').value.trim(),
-    card_type:     document.getElementById('f_bank').value.trim(), 
+    card_type:     document.getElementById('f_bank').value.trim(),
     platform:      document.getElementById('f_platform').value,
     order_name:    document.getElementById('f_order_name').value,
     model:         document.getElementById('f_model').value.trim(),
@@ -383,20 +419,22 @@ async function submitOrder() {
   const res = await api('/api/secondary-orders', 'POST', payload);
   if (res.error) { showToast(res.error, 'error'); return; }
   allOrders.unshift(res);
-  populateSaleFilter(); filterTable(); clearForm(); showToast('Secondary order saved!');
+  populateSaleFilter(); filterTable(); clearForm();
+  showToast('Secondary order saved!');
 }
 
+// ── Edit ──────────────────────────────────────────────────────────────────────
 async function openEdit(id) {
   const o = allOrders.find(x => x.id === id);
   if (!o) return;
-  document.getElementById('e_id').value = o.id;
-  document.getElementById('e_digits').value = o.last_digits || '';
-  document.getElementById('e_bank').value = o.card_type || ''; 
-  document.getElementById('e_model').value = o.model || '';
+  document.getElementById('e_id').value           = o.id;
+  document.getElementById('e_digits').value        = o.last_digits || '';
+  document.getElementById('e_bank').value          = o.card_type || '';
+  document.getElementById('e_model').value         = o.model || '';
   document.getElementById('e_delivery_date').value = o.delivery_date || '';
-  document.getElementById('e_costing').value = o.costing || '';
+  document.getElementById('e_costing').value       = o.costing || '';
   document.getElementById('e_selling_price').value = o.selling_price || '';
-  document.getElementById('e_sale_batch').value = o.sale_batch || 'Current Sale';
+  document.getElementById('e_sale_batch').value    = o.sale_batch || 'Current Sale';
 
   const platforms = await api('/api/platform-names');
   const ePlat = document.getElementById('e_platform');
@@ -416,12 +454,14 @@ async function openEdit(id) {
       const opt = document.createElement('option');
       const vName = typeof v === 'object' ? v.variant_name : v;
       const vCost = typeof v === 'object' ? (v.costing || '') : '';
-      opt.value = vName; opt.textContent = vName; opt.setAttribute('data-costing', vCost);
+      const vSell = typeof v === 'object' ? (v.selling_price || '') : '';
+      opt.value = vName; opt.textContent = vName;
+      opt.setAttribute('data-costing', vCost);
+      opt.setAttribute('data-selling', vSell);
       if (vName === o.variant) opt.selected = true;
       eVar.appendChild(opt);
     });
   }
-
   editModal.show();
 }
 
@@ -431,7 +471,7 @@ async function saveEdit() {
     last_digits:   document.getElementById('e_digits').value.trim(),
     card_type:     document.getElementById('e_bank').value.trim(),
     platform:      document.getElementById('e_platform').value,
-    account:       '',   // secondary orders don't have account field in the edit modal
+    account:       '',
     order_name:    document.getElementById('e_order_name').value,
     model:         document.getElementById('e_model').value.trim(),
     variant:       document.getElementById('e_variant').value,
@@ -440,62 +480,135 @@ async function saveEdit() {
     selling_price: document.getElementById('e_selling_price').value || null,
     sale_batch:    document.getElementById('e_sale_batch').value.trim() || 'Current Sale'
   };
-
   const res = await api(`/api/secondary-orders/${id}`, 'PUT', payload);
   if (!res.success) { showToast('Update failed. Please try again.', 'error'); return; }
-
-  // Instantly update the local array — no refresh needed
   const idx = allOrders.findIndex(x => x.id === id);
-  if (idx !== -1) {
-    allOrders[idx] = { ...allOrders[idx], ...res };
-  }
-
-  populateSaleFilter();
-  filterTable();
-  editModal.hide();
+  if (idx !== -1) allOrders[idx] = { ...allOrders[idx], ...res };
+  populateSaleFilter(); filterTable(); editModal.hide();
   showToast('Order updated!');
 }
 
-async function del(id) {
-  if(!confirm("Delete this order?")) return;
-  await fetch(`/api/secondary-orders/${id}`, { method: 'DELETE' });
-  allOrders = allOrders.filter(o => o.id !== id);
-  filterTable();
+// ── Bulk Selection ────────────────────────────────────────────────────────────
+function getSelectedIds() {
+  return [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
 }
 
 function onCheckChange() {
-  const checks = document.querySelectorAll('.row-check:checked');
-  const delBtn = document.getElementById('bulkDeleteBtn');
-  const saleBtn = document.getElementById('bulkSaleBtn');
-  document.getElementById('selCount').textContent = checks.length;
-  
-  const show = checks.length > 0;
-  delBtn.style.display = show ? 'inline-flex' : 'none';
-  saleBtn.style.display = show ? 'inline-flex' : 'none';
+  const count = getSelectedIds().length;
+  document.getElementById('selCount').textContent = count;
+  const show = count > 0;
+  ['bulkSellBtn','bulkDeliveryBtn','bulkSaleBtn','bulkDeleteBtn'].forEach(id => {
+    document.getElementById(id).style.display = show ? 'inline-flex' : 'none';
+  });
 }
 
-function toggleSelectAll(cb) { document.querySelectorAll('.row-check').forEach(c => { c.checked = cb.checked; }); onCheckChange(); }
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.row-check').forEach(c => { c.checked = cb.checked; });
+  onCheckChange();
+}
 
+// ── Bulk Set Sell Price ───────────────────────────────────────────────────────
+function openBulkSell() {
+  const count = getSelectedIds().length;
+  if (!count) return;
+  document.getElementById('bulkSellCount').textContent = count;
+  document.getElementById('bulk_sell_price').value = '';
+  bulkSellModal.show();
+}
+
+async function applyBulkSell() {
+  const ids  = getSelectedIds();
+  const sell = document.getElementById('bulk_sell_price').value.trim();
+  if (!sell) { showToast('Enter a selling price', 'error'); return; }
+
+  const btn = document.querySelector('#bulkSellModal .btn-success-custom');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+
+  try {
+    const res = await api('/api/secondary-orders/bulk-set-sell', 'POST', { ids, selling_price: parseFloat(sell) });
+    if (res.success) {
+      const sellF = parseFloat(sell);
+      ids.forEach(id => {
+        const o = allOrders.find(x => x.id === id);
+        if (o) { o.selling_price = sellF; o.profit = sellF - (parseFloat(o.costing) || 0); }
+      });
+      populateSaleFilter(); filterTable();
+      bulkSellModal.hide();
+      document.getElementById('selectAll').checked = false; onCheckChange();
+      showToast(`Sell price set for ${res.updated} order(s)`);
+    } else {
+      showToast('Failed to update sell price', 'error');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+// ── Bulk Set Delivery Date ────────────────────────────────────────────────────
+function openBulkDelivery() {
+  const count = getSelectedIds().length;
+  if (!count) return;
+  document.getElementById('bulkDeliveryCount').textContent = count;
+  document.getElementById('bulk_delivery_date').value = '';
+  bulkDelivModal.show();
+}
+
+async function applyBulkDelivery() {
+  const ids  = getSelectedIds();
+  const date = document.getElementById('bulk_delivery_date').value;
+  if (!date) { showToast('Select a delivery date', 'error'); return; }
+
+  const btn = document.querySelector('#bulkDeliveryModal .btn-primary-custom');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+
+  try {
+    const res = await api('/api/secondary-orders/bulk-set-delivery', 'POST', { ids, delivery_date: date });
+    if (res.success) {
+      ids.forEach(id => {
+        const o = allOrders.find(x => x.id === id);
+        if (o) o.delivery_date = date;
+      });
+      filterTable();
+      bulkDelivModal.hide();
+      document.getElementById('selectAll').checked = false; onCheckChange();
+      showToast(`Delivery date set for ${res.updated} order(s)`);
+    } else {
+      showToast('Failed to update delivery date', 'error');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+// ── Bulk Sale & Delete ────────────────────────────────────────────────────────
 async function bulkDelete() {
-  const ids = [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
+  const ids = getSelectedIds();
   if (!ids.length || !confirm(`Delete ${ids.length} selected orders?`)) return;
   const res = await api('/api/secondary-orders/bulk-delete', 'POST', {ids});
-  if (res.success) { allOrders = allOrders.filter(o => !ids.includes(o.id)); populateSaleFilter(); filterTable(); document.getElementById('selectAll').checked = false; onCheckChange(); showToast(`${res.deleted} orders deleted.`); }
+  if (res.success) {
+    allOrders = allOrders.filter(o => !ids.includes(o.id));
+    populateSaleFilter(); filterTable();
+    document.getElementById('selectAll').checked = false; onCheckChange();
+    showToast(`${res.deleted} orders deleted.`);
+  }
 }
 
 async function promptBulkSale() {
-  const ids = [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
+  const ids = getSelectedIds();
   if (!ids.length) return;
-  
-  const newBatch = prompt(`Enter Sale Batch name for ${ids.length} orders (e.g. Sale 1, Current Sale):`, "Sale 1");
+  const newBatch = prompt(`Enter Sale Batch name for ${ids.length} orders:`, 'Sale 1');
   if (!newBatch) return;
-
-  const res = await api('/api/secondary-orders/bulk-update-sale', 'POST', {ids: ids, sale_batch: newBatch});
+  const res = await api('/api/secondary-orders/bulk-update-sale', 'POST', {ids, sale_batch: newBatch});
   if (res.success) {
     showToast(`Assigned ${ids.length} orders to ${newBatch}`);
-    await loadOrders(); 
-    document.getElementById('selectAll').checked = false;
-    onCheckChange();
+    await loadOrders();
+    document.getElementById('selectAll').checked = false; onCheckChange();
   }
 }
 
