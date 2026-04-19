@@ -1,0 +1,193 @@
+{% extends 'base.html' %}
+{% set active = '' %}
+{% block title %}Setup — OrderTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Database Setup</div>
+    <div class="page-subtitle">Auto-create or verify all Google Sheet tabs and headers</div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card-panel" style="border-top: 4px solid var(--accent2);">
+      <div class="card-panel-title"><i class="bi bi-database-gear"></i> What this does</div>
+      <div style="font-size:13px; color:var(--muted); line-height:1.8;">
+        <p style="margin-bottom:12px;">Running setup will check your Google Sheet and:</p>
+        <ul style="list-style:none;padding:0;display:flex;flex-direction:column;gap:8px;">
+          <li><i class="bi bi-plus-circle" style="color:var(--green);margin-right:8px;"></i>Create any missing tabs</li>
+          <li><i class="bi bi-pencil" style="color:var(--amber);margin-right:8px;"></i>Fix headers on tabs that exist but are wrong or blank</li>
+          <li><i class="bi bi-check-circle" style="color:var(--accent2);margin-right:8px;"></i>Leave tabs that are already correct untouched</li>
+          <li><i class="bi bi-shield-check" style="color:var(--green);margin-right:8px;"></i>Never deletes any existing data rows</li>
+        </ul>
+        <div style="margin-top:16px; padding:12px; background:var(--navy); border-radius:8px; border-left:3px solid var(--amber);">
+          <strong style="color:var(--amber); font-size:12px;">Safe to re-run</strong>
+          <p style="margin-top:4px; font-size:12px;">You can run this multiple times — it only fixes what's wrong and skips what's already correct.</p>
+        </div>
+      </div>
+
+      <button id="runBtn" class="btn-primary-custom" style="margin-top:20px; width:100%; justify-content:center; font-size:14px; padding:12px;" onclick="runSetup()">
+        <i class="bi bi-play-fill"></i> Run Setup Now
+      </button>
+    </div>
+
+    <!-- Tabs that will be set up -->
+    <div class="card-panel">
+      <div class="card-panel-title"><i class="bi bi-table"></i> Tabs to be configured</div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">
+        {% set tabs = [
+          ('main_orders', 'Main Orders', 'bi-journal-text', '14 columns'),
+          ('secondary_orders', 'Secondary Orders', 'bi-journals', '13 columns'),
+          ('offline_orders', 'Offline Sales', 'bi-shop', '12 columns'),
+          ('cards', 'Cards', 'bi-credit-card', '3 columns'),
+          ('platforms', 'Platforms', 'bi-globe', '3 columns'),
+          ('models', 'Models', 'bi-phone', '2 columns'),
+          ('variants', 'Variants', 'bi-tags', '5 columns'),
+          ('sec_order_names', 'Secondary Order Names', 'bi-list-ul', '2 columns'),
+          ('machines', 'Machines', 'bi-terminal', '2 columns'),
+          ('vendors', 'Vendors', 'bi-building', '2 columns'),
+          ('brands', 'Brands', 'bi-bag', '2 columns'),
+        ] %}
+        {% for tab_id, tab_name, icon, cols in tabs %}
+        <div id="tab_{{ tab_id }}" style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--navy); border-radius:8px;">
+          <span><i class="bi {{ icon }}" style="color:var(--muted); margin-right:8px;"></i>{{ tab_name }} <span style="color:var(--muted);">({{ cols }})</span></span>
+          <span id="status_{{ tab_id }}" style="font-size:11px; color:var(--muted);">—</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card-panel" id="resultsPanel" style="display:none;">
+      <div class="card-panel-title"><i class="bi bi-terminal"></i> Setup Log</div>
+      <div id="resultsLog" style="font-family:monospace; font-size:12px; line-height:2; display:flex; flex-direction:column; gap:4px;"></div>
+      <div id="summaryBox" style="display:none; margin-top:16px; padding:14px; border-radius:10px; font-size:13px;"></div>
+    </div>
+
+    <div class="card-panel" style="border-top:4px solid var(--navy3);">
+      <div class="card-panel-title"><i class="bi bi-info-circle"></i> Next steps after setup</div>
+      <div style="font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:12px; line-height:1.6;">
+        <div>
+          <strong style="color:var(--text);">1. Share your sheet</strong><br>
+          Make sure your Google Sheet is shared as <em>Editor</em> with the <code style="color:var(--accent2);">client_email</code> from your service account JSON.
+        </div>
+        <div>
+          <strong style="color:var(--text);">2. Add master data in Settings</strong><br>
+          Go to <a href="/settings" style="color:var(--accent2);">Settings</a> to add your cards, platforms, models, variants, machines, vendors, and brands.
+        </div>
+        <div>
+          <strong style="color:var(--text);">3. Start adding orders</strong><br>
+          Head to <a href="/" style="color:var(--accent2);">Main Orders</a> or <a href="/secondary" style="color:var(--accent2);">Secondary Orders</a> to begin tracking.
+        </div>
+        <div>
+          <strong style="color:var(--text);">4. Check the Dashboard</strong><br>
+          Once you have a few orders, <a href="/dashboard" style="color:var(--accent2);">Dashboard</a> will show your profit analytics.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function runSetup() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Running...';
+
+  // Reset all status indicators
+  document.querySelectorAll('[id^="status_"]').forEach(el => {
+    el.textContent = '⏳';
+    el.style.color = 'var(--muted)';
+  });
+
+  document.getElementById('resultsPanel').style.display = 'block';
+  document.getElementById('resultsLog').innerHTML = '<span style="color:var(--muted);">Connecting to Google Sheets...</span>';
+  document.getElementById('summaryBox').style.display = 'none';
+
+  try {
+    const res = await api('/api/setup', 'POST');
+    renderResults(res);
+  } catch (e) {
+    document.getElementById('resultsLog').innerHTML = `<span style="color:var(--red);">Error: ${e.message}</span>`;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-play-fill"></i> Run Setup Now';
+  }
+}
+
+function renderResults(res) {
+  const log = document.getElementById('resultsLog');
+  const summary = document.getElementById('summaryBox');
+  const btn = document.getElementById('runBtn');
+
+  if (!res.success && !res.results) {
+    log.innerHTML = `<span style="color:var(--red);">❌ ${res.error || 'Setup failed'}</span>`;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-play-fill"></i> Try Again';
+    return;
+  }
+
+  const statusConfig = {
+    ok:      { icon: '✅', color: 'var(--green)',   label: 'Already correct' },
+    created: { icon: '🆕', color: 'var(--accent2)', label: 'Created' },
+    fixed:   { icon: '🔧', color: 'var(--amber)',   label: 'Fixed' },
+    error:   { icon: '❌', color: 'var(--red)',      label: 'Error' },
+  };
+
+  let logHtml = '';
+  let counts = { ok: 0, created: 0, fixed: 0, error: 0 };
+
+  res.results.forEach(r => {
+    const cfg = statusConfig[r.status] || { icon: '?', color: 'var(--muted)', label: r.status };
+    counts[r.status] = (counts[r.status] || 0) + 1;
+    logHtml += `<div style="display:flex;align-items:center;gap:8px;">
+      <span>${cfg.icon}</span>
+      <span style="color:var(--text);min-width:180px;">${r.tab}</span>
+      <span style="color:${cfg.color};">${r.msg}</span>
+    </div>`;
+
+    // Update the tab status pill in the left panel
+    const statusEl = document.getElementById(`status_${r.tab}`);
+    if (statusEl) {
+      statusEl.textContent = cfg.label;
+      statusEl.style.color = cfg.color;
+    }
+  });
+
+  log.innerHTML = logHtml;
+
+  // Summary box
+  const hasErrors = counts.error > 0;
+  const allOk = !hasErrors;
+  summary.style.display = 'block';
+  summary.style.background = allOk ? 'rgba(46,204,143,0.08)' : 'rgba(231,76,60,0.08)';
+  summary.style.border = `1px solid ${allOk ? 'rgba(46,204,143,0.25)' : 'rgba(231,76,60,0.25)'}`;
+
+  let summaryText = `<strong style="color:${allOk ? 'var(--green)' : 'var(--red)'};">
+    ${allOk ? '✅ Setup complete!' : '⚠️ Setup finished with errors'}
+  </strong><br><br>`;
+  if (counts.created) summaryText += `<span style="color:var(--accent2);">${counts.created} tab(s) created</span> &nbsp;`;
+  if (counts.fixed)   summaryText += `<span style="color:var(--amber);">${counts.fixed} tab(s) fixed</span> &nbsp;`;
+  if (counts.ok)      summaryText += `<span style="color:var(--green);">${counts.ok} tab(s) already correct</span> &nbsp;`;
+  if (counts.error)   summaryText += `<br><span style="color:var(--red);">${counts.error} error(s) — check log above</span>`;
+
+  if (allOk) {
+    summaryText += `<br><br><a href="/settings" style="color:var(--accent2);font-weight:600;">→ Go to Settings to add master data</a>`;
+  }
+
+  summary.innerHTML = summaryText;
+
+  btn.disabled = false;
+  btn.innerHTML = allOk
+    ? '<i class="bi bi-check-circle"></i> Done — Run Again'
+    : '<i class="bi bi-arrow-repeat"></i> Retry';
+
+  if (allOk) showToast('Setup complete! All tabs ready.', 'success');
+  else showToast('Setup finished with some errors', 'error');
+}
+</script>
+{% endblock %}
