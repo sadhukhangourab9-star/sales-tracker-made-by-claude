@@ -1,0 +1,211 @@
+{% extends 'base.html' %}
+{% set active = 'audit' %}
+{% block title %}Audit Log — OrderTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Audit Log</div>
+    <div class="page-subtitle">Full history of every edit and deletion across all order types</div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <div class="stat-pill"><strong id="totalCount">0</strong> Events</div>
+    <button class="btn-outline-custom" onclick="loadLog()">
+      <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card-panel" style="padding:16px 20px;margin-bottom:20px;">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label">Action</label>
+      <select id="f_action" class="form-select" onchange="applyFilters()">
+        <option value="">All Actions</option>
+        <option value="EDIT">Edit</option>
+        <option value="DELETE">Delete</option>
+        <option value="BULK_SELL">Bulk Sell</option>
+        <option value="BULK_DELIVERY">Bulk Delivery</option>
+        <option value="BULK_SALE">Bulk Sale</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Sheet</label>
+      <select id="f_sheet" class="form-select" onchange="applyFilters()">
+        <option value="">All Sheets</option>
+        <option value="main_orders">Main Orders</option>
+        <option value="secondary_orders">Secondary Orders</option>
+        <option value="offline_orders">Offline Sales</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">From Date</label>
+      <input type="date" id="f_from" class="form-control" onchange="applyFilters()"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">To Date</label>
+      <input type="date" id="f_to" class="form-control" onchange="applyFilters()"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Search</label>
+      <div class="search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" class="search-input" id="f_search" style="width:100%;" placeholder="Record ID, value…" oninput="applyFilters()"/>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <button class="btn-outline-custom w-100" onclick="clearFilters()">
+        <i class="bi bi-x-circle"></i> Clear
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="card-panel" style="padding:0;overflow:hidden;">
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Action</th>
+          <th>Sheet</th>
+          <th>Record ID</th>
+          <th>Old Value</th>
+          <th>New Value</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody id="auditBody">
+        <tr><td colspan="7"><div class="empty-state"><i class="bi bi-hourglass-split"></i><p>Loading...</p></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px; border-top:1px solid var(--border);">
+    <span id="pageInfo" style="color:var(--muted); font-size:12px; font-weight:600;">0 - 0 of 0</span>
+    <div style="display:flex; gap:8px;">
+      <button id="btnPrev" onclick="changePage(-1)" class="btn-outline-custom" disabled>Previous</button>
+      <button id="btnNext" onclick="changePage(1)" class="btn-outline-custom" disabled>Next</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allLogs = [];
+let filteredLogs = [];
+let currentPage = 1;
+const PAGE_SIZE = 100;
+
+const ACTION_CONFIG = {
+  'EDIT':            { label: 'Edit',          color: 'var(--accent2)', bg: 'rgba(91,184,245,0.12)',  border: 'rgba(91,184,245,0.3)'  },
+  'DELETE':          { label: 'Delete',         color: 'var(--red)',     bg: 'rgba(231,76,60,0.12)',   border: 'rgba(231,76,60,0.3)'   },
+  'BULK_SELL':       { label: 'Bulk Sell',      color: 'var(--green)',   bg: 'rgba(46,204,143,0.12)', border: 'rgba(46,204,143,0.3)'  },
+  'BULK_DELIVERY':   { label: 'Bulk Delivery',  color: 'var(--amber)',   bg: 'rgba(245,166,35,0.12)', border: 'rgba(245,166,35,0.3)'  },
+  'BULK_SALE':       { label: 'Bulk Sale',      color: '#b388ff',        bg: 'rgba(179,136,255,0.12)', border: 'rgba(179,136,255,0.3)' },
+};
+
+const SHEET_LABELS = {
+  'main_orders':      'Main Orders',
+  'secondary_orders': 'Secondary',
+  'offline_orders':   'Offline',
+};
+
+async function loadLog() {
+  document.getElementById('auditBody').innerHTML =
+    '<tr><td colspan="7"><div class="empty-state"><i class="bi bi-hourglass-split"></i><p>Loading...</p></div></td></tr>';
+  allLogs = await api('/api/audit-log');
+  applyFilters();
+}
+
+function applyFilters() {
+  const action  = document.getElementById('f_action').value;
+  const sheet   = document.getElementById('f_sheet').value;
+  const from    = document.getElementById('f_from').value;
+  const to      = document.getElementById('f_to').value;
+  const q       = document.getElementById('f_search').value.toLowerCase();
+
+  filteredLogs = allLogs.filter(r => {
+    if (action && r.action !== action) return false;
+    if (sheet  && r.sheet  !== sheet)  return false;
+    const dateStr = (r.timestamp || '').substring(0, 10);
+    if (from && dateStr < from) return false;
+    if (to   && dateStr > to)   return false;
+    if (q) {
+      const hay = [r.record_id, r.old_value, r.new_value, r.details, r.action, r.sheet].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  currentPage = 1;
+  renderTable();
+  document.getElementById('totalCount').textContent = filteredLogs.length;
+}
+
+function clearFilters() {
+  ['f_action','f_sheet','f_from','f_to'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f_search').value = '';
+  applyFilters();
+}
+
+function renderTable() {
+  const body = document.getElementById('auditBody');
+
+  if (!filteredLogs.length) {
+    body.innerHTML = '<tr><td colspan="7"><div class="empty-state"><i class="bi bi-clock-history"></i><p>No audit events match your filters.</p></div></td></tr>';
+    document.getElementById('pageInfo').textContent = '0 - 0 of 0';
+    document.getElementById('btnPrev').disabled = true;
+    document.getElementById('btnNext').disabled = true;
+    return;
+  }
+
+  const start    = (currentPage - 1) * PAGE_SIZE;
+  const end      = Math.min(start + PAGE_SIZE, filteredLogs.length);
+  const pageData = filteredLogs.slice(start, end);
+
+  document.getElementById('pageInfo').textContent = `${start + 1} - ${end} of ${filteredLogs.length}`;
+  document.getElementById('btnPrev').disabled = currentPage === 1;
+  document.getElementById('btnNext').disabled = end >= filteredLogs.length;
+
+  body.innerHTML = pageData.map(r => {
+    const cfg   = ACTION_CONFIG[r.action] || { label: r.action, color: 'var(--muted)', bg: 'rgba(255,255,255,0.05)', border: 'var(--border)' };
+    const sheet = SHEET_LABELS[r.sheet] || r.sheet;
+    const ts    = r.timestamp || '—';
+
+    const oldVal = r.old_value ? `<span style="color:var(--red);font-size:11px;word-break:break-word;max-width:220px;display:inline-block;">${escHtml(String(r.old_value))}</span>` : '<span style="color:var(--muted);font-size:11px;">—</span>';
+    const newVal = r.new_value ? `<span style="color:var(--green);font-size:11px;word-break:break-word;max-width:220px;display:inline-block;">${escHtml(String(r.new_value))}</span>` : '<span style="color:var(--muted);font-size:11px;">—</span>';
+    const details = r.details  ? `<span style="color:var(--muted);font-size:11px;">${escHtml(String(r.details))}</span>` : '—';
+
+    return `<tr>
+      <td style="color:var(--muted);font-size:12px;white-space:nowrap;">${ts}</td>
+      <td>
+        <span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;
+          color:${cfg.color};background:${cfg.bg};border:1px solid ${cfg.border};">
+          ${cfg.label}
+        </span>
+      </td>
+      <td style="font-size:12px;color:var(--muted);">${sheet}</td>
+      <td><code style="color:var(--accent2);font-size:12px;">#${r.record_id}</code></td>
+      <td style="max-width:240px;">${oldVal}</td>
+      <td style="max-width:240px;">${newVal}</td>
+      <td style="max-width:200px;">${details}</td>
+    </tr>`;
+  }).join('');
+}
+
+function changePage(dir) {
+  currentPage += dir;
+  renderTable();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+loadLog();
+</script>
+{% endblock %}
