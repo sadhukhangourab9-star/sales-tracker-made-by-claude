@@ -71,9 +71,6 @@ def dashboard(): return render_template('dashboard.html')
 @app.route('/settings')
 def settings(): return render_template('settings.html')
 
-@app.route('/audit')
-def audit_log_page(): return render_template('audit.html')
-
 # ── Settings APIs ─────────────────────────────────────────────────────────────
 @app.route('/api/cards', methods=['GET', 'POST'])
 def manage_cards():
@@ -391,12 +388,10 @@ def bulk_del_main():
         records = ws.get_all_records()
     except Exception:
         records = []
-    deleted_records = {r['id']: f"order_name={r.get('order_name','')} model={r.get('model','')} costing={r.get('costing','')}" for r in records if r.get('id') in ids}
     rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
     for r_idx in sorted(rows_to_delete, reverse=True):
         ws.delete_row(r_idx)
     cache_clear('main_orders')
-    write_audit('DELETE', 'main_orders', list(deleted_records.keys()), old_values=deleted_records)
     return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
 @app.route('/api/main-orders/bulk-update-sale', methods=['POST'])
@@ -407,12 +402,10 @@ def bulk_sale_main():
     ws = SHEET.worksheet('main_orders')
     try:
         records = ws.get_all_records()
-        old_batches = {r['id']: r.get('sale_batch','') for r in records if r.get('id') in ids}
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 ws.update_cell(i + 2, 13, new_batch)
         cache_clear('main_orders')
-        write_audit('BULK_SALE', 'main_orders', ids, details=f'new_batch={new_batch}', old_values=old_batches, new_values={i: new_batch for i in ids})
         return jsonify({'success': True})
     except Exception as e:
         print("Bulk Sale Error:", e)
@@ -430,7 +423,6 @@ def bulk_sell_main():
     try:
         records = ws.get_all_records()
         updated = 0
-        old_sells = {r['id']: r.get('selling_price','') for r in records if r.get('id') in ids}
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 row_num = i + 2
@@ -441,7 +433,6 @@ def bulk_sell_main():
                 ws.update_cell(row_num, 11, profit)
                 updated += 1
         cache_clear('main_orders')
-        write_audit('BULK_SELL', 'main_orders', ids, details=f'new_sell={new_sell_f}', old_values=old_sells, new_values={i: new_sell_f for i in ids})
         return jsonify({'success': True, 'updated': updated})
     except Exception as e:
         print("Bulk Sell Error:", e)
@@ -457,13 +448,11 @@ def bulk_delivery_main():
     try:
         records = ws.get_all_records()
         updated = 0
-        old_dates = {r['id']: r.get('delivery_date','') for r in records if r.get('id') in ids}
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 ws.update_cell(i + 2, 12, new_date)
                 updated += 1
         cache_clear('main_orders')
-        write_audit('BULK_DELIVERY', 'main_orders', ids, details=f'new_date={new_date}', old_values=old_dates, new_values={i: new_date for i in ids})
         return jsonify({'success': True, 'updated': updated})
     except Exception as e:
         print("Bulk Delivery Error:", e)
@@ -526,25 +515,13 @@ def export_main():
 @app.route('/api/main-orders/<int:id>', methods=['DELETE', 'PUT'])
 def modify_main(id):
     if request.method == 'DELETE':
-        # Capture old values before deleting
-        try:
-            old_row = SHEET.worksheet('main_orders').find(str(id), in_column=1)
-            old_vals = SHEET.worksheet('main_orders').row_values(old_row.row)
-            old_summary = f"order_name={old_vals[5] if len(old_vals)>5 else ''} model={old_vals[6] if len(old_vals)>6 else ''} sell={old_vals[9] if len(old_vals)>9 else ''}"
-        except:
-            old_summary = ''
         cache_clear('main_orders')
-        result = delete_master_table('main_orders', id)
-        write_audit('DELETE', 'main_orders', id, old_values=old_summary)
-        return result
+        return delete_master_table('main_orders', id)
     if not SHEET: return jsonify({'success': False})
     data = request.json
     ws = SHEET.worksheet('main_orders')
     try:
         cell = ws.find(str(id), in_column=1)
-        # Capture old row before overwriting
-        old_vals = ws.row_values(cell.row)
-        old_summary = f"sell={old_vals[9] if len(old_vals)>9 else ''} delivery={old_vals[11] if len(old_vals)>11 else ''} batch={old_vals[12] if len(old_vals)>12 else ''}"
         cost = float(data.get('costing', 0) or 0)
         sell = float(data.get('selling_price', 0) or 0)
         profit = sell - cost
@@ -557,8 +534,6 @@ def modify_main(id):
             data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
         ]])
         cache_clear('main_orders')
-        new_summary = f"sell={sell} delivery={data.get('delivery_date','')} batch={data.get('sale_batch','Current Sale')}"
-        write_audit('EDIT', 'main_orders', id, old_values=old_summary, new_values=new_summary)
         return jsonify({
             'success': True, 'id': id,
             'card_type': data.get('card_type', ''), 'last_digits': last_digits,
@@ -635,12 +610,10 @@ def bulk_del_sec():
         records = ws.get_all_records()
     except Exception:
         records = []
-    deleted_records = {r['id']: f"order_name={r.get('order_name','')} model={r.get('model','')} costing={r.get('costing','')}" for r in records if r.get('id') in ids}
     rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
     for r_idx in sorted(rows_to_delete, reverse=True):
         ws.delete_row(r_idx)
     cache_clear('secondary_orders')
-    write_audit('DELETE', 'secondary_orders', list(deleted_records.keys()), old_values=deleted_records)
     return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
 @app.route('/api/secondary-orders/bulk-update-sale', methods=['POST'])
@@ -651,12 +624,10 @@ def bulk_sale_sec():
     ws = SHEET.worksheet('secondary_orders')
     try:
         records = ws.get_all_records()
-        old_batches = {r['id']: r.get('sale_batch','') for r in records if r.get('id') in ids}
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 ws.update_cell(i + 2, 12, new_batch)
         cache_clear('secondary_orders')
-        write_audit('BULK_SALE', 'secondary_orders', ids, details=f'new_batch={new_batch}', old_values=old_batches, new_values={i: new_batch for i in ids})
         return jsonify({'success': True})
     except Exception as e:
         print("Bulk Sale Error:", e)
@@ -674,7 +645,6 @@ def bulk_sell_sec():
     try:
         records = ws.get_all_records()
         updated = 0
-        old_sells = {r['id']: r.get('selling_price','') for r in records if r.get('id') in ids}
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 row_num = i + 2
@@ -685,7 +655,6 @@ def bulk_sell_sec():
                 ws.update_cell(row_num, 10, profit)
                 updated += 1
         cache_clear('secondary_orders')
-        write_audit('BULK_SELL', 'secondary_orders', ids, details=f'new_sell={new_sell_f}', old_values=old_sells, new_values={i: new_sell_f for i in ids})
         return jsonify({'success': True, 'updated': updated})
     except Exception as e:
         print("Bulk Sell Sec Error:", e)
@@ -701,13 +670,11 @@ def bulk_delivery_sec():
     try:
         records = ws.get_all_records()
         updated = 0
-        old_dates = {r['id']: r.get('delivery_date','') for r in records if r.get('id') in ids}
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 ws.update_cell(i + 2, 11, new_date)
                 updated += 1
         cache_clear('secondary_orders')
-        write_audit('BULK_DELIVERY', 'secondary_orders', ids, details=f'new_date={new_date}', old_values=old_dates, new_values={i: new_date for i in ids})
         return jsonify({'success': True, 'updated': updated})
     except Exception as e:
         print("Bulk Delivery Sec Error:", e)
@@ -770,23 +737,13 @@ def export_secondary():
 @app.route('/api/secondary-orders/<int:id>', methods=['DELETE', 'PUT'])
 def modify_sec(id):
     if request.method == 'DELETE':
-        try:
-            old_row = SHEET.worksheet('secondary_orders').find(str(id), in_column=1)
-            old_vals = SHEET.worksheet('secondary_orders').row_values(old_row.row)
-            old_summary = f"order_name={old_vals[4] if len(old_vals)>4 else ''} model={old_vals[5] if len(old_vals)>5 else ''} sell={old_vals[8] if len(old_vals)>8 else ''}"
-        except:
-            old_summary = ''
         cache_clear('secondary_orders')
-        result = delete_master_table('secondary_orders', id)
-        write_audit('DELETE', 'secondary_orders', id, old_values=old_summary)
-        return result
+        return delete_master_table('secondary_orders', id)
     if not SHEET: return jsonify({'success': False})
     data = request.json
     ws = SHEET.worksheet('secondary_orders')
     try:
         cell = ws.find(str(id), in_column=1)
-        old_vals = ws.row_values(cell.row)
-        old_summary = f"sell={old_vals[8] if len(old_vals)>8 else ''} delivery={old_vals[10] if len(old_vals)>10 else ''} batch={old_vals[11] if len(old_vals)>11 else ''}"
         cost = float(data.get('costing', 0) or 0)
         sell = float(data.get('selling_price', 0) or 0)
         profit = sell - cost
@@ -799,8 +756,6 @@ def modify_sec(id):
             data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
         ]])
         cache_clear('secondary_orders')
-        new_summary = f"sell={sell} delivery={data.get('delivery_date','')} batch={data.get('sale_batch','Current Sale')}"
-        write_audit('EDIT', 'secondary_orders', id, old_values=old_summary, new_values=new_summary)
         return jsonify({
             'success': True, 'id': id,
             'card_type': data.get('card_type', ''), 'last_digits': last_digits,
@@ -874,12 +829,10 @@ def bulk_del_offline():
         records = ws.get_all_records()
     except Exception:
         records = []
-    deleted_records = {r['id']: f"brand={r.get('brand','')} machine={r.get('machine','')} sell={r.get('selling_price','')}" for r in records if r.get('id') in ids}
     rows_to_delete = [i + 2 for i, r in enumerate(records) if r.get('id') in ids]
     for r_idx in sorted(rows_to_delete, reverse=True):
         ws.delete_row(r_idx)
     cache_clear('offline_orders')
-    write_audit('DELETE', 'offline_orders', list(deleted_records.keys()), old_values=deleted_records)
     return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
 @app.route('/api/offline-orders/export')
@@ -938,23 +891,13 @@ def export_offline():
 @app.route('/api/offline-orders/<int:id>', methods=['DELETE', 'PUT'])
 def modify_offline(id):
     if request.method == 'DELETE':
-        try:
-            old_row = SHEET.worksheet('offline_orders').find(str(id), in_column=1)
-            old_vals = SHEET.worksheet('offline_orders').row_values(old_row.row)
-            old_summary = f"brand={old_vals[5] if len(old_vals)>5 else ''} sell={old_vals[8] if len(old_vals)>8 else ''} month={old_vals[10] if len(old_vals)>10 else ''}"
-        except:
-            old_summary = ''
         cache_clear('offline_orders')
-        result = delete_master_table('offline_orders', id)
-        write_audit('DELETE', 'offline_orders', id, old_values=old_summary)
-        return result
+        return delete_master_table('offline_orders', id)
     if not SHEET: return jsonify({'success': False})
     data = request.json
     ws = SHEET.worksheet('offline_orders')
     try:
         cell = ws.find(str(id), in_column=1)
-        old_vals = ws.row_values(cell.row)
-        old_summary = f"sell={old_vals[8] if len(old_vals)>8 else ''} brand={old_vals[5] if len(old_vals)>5 else ''} month={old_vals[10] if len(old_vals)>10 else ''}"
         cost = float(data.get('costing', 0) or 0)
         sell = float(data.get('selling_price', 0) or 0)
         profit = sell - cost
@@ -966,8 +909,6 @@ def modify_offline(id):
             cost, sell, profit, data.get('sale_month', '')
         ]])
         cache_clear('offline_orders')
-        new_summary = f"sell={sell} brand={data.get('brand','')} month={data.get('sale_month','')}"
-        write_audit('EDIT', 'offline_orders', id, old_values=old_summary, new_values=new_summary)
         return jsonify({
             'success': True, 'id': id,
             'card_type': data.get('card_type', ''), 'last_digits': last_digits,
@@ -1006,7 +947,6 @@ SHEET_SCHEMA = {
     'machines':  ['id','name'],
     'vendors':   ['id','name'],
     'brands':    ['id','name'],
-    'audit_log': ['timestamp','action','sheet','record_id','old_value','new_value','details'],
 }
 
 @app.route('/setup')
@@ -1042,22 +982,6 @@ def run_setup():
     cache_clear_all()
     all_ok = all(r['status'] in ('ok', 'created', 'fixed') for r in results)
     return jsonify({'success': all_ok, 'results': results})
-
-
-# ── Audit Log API ─────────────────────────────────────────────────────────────
-@app.route('/api/audit-log')
-def get_audit_log():
-    if not SHEET: return jsonify([])
-    cached = cache_get('audit_log')
-    if cached: return jsonify(cached)
-    try:
-        records = SHEET.worksheet('audit_log').get_all_records()
-        result  = list(reversed(records))   # newest first
-        cache_set('audit_log', result)
-        return jsonify(result)
-    except Exception as e:
-        print(f"Audit log fetch error: {e}")
-        return jsonify([])
 
 # ── PWA Setup ─────────────────────────────────────────────────────────────────
 @app.route('/manifest.json')
