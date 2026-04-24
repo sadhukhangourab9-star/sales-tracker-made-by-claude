@@ -338,6 +338,9 @@
     <a href="/setup" class="nav-link {% if active=='setup' %}active{% endif %}">
       <i class="bi bi-database-gear"></i> DB Setup
     </a>
+    <a href="/audit" class="nav-link {% if active=='audit' %}active{% endif %}">
+      <i class="bi bi-clock-history"></i> Audit Log
+    </a>
   </div>
   <div class="sidebar-footer">
     <div>OrderTrack v1.0</div>
@@ -389,26 +392,68 @@
     });
   }
 
-  // Variant lookup helper — now also stores selling_price in data-selling
+  // ── Client-side variant cache ─────────────────────────────────────────────
+  // Keyed by model name. Persists for the lifetime of the page — no repeat
+  // network calls when the same model is selected again (add form, edit modal, etc.)
+  const _variantCache = new Map();
+  // If a fetch is already in-flight for a model, queue callers instead of
+  // firing duplicate requests (handles rapid re-selections gracefully).
+  const _variantInflight = new Map();
+
   async function lookupVariants(modelName, variantSelect) {
+    if (!modelName) {
+      variantSelect.innerHTML = '<option value="">Select Variant</option>';
+      return;
+    }
+
+    // Cache hit — populate instantly, zero latency
+    if (_variantCache.has(modelName)) {
+      _populateVariantSelect(variantSelect, _variantCache.get(modelName));
+      return;
+    }
+
+    // In-flight dedup — show loading only once, queue extra callers
+    if (_variantInflight.has(modelName)) {
+      variantSelect.innerHTML = '<option value="">Loading...</option>';
+      _variantInflight.get(modelName).push(variantSelect);
+      return;
+    }
+
+    // Cache miss — first fetch for this model
     variantSelect.innerHTML = '<option value="">Loading...</option>';
+    _variantInflight.set(modelName, [variantSelect]);
+
     try {
       const variants = await api(`/api/variants?model=${encodeURIComponent(modelName)}`);
-      variantSelect.innerHTML = '<option value="">Select Variant</option>';
-      variants.forEach(v => {
-        const opt = document.createElement('option');
-        const vName  = typeof v === 'object' ? v.variant_name : v;
-        const vCost  = typeof v === 'object' ? (v.costing       || '') : '';
-        const vSell  = typeof v === 'object' ? (v.selling_price || '') : '';
-        opt.value = vName;
-        opt.textContent = vName;
-        opt.setAttribute('data-costing', vCost);
-        opt.setAttribute('data-selling', vSell);
-        variantSelect.appendChild(opt);
-      });
+      _variantCache.set(modelName, variants);
+
+      // Populate every select that was waiting on this model
+      for (const sel of _variantInflight.get(modelName)) {
+        _populateVariantSelect(sel, variants);
+      }
     } catch (e) {
-      variantSelect.innerHTML = '<option value="">Error loading variants</option>';
+      for (const sel of _variantInflight.get(modelName)) {
+        sel.innerHTML = '<option value="">Error loading variants</option>';
+      }
+    } finally {
+      _variantInflight.delete(modelName);
     }
+  }
+
+  // Shared render helper used by both cache-hit and fetch paths
+  function _populateVariantSelect(variantSelect, variants) {
+    variantSelect.innerHTML = '<option value="">Select Variant</option>';
+    variants.forEach(v => {
+      const opt   = document.createElement('option');
+      const vName = typeof v === 'object' ? v.variant_name     : v;
+      const vCost = typeof v === 'object' ? (v.costing       || '') : '';
+      const vSell = typeof v === 'object' ? (v.selling_price || '') : '';
+      opt.value = vName;
+      opt.textContent = vName;
+      opt.setAttribute('data-costing', vCost);
+      opt.setAttribute('data-selling', vSell);
+      variantSelect.appendChild(opt);
+    });
   }
 
   // onVariantChange — auto-fills BOTH costing AND selling price from variant defaults.
