@@ -57,7 +57,7 @@
     </div>
     <div class="col-md-2">
       <label class="form-label">Selling Price (₹)</label>
-      <input type="number" id="f_selling" class="form-control" placeholder="0.00"/>
+      <input type="number" id="f_selling" class="form-control" placeholder="Optional"/>
     </div>
     <div class="col-12 mt-3">
       <button id="saveSaleBtn" class="btn-primary-custom" onclick="submitOrder()">
@@ -76,6 +76,13 @@
     <input type="month" id="filterMonth" class="form-select" style="width:160px;" onchange="filterTable()"/>
   </div>
   <div class="toolbar-right">
+    <!-- Bulk action buttons — shown only when rows are selected -->
+    <button class="btn-outline-custom" id="bulkCostingBtn" onclick="openBulkCosting()" style="display:none;">
+      <i class="bi bi-tag"></i> Set Costing
+    </button>
+    <button class="btn-success-custom" id="bulkSellBtn" onclick="openBulkSell()" style="display:none;">
+      <i class="bi bi-currency-rupee"></i> Set Sell Price
+    </button>
     <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">
       <i class="bi bi-trash3"></i> Delete (<span id="selCount">0</span>)
     </button>
@@ -120,7 +127,7 @@
   </div>
 </div>
 
-<!-- Edit Modal -->
+<!-- ── Edit Modal ── -->
 <div class="modal fade" id="editModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -182,6 +189,52 @@
   </div>
 </div>
 
+<!-- ── Bulk Set Costing Modal ── -->
+<div class="modal fade" id="bulkCostingModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-tag me-2"></i>Set Costing</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
+          Apply one costing to <strong id="bulkCostingCount" style="color:var(--text);">0</strong> selected sales. Profit will be recalculated automatically.
+        </p>
+        <label class="form-label">Costing (₹)</label>
+        <input type="number" id="bulk_costing_val" class="form-control" placeholder="e.g. 18500" step="0.01"/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-primary-custom" onclick="applyBulkCosting()"><i class="bi bi-check-lg"></i> Apply to Selected</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Bulk Set Sell Price Modal ── -->
+<div class="modal fade" id="bulkSellModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-currency-rupee me-2"></i>Set Sell Price</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
+          Apply one selling price to <strong id="bulkSellCount" style="color:var(--text);">0</strong> selected sales. Profit will be recalculated automatically.
+        </p>
+        <label class="form-label">Selling Price (₹)</label>
+        <input type="number" id="bulk_sell_price" class="form-control" placeholder="e.g. 21450" step="0.01"/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-success-custom" onclick="applyBulkSell()"><i class="bi bi-check-lg"></i> Apply to Selected</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -190,7 +243,9 @@ let allOrders = [];
 let filteredOrders = [];
 let currentPage = 1;
 const PAGE_SIZE = 50;
-const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+const editModal        = new bootstrap.Modal(document.getElementById('editModal'));
+const bulkCostingModal = new bootstrap.Modal(document.getElementById('bulkCostingModal'));
+const bulkSellModal    = new bootstrap.Modal(document.getElementById('bulkSellModal'));
 
 // ── Init ──────────────────────────────────────────────────────────
 async function init() {
@@ -305,7 +360,19 @@ function renderTable() {
   document.getElementById('btnNext').disabled = end >= filteredOrders.length;
 
   body.innerHTML = pageData.map(o => {
-    const pColor = parseFloat(o.profit) >= 0 ? 'var(--green)' : 'var(--red)';
+    const hasSell  = o.selling_price && parseFloat(o.selling_price) > 0;
+    const pColor   = parseFloat(o.profit) >= 0 ? 'var(--green)' : 'var(--red)';
+
+    // Sell price cell — amber "pending" italic when no sell price, like main orders
+    const sellCell = hasSell
+      ? `<span style="font-weight:600;">${formatCost(o.selling_price)}</span>`
+      : `<span style="color:var(--amber);font-size:11px;font-style:italic;">pending</span>`;
+
+    // Profit cell — blank dash until sell price is entered, like main orders
+    const profitCell = hasSell
+      ? `<span style="color:${pColor};font-weight:bold;">${formatCost(o.profit)}</span>`
+      : `<span style="color:var(--muted);">—</span>`;
+
     return `<tr>
       <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
       <td><span class="badge-card" style="background:var(--navy3);">${o.sale_month || '—'}</span></td>
@@ -317,8 +384,8 @@ function renderTable() {
       <td style="font-weight:bold;">${o.brand || '—'}</td>
       <td>${o.sale_type || '—'}</td>
       <td style="color:var(--muted)">${formatCost(o.costing)}</td>
-      <td style="font-weight:600;">${formatCost(o.selling_price)}</td>
-      <td style="color:${pColor}; font-weight:bold;">${formatCost(o.profit)}</td>
+      <td>${sellCell}</td>
+      <td>${profitCell}</td>
       <td>
         <div style="display:flex;gap:6px;">
           <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})"><i class="bi bi-pencil"></i></button>
@@ -336,7 +403,10 @@ function changePage(dir) {
 }
 
 function updateStats() {
-  const totalProfit = filteredOrders.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  // Only count profit from rows that have a sell price set
+  const totalProfit = filteredOrders
+    .filter(o => o.selling_price && parseFloat(o.selling_price) > 0)
+    .reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
   document.getElementById('totalCount').textContent  = filteredOrders.length;
   document.getElementById('totalProfit').textContent = `Profit: ${formatCost(totalProfit)}`;
 }
@@ -412,20 +482,117 @@ async function del(id) {
   filterTable();
 }
 
-// ── Bulk Delete ───────────────────────────────────────────────────
+// ── Bulk Selection ────────────────────────────────────────────────
+function getSelectedIds() {
+  return [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
+}
+
 function toggleSelectAll(cb) {
   document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked);
   checkBulk();
 }
 
 function checkBulk() {
-  const count = document.querySelectorAll('.row-check:checked').length;
+  const count = getSelectedIds().length;
   document.getElementById('selCount').textContent = count;
-  document.getElementById('bulkDeleteBtn').style.display = count ? 'inline-flex' : 'none';
+  const show = count > 0;
+  ['bulkCostingBtn', 'bulkSellBtn', 'bulkDeleteBtn'].forEach(id => {
+    document.getElementById(id).style.display = show ? 'inline-flex' : 'none';
+  });
 }
 
+// ── Bulk Set Costing ──────────────────────────────────────────────
+function openBulkCosting() {
+  const count = getSelectedIds().length;
+  if (!count) return;
+  document.getElementById('bulkCostingCount').textContent = count;
+  document.getElementById('bulk_costing_val').value = '';
+  bulkCostingModal.show();
+}
+
+async function applyBulkCosting() {
+  const ids  = getSelectedIds();
+  const cost = document.getElementById('bulk_costing_val').value.trim();
+  if (!cost) { showToast('Enter a costing value', 'error'); return; }
+
+  const btn = document.querySelector('#bulkCostingModal .btn-primary-custom');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+
+  try {
+    const res = await api('/api/offline-orders/bulk-set-costing', 'POST', { ids, costing: parseFloat(cost) });
+    if (res.success) {
+      const costF = parseFloat(cost);
+      ids.forEach(id => {
+        const o = allOrders.find(x => x.id === id);
+        if (o) {
+          o.costing = costF;
+          const sell = parseFloat(o.selling_price) || 0;
+          o.profit = sell > 0 ? sell - costF : 0;
+        }
+      });
+      filterTable();
+      bulkCostingModal.hide();
+      document.getElementById('selectAll').checked = false;
+      checkBulk();
+      showToast(`Costing set for ${res.updated} sale(s)`);
+    } else {
+      showToast('Failed to update costing', 'error');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+// ── Bulk Set Sell Price ───────────────────────────────────────────
+function openBulkSell() {
+  const count = getSelectedIds().length;
+  if (!count) return;
+  document.getElementById('bulkSellCount').textContent = count;
+  document.getElementById('bulk_sell_price').value = '';
+  bulkSellModal.show();
+}
+
+async function applyBulkSell() {
+  const ids  = getSelectedIds();
+  const sell = document.getElementById('bulk_sell_price').value.trim();
+  if (!sell) { showToast('Enter a selling price', 'error'); return; }
+
+  const btn = document.querySelector('#bulkSellModal .btn-success-custom');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+
+  try {
+    const res = await api('/api/offline-orders/bulk-set-sell', 'POST', { ids, selling_price: parseFloat(sell) });
+    if (res.success) {
+      const sellF = parseFloat(sell);
+      ids.forEach(id => {
+        const o = allOrders.find(x => x.id === id);
+        if (o) {
+          o.selling_price = sellF;
+          o.profit = sellF - (parseFloat(o.costing) || 0);
+        }
+      });
+      filterTable();
+      bulkSellModal.hide();
+      document.getElementById('selectAll').checked = false;
+      checkBulk();
+      showToast(`Sell price set for ${res.updated} sale(s)`);
+    } else {
+      showToast('Failed to update sell price', 'error');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+// ── Bulk Delete ───────────────────────────────────────────────────
 async function bulkDelete() {
-  const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
+  const ids = getSelectedIds();
   if (!ids.length || !confirm(`Delete ${ids.length} sales?`)) return;
   const res = await api('/api/offline-orders/bulk-delete', 'POST', { ids });
   if (res.success !== false) {
