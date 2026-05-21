@@ -835,6 +835,64 @@ def bulk_del_offline():
     cache_clear('offline_orders')
     return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
+# ── NEW: Bulk Set Costing for Offline Orders ──────────────────────────────────
+@app.route('/api/offline-orders/bulk-set-costing', methods=['POST'])
+def bulk_costing_offline():
+    if not SHEET: return jsonify({'success': False})
+    ids      = request.json.get('ids', [])
+    new_cost = request.json.get('costing')
+    if not ids or new_cost is None: return jsonify({'success': False})
+    try: new_cost_f = float(new_cost)
+    except (ValueError, TypeError): return jsonify({'success': False, 'error': 'invalid costing'})
+    ws = SHEET.worksheet('offline_orders')
+    # offline_orders columns: id(1) card_type(2) last_digits(3) machine(4) vendor(5)
+    #   brand(6) sale_type(7) costing(8) selling_price(9) profit(10) sale_month(11) created_at(12)
+    try:
+        records = ws.get_all_records()
+        updated = 0
+        for i, r in enumerate(records):
+            if r.get('id') in ids:
+                row_num = i + 2
+                try: sell = float(r.get('selling_price') or 0)
+                except: sell = 0.0
+                profit = round(sell - new_cost_f, 2)
+                ws.update_cell(row_num, 8, new_cost_f)   # costing column
+                ws.update_cell(row_num, 10, profit)       # profit column
+                updated += 1
+        cache_clear('offline_orders')
+        return jsonify({'success': True, 'updated': updated})
+    except Exception as e:
+        print("Bulk Costing Offline Error:", e)
+        return jsonify({'success': False})
+
+# ── NEW: Bulk Set Sell Price for Offline Orders ───────────────────────────────
+@app.route('/api/offline-orders/bulk-set-sell', methods=['POST'])
+def bulk_sell_offline():
+    if not SHEET: return jsonify({'success': False})
+    ids      = request.json.get('ids', [])
+    new_sell = request.json.get('selling_price')
+    if not ids or new_sell is None: return jsonify({'success': False})
+    try: new_sell_f = float(new_sell)
+    except (ValueError, TypeError): return jsonify({'success': False, 'error': 'invalid price'})
+    ws = SHEET.worksheet('offline_orders')
+    try:
+        records = ws.get_all_records()
+        updated = 0
+        for i, r in enumerate(records):
+            if r.get('id') in ids:
+                row_num = i + 2
+                try: cost = float(r.get('costing') or 0)
+                except: cost = 0.0
+                profit = round(new_sell_f - cost, 2)
+                ws.update_cell(row_num, 9,  new_sell_f)  # selling_price column
+                ws.update_cell(row_num, 10, profit)       # profit column
+                updated += 1
+        cache_clear('offline_orders')
+        return jsonify({'success': True, 'updated': updated})
+    except Exception as e:
+        print("Bulk Sell Offline Error:", e)
+        return jsonify({'success': False})
+
 @app.route('/api/offline-orders/export')
 def export_offline():
     if not SHEET: return "No sheet connected", 500
