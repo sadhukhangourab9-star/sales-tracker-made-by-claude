@@ -192,13 +192,20 @@ Chart.defaults.font.family = "'DM Sans', sans-serif";
 
 const COLORS = ['#3b9ddd','#2ecc8f','#f5a623','#e74c3c','#9b59b6','#1abc9c','#e67e22','#e91e63'];
 
+// ── Helper: only offline orders that have a sell price set ────────
+// Offline orders saved without a sell price have profit = 0 - costing
+// (a negative number baked into the sheet), so we must exclude them
+// from all profit/spend calculations — exactly like offline_orders.html does.
+function offDone(arr) {
+  return arr.filter(o => o.selling_price && parseFloat(o.selling_price) > 0);
+}
+
 // ── Init ──────────────────────────────────────────────────────────
 async function initDashboard() {
-  // Show loading state
   document.getElementById('kpi_profit').textContent = '...';
-  document.getElementById('kpi_spend').textContent = '...';
+  document.getElementById('kpi_spend').textContent  = '...';
   document.getElementById('kpi_orders').textContent = '...';
-  document.getElementById('kpi_avg').textContent = '...';
+  document.getElementById('kpi_avg').textContent    = '...';
 
   const [main, sec, off] = await Promise.all([
     api('/api/main-orders'),
@@ -245,21 +252,21 @@ function applyFilters() {
   });
 
   fOff = rawOff.filter(o => {
-    const m = o.sale_month || o.created_at?.substring(0, 7) || '';
-    return inRange(m + '-01');
+    const m = o.sale_month || (o.created_at || '').substring(0, 7);
+    return inRange(m.length === 7 ? m + '-01' : m);
   });
 
   // Apply channel filter
-  if (channel === 'online') fOff = [];
+  if (channel === 'online')  fOff = [];
   if (channel === 'offline') { fMain = []; fSec = []; }
 
   renderAll();
 }
 
 function clearFilters() {
-  document.getElementById('f_from').value   = '';
-  document.getElementById('f_to').value     = '';
-  document.getElementById('f_batch').value  = 'ALL';
+  document.getElementById('f_from').value    = '';
+  document.getElementById('f_to').value      = '';
+  document.getElementById('f_batch').value   = 'ALL';
   document.getElementById('f_channel').value = 'ALL';
   applyFilters();
 }
@@ -277,19 +284,27 @@ function renderAll() {
 
 // ── KPIs ──────────────────────────────────────────────────────────
 function updateKPIs() {
-  const allOrders = [...fMain, ...fSec, ...fOff];
+  // Only count offline orders that have a sell price — pending ones have
+  // profit = -costing baked in and must not pollute totals.
+  const fOffDone = offDone(fOff);
+
+  const allOrders   = [...fMain, ...fSec, ...fOffDone];
   const totalOrders = allOrders.length;
   const totalProfit = allOrders.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
-  const totalSpend  = [...fMain, ...fSec].reduce((s, o) => s + (parseFloat(o.costing) || 0), 0)
-                    + fOff.reduce((s, o) => s + (parseFloat(o.costing) || 0), 0);
-  const avgProfit   = totalOrders ? totalProfit / totalOrders : 0;
+
+  // Spend: online always counts costing; offline only when sell price is set
+  const totalSpend =
+    [...fMain, ...fSec].reduce((s, o) => s + (parseFloat(o.costing) || 0), 0) +
+    fOffDone.reduce((s, o) => s + (parseFloat(o.costing) || 0), 0);
+
+  const avgProfit = totalOrders ? totalProfit / totalOrders : 0;
 
   const onlineProfit  = [...fMain, ...fSec].reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
   const mainProfit    = fMain.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
   const secProfit     = fSec.reduce((s, o)  => s + (parseFloat(o.profit) || 0), 0);
-  const offlineProfit = fOff.reduce((s, o)  => s + (parseFloat(o.profit) || 0), 0);
-  const instantProfit = fOff.filter(o => o.sale_type === 'INSTANT').reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
-  const emiProfit     = fOff.filter(o => o.sale_type === 'EMI').reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  const offlineProfit = fOffDone.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  const instantProfit = fOffDone.filter(o => o.sale_type === 'INSTANT').reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  const emiProfit     = fOffDone.filter(o => o.sale_type === 'EMI').reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
 
   document.getElementById('kpi_orders').textContent  = totalOrders.toLocaleString('en-IN');
   document.getElementById('kpi_profit').textContent  = formatCost(totalProfit);
@@ -302,17 +317,21 @@ function updateKPIs() {
   document.getElementById('kpi_instant').textContent = formatCost(instantProfit);
   document.getElementById('kpi_emi').textContent     = formatCost(emiProfit);
 
-  // Subtitle updates
+  // Subtitle: show total offline count, but note how many are pending
+  const offPending = fOff.length - fOffDone.length;
+  const offSub = offPending > 0
+    ? `${fOffDone.length} completed · ${offPending} pending`
+    : `${fOffDone.length} offline`;
   document.getElementById('kpi_orders_sub').textContent =
-    `${fMain.length} main · ${fSec.length} sec · ${fOff.length} offline`;
+    `${fMain.length} main · ${fSec.length} sec · ${offSub}`;
 }
 
 // ── Monthly Chart ─────────────────────────────────────────────────
 let monthlyData = {};
 
 function rebuildMonthlyChart() {
-  // Crunch monthly data
   monthlyData = {};
+
   [...fMain, ...fSec].forEach(o => {
     const m = (o.delivery_date || o.created_at || '').substring(0, 7);
     if (m.length === 7) {
@@ -320,7 +339,9 @@ function rebuildMonthlyChart() {
       monthlyData[m].on += parseFloat(o.profit) || 0;
     }
   });
-  fOff.forEach(o => {
+
+  // Only completed offline orders contribute to the monthly chart
+  offDone(fOff).forEach(o => {
     const m = o.sale_month || (o.created_at || '').substring(0, 7);
     if (m.length === 7) {
       if (!monthlyData[m]) monthlyData[m] = { on: 0, off: 0 };
@@ -328,9 +349,9 @@ function rebuildMonthlyChart() {
     }
   });
 
-  const labels   = Object.keys(monthlyData).sort();
-  const onData   = labels.map(l => Math.round(monthlyData[l].on));
-  const offData  = labels.map(l => Math.round(monthlyData[l].off));
+  const labels    = Object.keys(monthlyData).sort();
+  const onData    = labels.map(l => Math.round(monthlyData[l].on));
+  const offData   = labels.map(l => Math.round(monthlyData[l].off));
   const chartType = document.getElementById('chartTypeToggle').value;
 
   if (charts.monthly) charts.monthly.destroy();
@@ -402,7 +423,7 @@ function rebuildMonthlyChart() {
 // ── Channel Donut ─────────────────────────────────────────────────
 function buildChannelChart() {
   const onlineProfit  = [...fMain, ...fSec].reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
-  const offlineProfit = fOff.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  const offlineProfit = offDone(fOff).reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
 
   if (charts.channel) charts.channel.destroy();
   charts.channel = new Chart(document.getElementById('channelChart'), {
@@ -439,6 +460,7 @@ function buildChannelChart() {
 // ── Cards Donut ───────────────────────────────────────────────────
 function buildCardChart() {
   const cards = {};
+  // Count card usage across all orders (pending offline still used the card)
   [...fMain, ...fSec, ...fOff].forEach(o => {
     if (o.card_type) cards[o.card_type] = (cards[o.card_type] || 0) + 1;
   });
@@ -576,14 +598,14 @@ function buildBatchTable() {
   }
 
   const rows = batches.map(batch => {
-    const orders   = online.filter(o => (o.sale_batch || 'Current Sale') === batch);
-    const spend    = orders.reduce((s, o) => s + (parseFloat(o.costing) || 0), 0);
-    const revenue  = orders.reduce((s, o) => s + (parseFloat(o.selling_price) || 0), 0);
-    const profit   = orders.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
-    const avg      = orders.length ? profit / orders.length : 0;
-    const margin   = revenue ? (profit / revenue * 100) : 0;
-    const pColor   = profit >= 0 ? 'var(--green)' : 'var(--red)';
-    const mColor   = margin >= 0 ? 'var(--green)' : 'var(--red)';
+    const orders  = online.filter(o => (o.sale_batch || 'Current Sale') === batch);
+    const spend   = orders.reduce((s, o) => s + (parseFloat(o.costing) || 0), 0);
+    const revenue = orders.reduce((s, o) => s + (parseFloat(o.selling_price) || 0), 0);
+    const profit  = orders.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+    const avg     = orders.length ? profit / orders.length : 0;
+    const margin  = revenue ? (profit / revenue * 100) : 0;
+    const pColor  = profit >= 0 ? 'var(--green)' : 'var(--red)';
+    const mColor  = margin >= 0 ? 'var(--green)' : 'var(--red)';
 
     return `<tr>
       <td><span class="badge-card" style="background:var(--navy);border:1px solid var(--border);">${batch}</span></td>
@@ -597,12 +619,12 @@ function buildBatchTable() {
   });
 
   // Totals row
-  const totalOrders  = online.length;
-  const totalSpend   = online.reduce((s, o) => s + (parseFloat(o.costing) || 0), 0);
-  const totalRev     = online.reduce((s, o) => s + (parseFloat(o.selling_price) || 0), 0);
-  const totalProfit  = online.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
-  const totalAvg     = totalOrders ? totalProfit / totalOrders : 0;
-  const totalMargin  = totalRev ? (totalProfit / totalRev * 100) : 0;
+  const totalOrders = online.length;
+  const totalSpend  = online.reduce((s, o) => s + (parseFloat(o.costing) || 0), 0);
+  const totalRev    = online.reduce((s, o) => s + (parseFloat(o.selling_price) || 0), 0);
+  const totalProfit = online.reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
+  const totalAvg    = totalOrders ? totalProfit / totalOrders : 0;
+  const totalMargin = totalRev ? (totalProfit / totalRev * 100) : 0;
 
   rows.push(`<tr style="border-top:2px solid var(--border);background:rgba(59,157,221,0.05);">
     <td style="font-weight:700;color:var(--accent2);">TOTAL</td>
