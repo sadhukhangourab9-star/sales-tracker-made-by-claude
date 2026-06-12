@@ -33,6 +33,12 @@
       </select>
     </div>
     <div class="col-md-2">
+      <label class="form-label">Offline Month</label>
+      <select id="f_off_month" class="form-select" onchange="applyFilters()">
+        <option value="ALL">All Months</option>
+      </select>
+    </div>
+    <div class="col-md-2">
       <label class="form-label">Channel</label>
       <select id="f_channel" class="form-select" onchange="applyFilters()">
         <option value="ALL">All Channels</option>
@@ -217,22 +223,36 @@ async function initDashboard() {
   rawSec  = sec;
   rawOff  = off;
 
-  // Populate batch filter from online orders
+  // Populate online batch filter
   const batches = [...new Set([...main, ...sec].map(o => o.sale_batch || 'Current Sale'))].sort();
-  const sel = document.getElementById('f_batch');
-  sel.innerHTML = '<option value="ALL">All Batches</option>';
-  batches.forEach(b => sel.innerHTML += `<option value="${b}">${b}</option>`);
+  const selBatch = document.getElementById('f_batch');
+  selBatch.innerHTML = '<option value="ALL">All Batches</option>';
+  batches.forEach(b => selBatch.innerHTML += `<option value="${b}">${b}</option>`);
+
+  // Populate offline month filter — derived directly from sale_month field
+  const offMonths = [...new Set(
+    off.map(o => o.sale_month || (o.created_at || '').substring(0, 7))
+       .filter(m => m && m.length === 7)
+  )].sort().reverse();
+  const selOffMonth = document.getElementById('f_off_month');
+  selOffMonth.innerHTML = '<option value="ALL">All Months</option>';
+  offMonths.forEach(m => {
+    const label = new Date(m + '-02').toLocaleString('en-IN', { month: 'short', year: 'numeric' });
+    selOffMonth.innerHTML += `<option value="${m}">${label}</option>`;
+  });
 
   applyFilters();
 }
 
 // ── Filters ───────────────────────────────────────────────────────
 function applyFilters() {
-  const from    = document.getElementById('f_from').value;
-  const to      = document.getElementById('f_to').value;
-  const batch   = document.getElementById('f_batch').value;
-  const channel = document.getElementById('f_channel').value;
+  const from     = document.getElementById('f_from').value;
+  const to       = document.getElementById('f_to').value;
+  const batch    = document.getElementById('f_batch').value;
+  const offMonth = document.getElementById('f_off_month').value;
+  const channel  = document.getElementById('f_channel').value;
 
+  // inRange — used for online orders (delivery_date / created_at based)
   function inRange(dateStr) {
     if (!dateStr) return true;
     const m = dateStr.substring(0, 7);
@@ -241,6 +261,7 @@ function applyFilters() {
     return true;
   }
 
+  // Filter online orders by from/to range + batch
   fMain = rawMain.filter(o => {
     const d = o.delivery_date || o.created_at || '';
     return inRange(d) && (batch === 'ALL' || (o.sale_batch || 'Current Sale') === batch);
@@ -251,12 +272,19 @@ function applyFilters() {
     return inRange(d) && (batch === 'ALL' || (o.sale_batch || 'Current Sale') === batch);
   });
 
+  // Filter offline orders by their own dedicated month selector (sale_month field)
+  // This is a direct string match — no ambiguity with date parsing.
   fOff = rawOff.filter(o => {
     const m = o.sale_month || (o.created_at || '').substring(0, 7);
-    return inRange(m.length === 7 ? m + '-01' : m);
+    if (offMonth !== 'ALL') return m === offMonth;
+    // If no specific offline month selected, still respect the from/to range
+    // by treating sale_month as the date reference
+    if (from && m < from) return false;
+    if (to   && m > to)   return false;
+    return true;
   });
 
-  // Apply channel filter
+  // Apply channel filter last
   if (channel === 'online')  fOff = [];
   if (channel === 'offline') { fMain = []; fSec = []; }
 
@@ -264,10 +292,11 @@ function applyFilters() {
 }
 
 function clearFilters() {
-  document.getElementById('f_from').value    = '';
-  document.getElementById('f_to').value      = '';
-  document.getElementById('f_batch').value   = 'ALL';
-  document.getElementById('f_channel').value = 'ALL';
+  document.getElementById('f_from').value      = '';
+  document.getElementById('f_to').value        = '';
+  document.getElementById('f_batch').value     = 'ALL';
+  document.getElementById('f_off_month').value = 'ALL';
+  document.getElementById('f_channel').value   = 'ALL';
   applyFilters();
 }
 
@@ -317,7 +346,7 @@ function updateKPIs() {
   document.getElementById('kpi_instant').textContent = formatCost(instantProfit);
   document.getElementById('kpi_emi').textContent     = formatCost(emiProfit);
 
-  // Subtitle: show total offline count, but note how many are pending
+  // Subtitle: show total offline count and how many are pending
   const offPending = fOff.length - fOffDone.length;
   const offSub = offPending > 0
     ? `${fOffDone.length} completed · ${offPending} pending`
