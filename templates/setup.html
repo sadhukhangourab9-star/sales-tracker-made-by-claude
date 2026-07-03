@@ -23,8 +23,12 @@
           <li><i class="bi bi-shield-check" style="color:var(--green);margin-right:8px;"></i>Never deletes any existing data rows</li>
         </ul>
         <div style="margin-top:16px; padding:12px; background:var(--navy); border-radius:8px; border-left:3px solid var(--amber);">
-          <strong style="color:var(--amber); font-size:12px;">Safe to re-run</strong>
-          <p style="margin-top:4px; font-size:12px;">You can run this multiple times — it only fixes what's wrong and skips what's already correct.</p>
+          <strong style="color:var(--amber); font-size:12px;">Important after voucher update</strong>
+          <p style="margin-top:4px; font-size:12px;">
+            If you had existing main_orders or secondary_orders data, running setup will update the headers
+            to add the new voucher_name, voucher_value, and card_value columns. Your existing data rows
+            are never deleted — the new columns will simply be blank for old orders.
+          </p>
         </div>
       </div>
 
@@ -38,17 +42,18 @@
       <div class="card-panel-title"><i class="bi bi-table"></i> Tabs to be configured</div>
       <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">
         {% set tabs = [
-          ('main_orders', 'Main Orders', 'bi-journal-text', '14 columns'),
-          ('secondary_orders', 'Secondary Orders', 'bi-journals', '13 columns'),
-          ('offline_orders', 'Offline Sales', 'bi-shop', '12 columns'),
-          ('cards', 'Cards', 'bi-credit-card', '3 columns'),
-          ('platforms', 'Platforms', 'bi-globe', '3 columns'),
-          ('models', 'Models', 'bi-phone', '2 columns'),
-          ('variants', 'Variants', 'bi-tags', '5 columns'),
-          ('sec_order_names', 'Secondary Order Names', 'bi-list-ul', '2 columns'),
-          ('machines', 'Machines', 'bi-terminal', '2 columns'),
-          ('vendors', 'Vendors', 'bi-building', '2 columns'),
-          ('brands', 'Brands', 'bi-bag', '2 columns'),
+          ('main_orders',       'Main Orders',            'bi-journal-text',      '17 columns'),
+          ('secondary_orders',  'Secondary Orders',       'bi-journals',          '16 columns'),
+          ('offline_orders',    'Offline Sales',          'bi-shop',              '12 columns'),
+          ('cards',             'Cards',                  'bi-credit-card',       '3 columns'),
+          ('platforms',         'Platforms',              'bi-globe',             '3 columns'),
+          ('models',            'Models',                 'bi-phone',             '2 columns'),
+          ('variants',          'Variants',               'bi-tags',              '5 columns'),
+          ('sec_order_names',   'Secondary Order Names',  'bi-list-ul',           '2 columns'),
+          ('vouchers',          'Vouchers',               'bi-ticket-perforated', '3 columns'),
+          ('machines',          'Machines',               'bi-terminal',          '2 columns'),
+          ('vendors',           'Vendors',                'bi-building',          '2 columns'),
+          ('brands',            'Brands',                 'bi-bag',               '2 columns'),
         ] %}
         {% for tab_id, tab_name, icon, cols in tabs %}
         <div id="tab_{{ tab_id }}" style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--navy); border-radius:8px;">
@@ -75,16 +80,20 @@
           Make sure your Google Sheet is shared as <em>Editor</em> with the <code style="color:var(--accent2);">client_email</code> from your service account JSON.
         </div>
         <div>
-          <strong style="color:var(--text);">2. Add master data in Settings</strong><br>
-          Go to <a href="/settings" style="color:var(--accent2);">Settings</a> to add your cards, platforms, models, variants, machines, vendors, and brands.
+          <strong style="color:var(--text);">2. Add Vouchers in Settings</strong><br>
+          Go to <a href="/settings" style="color:var(--accent2);">Settings</a> → Vouchers section to add your voucher types and values (e.g. HDFC Gift Card ₹6000).
         </div>
         <div>
-          <strong style="color:var(--text);">3. Start adding orders</strong><br>
-          Head to <a href="/" style="color:var(--accent2);">Main Orders</a> or <a href="/secondary" style="color:var(--accent2);">Secondary Orders</a> to begin tracking.
+          <strong style="color:var(--text);">3. Add other master data</strong><br>
+          Add your cards, platforms, models, variants, machines, vendors, and brands.
         </div>
         <div>
-          <strong style="color:var(--text);">4. Check the Dashboard</strong><br>
-          Once you have a few orders, <a href="/dashboard" style="color:var(--accent2);">Dashboard</a> will show your profit analytics.
+          <strong style="color:var(--text);">4. Start adding orders</strong><br>
+          Head to <a href="/" style="color:var(--accent2);">Main Orders</a> or <a href="/secondary" style="color:var(--accent2);">Secondary Orders</a>. Select a voucher from the dropdown — the voucher value and card deduction will fill automatically.
+        </div>
+        <div>
+          <strong style="color:var(--text);">5. Check the Dashboard</strong><br>
+          Once you have orders, <a href="/dashboard" style="color:var(--accent2);">Dashboard</a> shows your profit analytics.
         </div>
       </div>
     </div>
@@ -99,7 +108,6 @@ async function runSetup() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Running...';
 
-  // Reset all status indicators
   document.querySelectorAll('[id^="status_"]').forEach(el => {
     el.textContent = '⏳';
     el.style.color = 'var(--muted)';
@@ -120,9 +128,9 @@ async function runSetup() {
 }
 
 function renderResults(res) {
-  const log = document.getElementById('resultsLog');
+  const log     = document.getElementById('resultsLog');
   const summary = document.getElementById('summaryBox');
-  const btn = document.getElementById('runBtn');
+  const btn     = document.getElementById('runBtn');
 
   if (!res.success && !res.results) {
     log.innerHTML = `<span style="color:var(--red);">❌ ${res.error || 'Setup failed'}</span>`;
@@ -150,7 +158,6 @@ function renderResults(res) {
       <span style="color:${cfg.color};">${r.msg}</span>
     </div>`;
 
-    // Update the tab status pill in the left panel
     const statusEl = document.getElementById(`status_${r.tab}`);
     if (statusEl) {
       statusEl.textContent = cfg.label;
@@ -160,12 +167,11 @@ function renderResults(res) {
 
   log.innerHTML = logHtml;
 
-  // Summary box
   const hasErrors = counts.error > 0;
-  const allOk = !hasErrors;
-  summary.style.display = 'block';
+  const allOk     = !hasErrors;
+  summary.style.display    = 'block';
   summary.style.background = allOk ? 'rgba(46,204,143,0.08)' : 'rgba(231,76,60,0.08)';
-  summary.style.border = `1px solid ${allOk ? 'rgba(46,204,143,0.25)' : 'rgba(231,76,60,0.25)'}`;
+  summary.style.border     = `1px solid ${allOk ? 'rgba(46,204,143,0.25)' : 'rgba(231,76,60,0.25)'}`;
 
   let summaryText = `<strong style="color:${allOk ? 'var(--green)' : 'var(--red)'};">
     ${allOk ? '✅ Setup complete!' : '⚠️ Setup finished with errors'}
