@@ -46,11 +46,17 @@ def cache_clear_all():
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def get_next_id(ws):
     try:
-        col = ws.col_values(1)  # Only fetch column A — much faster
-        ids = [int(x) for x in col[1:] if str(x).isdigit()]  # skip header
+        col = ws.col_values(1)
+        ids = [int(x) for x in col[1:] if str(x).isdigit()]
         return max(ids) + 1 if ids else 1
     except Exception:
         return 1
+
+def safe_float(val, default=0.0):
+    try:
+        return float(val) if val not in (None, '', 'None') else default
+    except (ValueError, TypeError):
+        return default
 
 # ── Page Routes ───────────────────────────────────────────────────────────────
 @app.route('/')
@@ -84,7 +90,7 @@ def manage_cards():
         except Exception:
             cards = []
         for c in cards:
-            if str(c.get('last_digits', '')).startswith("'"): 
+            if str(c.get('last_digits', '')).startswith("'"):
                 c['last_digits'] = str(c['last_digits'])[1:]
         result = list(reversed(cards))
         cache_set('cards', result)
@@ -141,7 +147,6 @@ def handle_master_table(table_name, req, field_name='name'):
     new_id = get_next_id(ws)
     ws.append_row([new_id, data.get(field_name, '')])
     cache_clear(f'master_{table_name}')
-    # Also clear dependent caches
     if table_name == 'platforms':
         cache_clear('platform_names')
     if table_name == 'models':
@@ -190,6 +195,31 @@ def api_brands(): return handle_master_table('brands', request, 'name')
 @app.route('/api/brands/<int:id>', methods=['DELETE'])
 def api_del_brands(id): return delete_master_table('brands', id)
 
+# ── Vouchers API ──────────────────────────────────────────────────────────────
+@app.route('/api/vouchers', methods=['GET', 'POST'])
+def api_vouchers():
+    if not SHEET: return jsonify([])
+    ws = SHEET.worksheet('vouchers')
+    if request.method == 'GET':
+        cached = cache_get('master_vouchers')
+        if cached: return jsonify(cached)
+        try:
+            result = ws.get_all_records()
+        except Exception:
+            result = []
+        cache_set('master_vouchers', result)
+        return jsonify(result)
+    data = request.json
+    new_id = get_next_id(ws)
+    ws.append_row([new_id, data.get('name', ''), safe_float(data.get('value', 0))])
+    cache_clear('master_vouchers')
+    return jsonify({'success': True})
+
+@app.route('/api/vouchers/<int:id>', methods=['DELETE'])
+def api_del_voucher(id):
+    cache_clear('master_vouchers')
+    return delete_master_table('vouchers', id)
+
 @app.route('/api/platform-names')
 def platform_names():
     if not SHEET: return jsonify([])
@@ -227,7 +257,6 @@ def api_variants():
             result = variants
         cache_set(cache_key, result)
         return jsonify(result)
-    # POST — now saves selling_price as column 5
     data = request.json
     new_id = get_next_id(ws)
     ws.append_row([
@@ -235,7 +264,7 @@ def api_variants():
         data.get('model_id'),
         data.get('variant_name', ''),
         data.get('costing', ''),
-        data.get('selling_price', '')   # ← new column E
+        data.get('selling_price', '')
     ])
     for k in list(_cache.keys()):
         if k.startswith('variants'): cache_clear(k)
@@ -247,13 +276,11 @@ def del_variant(var_id):
         for k in list(_cache.keys()):
             if k.startswith('variants'): cache_clear(k)
         return delete_master_table('variants', var_id)
-    # PUT — update selling_price (and optionally costing) on the variant row
     if not SHEET: return jsonify({'success': False})
     data = request.json
     ws = SHEET.worksheet('variants')
     try:
         cell = ws.find(str(var_id), in_column=1)
-        # Read existing row to preserve model_id, variant_name, costing unless sent
         row = ws.row_values(cell.row)
         new_cost = data.get('costing',       row[3] if len(row) > 3 else '')
         new_sell = data.get('selling_price', row[4] if len(row) > 4 else '')
@@ -265,24 +292,19 @@ def del_variant(var_id):
         print("Variant PUT error:", e)
         return jsonify({'success': False})
 
-
 @app.route('/api/variants/<int:var_id>/sync-sell-price', methods=['POST'])
 def sync_variant_sell_price(var_id):
-    """Push the variant's sell price to existing orders that match BOTH variant_name
-    AND costing, so two variants with the same name but different costs stay separate."""
     if not SHEET: return jsonify({'success': False})
     data = request.json
     variant_name  = data.get('variant_name', '')
     new_sell      = data.get('selling_price', '')
-    match_costing = data.get('costing', '')          # ← must also match costing
+    match_costing = data.get('costing', '')
     if not variant_name or new_sell == '':
         return jsonify({'success': False, 'error': 'variant_name and selling_price required'})
     try:
         new_sell_f = float(new_sell)
     except (ValueError, TypeError):
         return jsonify({'success': False, 'error': 'invalid selling_price'})
-
-    # Parse the costing to match against — if blank, fall back to name-only (safe default)
     try:
         match_cost_f = float(match_costing) if match_costing != '' else None
     except (ValueError, TypeError):
@@ -291,29 +313,26 @@ def sync_variant_sell_price(var_id):
     updated = 0
     errors  = []
 
+    # main_orders columns:      variant=H(8), costing=I(9), sell=J(10), profit=K(11)
+    # secondary_orders columns: variant=G(7), costing=H(8), sell=I(9),  profit=J(10)
     for sheet_name, variant_col, sell_col, profit_col, cost_col in [
-        ('main_orders',      8, 10, 11, 9),    # variant=H(8), costing=I(9), sell=J(10), profit=K(11)
-        ('secondary_orders', 7,  9, 10, 8),    # variant=G(7), costing=H(8), sell=I(9),  profit=J(10)
+        ('main_orders',      8, 10, 11, 9),
+        ('secondary_orders', 7,  9, 10, 8),
     ]:
         try:
             ws = SHEET.worksheet(sheet_name)
             all_rows = ws.get_all_values()
             if not all_rows: continue
-            for row_idx, row in enumerate(all_rows[1:], start=2):  # skip header
+            for row_idx, row in enumerate(all_rows[1:], start=2):
                 cell_variant = row[variant_col - 1] if len(row) >= variant_col else ''
                 if cell_variant.strip() != variant_name.strip():
                     continue
-
-                # Parse this row's costing
                 try:
                     row_cost_f = float(row[cost_col - 1]) if len(row) >= cost_col and row[cost_col - 1] else 0.0
                 except (ValueError, TypeError):
                     row_cost_f = 0.0
-
-                # Only update rows whose costing matches the variant's costing
                 if match_cost_f is not None and round(row_cost_f, 2) != round(match_cost_f, 2):
                     continue
-
                 profit = new_sell_f - row_cost_f
                 ws.update_cell(row_idx, sell_col,   new_sell_f)
                 ws.update_cell(row_idx, profit_col, round(profit, 2))
@@ -327,6 +346,11 @@ def sync_variant_sell_price(var_id):
 
 
 # ── Main Orders API ───────────────────────────────────────────────────────────
+# Column layout (17 cols):
+# id(1) card_type(2) last_digits(3) platform(4) account(5) order_name(6)
+# model(7) variant(8) costing(9) selling_price(10) profit(11) delivery_date(12)
+# voucher_name(13) voucher_value(14) card_value(15) sale_batch(16) created_at(17)
+
 @app.route('/api/main-orders', methods=['GET', 'POST'])
 def api_main_orders():
     if not SHEET: return jsonify([])
@@ -340,7 +364,7 @@ def api_main_orders():
         except Exception:
             records = []
         for o in records:
-            if str(o.get('last_digits', '')).startswith("'"): 
+            if str(o.get('last_digits', '')).startswith("'"):
                 o['last_digits'] = str(o['last_digits'])[1:]
         result = list(reversed(records))
         cache_set('main_orders', result)
@@ -349,10 +373,10 @@ def api_main_orders():
     try:
         data = request.json
         next_id = get_next_id(ws)
-        try: costing = float(data.get('costing') or 0)
-        except ValueError: costing = 0.0
-        try: selling = float(data.get('selling_price') or 0)
-        except ValueError: selling = 0.0
+        costing       = safe_float(data.get('costing'))
+        selling       = safe_float(data.get('selling_price'))
+        voucher_value = safe_float(data.get('voucher_value'))
+        card_value    = costing - voucher_value  # auto-calculated
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
@@ -360,7 +384,10 @@ def api_main_orders():
             next_id, data.get('card_type', ''), safe_digits, data.get('platform', ''),
             data.get('account', ''), data.get('order_name', ''), data.get('model', ''),
             data.get('variant', ''), costing, selling, selling - costing,
-            data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now
+            data.get('delivery_date', ''),
+            data.get('voucher_name', ''), voucher_value if voucher_value else '',
+            card_value if voucher_value else '',
+            data.get('sale_batch', 'Current Sale'), now
         ]
         ws.append_row(row)
         cache_clear('main_orders')
@@ -372,6 +399,9 @@ def api_main_orders():
             'variant': data.get('variant', ''), 'costing': costing,
             'selling_price': selling, 'profit': selling - costing,
             'delivery_date': data.get('delivery_date', ''),
+            'voucher_name': data.get('voucher_name', ''),
+            'voucher_value': voucher_value if voucher_value else '',
+            'card_value': card_value if voucher_value else '',
             'sale_batch': data.get('sale_batch', 'Current Sale'), 'created_at': now
         }
         return jsonify(new_order)
@@ -404,7 +434,7 @@ def bulk_sale_main():
         records = ws.get_all_records()
         for i, r in enumerate(records):
             if r.get('id') in ids:
-                ws.update_cell(i + 2, 13, new_batch)
+                ws.update_cell(i + 2, 16, new_batch)  # col 16 = sale_batch
         cache_clear('main_orders')
         return jsonify({'success': True})
     except Exception as e:
@@ -414,8 +444,8 @@ def bulk_sale_main():
 @app.route('/api/main-orders/bulk-set-sell', methods=['POST'])
 def bulk_sell_main():
     if not SHEET: return jsonify({'success': False})
-    ids       = request.json.get('ids', [])
-    new_sell  = request.json.get('selling_price')
+    ids      = request.json.get('ids', [])
+    new_sell = request.json.get('selling_price')
     if not ids or new_sell is None: return jsonify({'success': False})
     try: new_sell_f = float(new_sell)
     except (ValueError, TypeError): return jsonify({'success': False, 'error': 'invalid price'})
@@ -426,11 +456,10 @@ def bulk_sell_main():
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 row_num = i + 2
-                try: cost = float(r.get('costing') or 0)
-                except: cost = 0.0
+                cost = safe_float(r.get('costing'))
                 profit = round(new_sell_f - cost, 2)
-                ws.update_cell(row_num, 10, new_sell_f)
-                ws.update_cell(row_num, 11, profit)
+                ws.update_cell(row_num, 10, new_sell_f)  # selling_price
+                ws.update_cell(row_num, 11, profit)       # profit
                 updated += 1
         cache_clear('main_orders')
         return jsonify({'success': True, 'updated': updated})
@@ -450,7 +479,7 @@ def bulk_delivery_main():
         updated = 0
         for i, r in enumerate(records):
             if r.get('id') in ids:
-                ws.update_cell(i + 2, 12, new_date)
+                ws.update_cell(i + 2, 12, new_date)  # delivery_date
                 updated += 1
         cache_clear('main_orders')
         return jsonify({'success': True, 'updated': updated})
@@ -474,7 +503,7 @@ def export_main():
         records = [r for r in records if r.get('sale_batch', '') == sale_filter]
     headers = ['id','card_type','last_digits','platform','account','order_name',
                'model','variant','costing','selling_price','profit','delivery_date',
-               'sale_batch','created_at']
+               'voucher_name','voucher_value','card_value','sale_batch','created_at']
     if fmt == 'csv':
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=headers, extrasaction='ignore')
@@ -489,19 +518,19 @@ def export_main():
         )
     else:
         wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Main Orders"
+        ws_xl = wb.active
+        ws_xl.title = "Main Orders"
         header_fill = PatternFill("solid", fgColor="1A2D45")
         header_font = Font(bold=True, color="5BB8F5")
-        ws.append(headers)
-        for cell in ws[1]:
+        ws_xl.append(headers)
+        for cell in ws_xl[1]:
             cell.fill = header_fill
             cell.font = header_font
         for r in records:
-            ws.append([r.get(h, '') for h in headers])
-        for col in ws.columns:
+            ws_xl.append([r.get(h, '') for h in headers])
+        for col in ws_xl.columns:
             max_len = max((len(str(cell.value or '')) for cell in col), default=10)
-            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+            ws_xl.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -522,16 +551,23 @@ def modify_main(id):
     ws = SHEET.worksheet('main_orders')
     try:
         cell = ws.find(str(id), in_column=1)
-        cost = float(data.get('costing', 0) or 0)
-        sell = float(data.get('selling_price', 0) or 0)
-        profit = sell - cost
+        cost          = safe_float(data.get('costing'))
+        sell          = safe_float(data.get('selling_price'))
+        profit        = sell - cost
+        voucher_value = safe_float(data.get('voucher_value'))
+        card_value    = cost - voucher_value if voucher_value else ''
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
-        ws.update(f'B{cell.row}:M{cell.row}', [[
+        # Update cols B(2) through P(16) = 15 cells
+        ws.update(f'B{cell.row}:P{cell.row}', [[
             data.get('card_type', ''), safe_digits, data.get('platform', ''),
             data.get('account', ''), data.get('order_name', ''), data.get('model', ''),
             data.get('variant', ''), cost, sell, profit,
-            data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
+            data.get('delivery_date', ''),
+            data.get('voucher_name', ''),
+            voucher_value if voucher_value else '',
+            card_value,
+            data.get('sale_batch', 'Current Sale')
         ]])
         cache_clear('main_orders')
         return jsonify({
@@ -539,8 +575,12 @@ def modify_main(id):
             'card_type': data.get('card_type', ''), 'last_digits': last_digits,
             'platform': data.get('platform', ''), 'account': data.get('account', ''),
             'order_name': data.get('order_name', ''), 'model': data.get('model', ''),
-            'variant': data.get('variant', ''), 'costing': cost, 'selling_price': sell,
-            'profit': profit, 'delivery_date': data.get('delivery_date', ''),
+            'variant': data.get('variant', ''), 'costing': cost,
+            'selling_price': sell, 'profit': profit,
+            'delivery_date': data.get('delivery_date', ''),
+            'voucher_name': data.get('voucher_name', ''),
+            'voucher_value': voucher_value if voucher_value else '',
+            'card_value': card_value,
             'sale_batch': data.get('sale_batch', 'Current Sale')
         })
     except Exception as e:
@@ -549,6 +589,11 @@ def modify_main(id):
 
 
 # ── Secondary Orders API ──────────────────────────────────────────────────────
+# Column layout (16 cols):
+# id(1) card_type(2) last_digits(3) platform(4) order_name(5) model(6)
+# variant(7) costing(8) selling_price(9) profit(10) delivery_date(11)
+# voucher_name(12) voucher_value(13) card_value(14) sale_batch(15) created_at(16)
+
 @app.route('/api/secondary-orders', methods=['GET', 'POST'])
 def api_secondary_orders():
     if not SHEET: return jsonify([])
@@ -562,7 +607,7 @@ def api_secondary_orders():
         except Exception:
             records = []
         for o in records:
-            if str(o.get('last_digits', '')).startswith("'"): 
+            if str(o.get('last_digits', '')).startswith("'"):
                 o['last_digits'] = str(o['last_digits'])[1:]
         result = list(reversed(records))
         cache_set('secondary_orders', result)
@@ -571,10 +616,10 @@ def api_secondary_orders():
     try:
         data = request.json
         next_id = get_next_id(ws)
-        try: costing = float(data.get('costing') or 0)
-        except ValueError: costing = 0.0
-        try: selling = float(data.get('selling_price') or 0)
-        except ValueError: selling = 0.0
+        costing       = safe_float(data.get('costing'))
+        selling       = safe_float(data.get('selling_price'))
+        voucher_value = safe_float(data.get('voucher_value'))
+        card_value    = costing - voucher_value
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
@@ -582,7 +627,10 @@ def api_secondary_orders():
             next_id, data.get('card_type', ''), safe_digits, data.get('platform', ''),
             data.get('order_name', ''), data.get('model', ''),
             data.get('variant', ''), costing, selling, selling - costing,
-            data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale'), now
+            data.get('delivery_date', ''),
+            data.get('voucher_name', ''), voucher_value if voucher_value else '',
+            card_value if voucher_value else '',
+            data.get('sale_batch', 'Current Sale'), now
         ]
         ws.append_row(row)
         cache_clear('secondary_orders')
@@ -594,6 +642,9 @@ def api_secondary_orders():
             'variant': data.get('variant', ''), 'costing': costing,
             'selling_price': selling, 'profit': selling - costing,
             'delivery_date': data.get('delivery_date', ''),
+            'voucher_name': data.get('voucher_name', ''),
+            'voucher_value': voucher_value if voucher_value else '',
+            'card_value': card_value if voucher_value else '',
             'sale_batch': data.get('sale_batch', 'Current Sale'), 'created_at': now
         }
         return jsonify(new_order)
@@ -626,7 +677,7 @@ def bulk_sale_sec():
         records = ws.get_all_records()
         for i, r in enumerate(records):
             if r.get('id') in ids:
-                ws.update_cell(i + 2, 12, new_batch)
+                ws.update_cell(i + 2, 15, new_batch)  # col 15 = sale_batch
         cache_clear('secondary_orders')
         return jsonify({'success': True})
     except Exception as e:
@@ -636,8 +687,8 @@ def bulk_sale_sec():
 @app.route('/api/secondary-orders/bulk-set-sell', methods=['POST'])
 def bulk_sell_sec():
     if not SHEET: return jsonify({'success': False})
-    ids       = request.json.get('ids', [])
-    new_sell  = request.json.get('selling_price')
+    ids      = request.json.get('ids', [])
+    new_sell = request.json.get('selling_price')
     if not ids or new_sell is None: return jsonify({'success': False})
     try: new_sell_f = float(new_sell)
     except (ValueError, TypeError): return jsonify({'success': False, 'error': 'invalid price'})
@@ -648,11 +699,10 @@ def bulk_sell_sec():
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 row_num = i + 2
-                try: cost = float(r.get('costing') or 0)
-                except: cost = 0.0
+                cost = safe_float(r.get('costing'))
                 profit = round(new_sell_f - cost, 2)
-                ws.update_cell(row_num, 9,  new_sell_f)
-                ws.update_cell(row_num, 10, profit)
+                ws.update_cell(row_num, 9,  new_sell_f)  # selling_price
+                ws.update_cell(row_num, 10, profit)       # profit
                 updated += 1
         cache_clear('secondary_orders')
         return jsonify({'success': True, 'updated': updated})
@@ -672,7 +722,7 @@ def bulk_delivery_sec():
         updated = 0
         for i, r in enumerate(records):
             if r.get('id') in ids:
-                ws.update_cell(i + 2, 11, new_date)
+                ws.update_cell(i + 2, 11, new_date)  # delivery_date
                 updated += 1
         cache_clear('secondary_orders')
         return jsonify({'success': True, 'updated': updated})
@@ -696,7 +746,7 @@ def export_secondary():
         records = [r for r in records if r.get('sale_batch', '') == sale_filter]
     headers = ['id','card_type','last_digits','platform','order_name','model',
                'variant','costing','selling_price','profit','delivery_date',
-               'sale_batch','created_at']
+               'voucher_name','voucher_value','card_value','sale_batch','created_at']
     if fmt == 'csv':
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=headers, extrasaction='ignore')
@@ -711,19 +761,19 @@ def export_secondary():
         )
     else:
         wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Secondary Orders"
+        ws_xl = wb.active
+        ws_xl.title = "Secondary Orders"
         header_fill = PatternFill("solid", fgColor="1A2D45")
         header_font = Font(bold=True, color="5BB8F5")
-        ws.append(headers)
-        for cell in ws[1]:
+        ws_xl.append(headers)
+        for cell in ws_xl[1]:
             cell.fill = header_fill
             cell.font = header_font
         for r in records:
-            ws.append([r.get(h, '') for h in headers])
-        for col in ws.columns:
+            ws_xl.append([r.get(h, '') for h in headers])
+        for col in ws_xl.columns:
             max_len = max((len(str(cell.value or '')) for cell in col), default=10)
-            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+            ws_xl.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -744,16 +794,23 @@ def modify_sec(id):
     ws = SHEET.worksheet('secondary_orders')
     try:
         cell = ws.find(str(id), in_column=1)
-        cost = float(data.get('costing', 0) or 0)
-        sell = float(data.get('selling_price', 0) or 0)
-        profit = sell - cost
+        cost          = safe_float(data.get('costing'))
+        sell          = safe_float(data.get('selling_price'))
+        profit        = sell - cost
+        voucher_value = safe_float(data.get('voucher_value'))
+        card_value    = cost - voucher_value if voucher_value else ''
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
-        ws.update(f'B{cell.row}:L{cell.row}', [[
+        # Update cols B(2) through O(15) = 14 cells
+        ws.update(f'B{cell.row}:O{cell.row}', [[
             data.get('card_type', ''), safe_digits, data.get('platform', ''),
             data.get('order_name', ''), data.get('model', ''),
             data.get('variant', ''), cost, sell, profit,
-            data.get('delivery_date', ''), data.get('sale_batch', 'Current Sale')
+            data.get('delivery_date', ''),
+            data.get('voucher_name', ''),
+            voucher_value if voucher_value else '',
+            card_value,
+            data.get('sale_batch', 'Current Sale')
         ]])
         cache_clear('secondary_orders')
         return jsonify({
@@ -761,8 +818,12 @@ def modify_sec(id):
             'card_type': data.get('card_type', ''), 'last_digits': last_digits,
             'platform': data.get('platform', ''),
             'order_name': data.get('order_name', ''), 'model': data.get('model', ''),
-            'variant': data.get('variant', ''), 'costing': cost, 'selling_price': sell,
-            'profit': profit, 'delivery_date': data.get('delivery_date', ''),
+            'variant': data.get('variant', ''), 'costing': cost,
+            'selling_price': sell, 'profit': profit,
+            'delivery_date': data.get('delivery_date', ''),
+            'voucher_name': data.get('voucher_name', ''),
+            'voucher_value': voucher_value if voucher_value else '',
+            'card_value': card_value,
             'sale_batch': data.get('sale_batch', 'Current Sale')
         })
     except Exception as e:
@@ -784,7 +845,7 @@ def api_offline_orders():
         except Exception:
             records = []
         for o in records:
-            if str(o.get('last_digits', '')).startswith("'"): 
+            if str(o.get('last_digits', '')).startswith("'"):
                 o['last_digits'] = str(o['last_digits'])[1:]
         result = list(reversed(records))
         cache_set('offline_orders', result)
@@ -793,10 +854,8 @@ def api_offline_orders():
     try:
         data = request.json
         next_id = get_next_id(ws)
-        try: costing = float(data.get('costing') or 0)
-        except ValueError: costing = 0.0
-        try: selling = float(data.get('selling_price') or 0)
-        except ValueError: selling = 0.0
+        costing = safe_float(data.get('costing'))
+        selling = safe_float(data.get('selling_price'))
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
@@ -835,7 +894,6 @@ def bulk_del_offline():
     cache_clear('offline_orders')
     return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
-# ── NEW: Bulk Set Costing for Offline Orders ──────────────────────────────────
 @app.route('/api/offline-orders/bulk-set-costing', methods=['POST'])
 def bulk_costing_offline():
     if not SHEET: return jsonify({'success': False})
@@ -845,19 +903,16 @@ def bulk_costing_offline():
     try: new_cost_f = float(new_cost)
     except (ValueError, TypeError): return jsonify({'success': False, 'error': 'invalid costing'})
     ws = SHEET.worksheet('offline_orders')
-    # offline_orders columns: id(1) card_type(2) last_digits(3) machine(4) vendor(5)
-    #   brand(6) sale_type(7) costing(8) selling_price(9) profit(10) sale_month(11) created_at(12)
     try:
         records = ws.get_all_records()
         updated = 0
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 row_num = i + 2
-                try: sell = float(r.get('selling_price') or 0)
-                except: sell = 0.0
+                sell = safe_float(r.get('selling_price'))
                 profit = round(sell - new_cost_f, 2)
-                ws.update_cell(row_num, 8, new_cost_f)   # costing column
-                ws.update_cell(row_num, 10, profit)       # profit column
+                ws.update_cell(row_num, 8, new_cost_f)
+                ws.update_cell(row_num, 10, profit)
                 updated += 1
         cache_clear('offline_orders')
         return jsonify({'success': True, 'updated': updated})
@@ -865,7 +920,6 @@ def bulk_costing_offline():
         print("Bulk Costing Offline Error:", e)
         return jsonify({'success': False})
 
-# ── NEW: Bulk Set Sell Price for Offline Orders ───────────────────────────────
 @app.route('/api/offline-orders/bulk-set-sell', methods=['POST'])
 def bulk_sell_offline():
     if not SHEET: return jsonify({'success': False})
@@ -881,11 +935,10 @@ def bulk_sell_offline():
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 row_num = i + 2
-                try: cost = float(r.get('costing') or 0)
-                except: cost = 0.0
+                cost = safe_float(r.get('costing'))
                 profit = round(new_sell_f - cost, 2)
-                ws.update_cell(row_num, 9,  new_sell_f)  # selling_price column
-                ws.update_cell(row_num, 10, profit)       # profit column
+                ws.update_cell(row_num, 9,  new_sell_f)
+                ws.update_cell(row_num, 10, profit)
                 updated += 1
         cache_clear('offline_orders')
         return jsonify({'success': True, 'updated': updated})
@@ -923,19 +976,19 @@ def export_offline():
         )
     else:
         wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Offline Sales"
+        ws_xl = wb.active
+        ws_xl.title = "Offline Sales"
         header_fill = PatternFill("solid", fgColor="1A2D45")
         header_font = Font(bold=True, color="2ECC8F")
-        ws.append(headers)
-        for cell in ws[1]:
+        ws_xl.append(headers)
+        for cell in ws_xl[1]:
             cell.fill = header_fill
             cell.font = header_font
         for r in records:
-            ws.append([r.get(h, '') for h in headers])
-        for col in ws.columns:
+            ws_xl.append([r.get(h, '') for h in headers])
+        for col in ws_xl.columns:
             max_len = max((len(str(cell.value or '')) for cell in col), default=10)
-            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+            ws_xl.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -956,8 +1009,8 @@ def modify_offline(id):
     ws = SHEET.worksheet('offline_orders')
     try:
         cell = ws.find(str(id), in_column=1)
-        cost = float(data.get('costing', 0) or 0)
-        sell = float(data.get('selling_price', 0) or 0)
+        cost = safe_float(data.get('costing'))
+        sell = safe_float(data.get('selling_price'))
         profit = sell - cost
         last_digits = str(data.get('last_digits', ''))
         safe_digits = f"'{last_digits}" if last_digits else ""
@@ -980,18 +1033,17 @@ def modify_offline(id):
         return jsonify({'success': False})
 
 
-
 # ── Auto-Setup Route ──────────────────────────────────────────────────────────
 SHEET_SCHEMA = {
     'main_orders': [
         'id','card_type','last_digits','platform','account','order_name',
         'model','variant','costing','selling_price','profit','delivery_date',
-        'sale_batch','created_at'
+        'voucher_name','voucher_value','card_value','sale_batch','created_at'
     ],
     'secondary_orders': [
         'id','card_type','last_digits','platform','order_name','model',
         'variant','costing','selling_price','profit','delivery_date',
-        'sale_batch','created_at'
+        'voucher_name','voucher_value','card_value','sale_batch','created_at'
     ],
     'offline_orders': [
         'id','card_type','last_digits','machine','vendor','brand',
@@ -1002,6 +1054,7 @@ SHEET_SCHEMA = {
     'models':    ['id','model_name'],
     'variants':  ['id','model_id','variant_name','costing','selling_price'],
     'sec_order_names': ['id','name'],
+    'vouchers':  ['id','name','value'],
     'machines':  ['id','name'],
     'vendors':   ['id','name'],
     'brands':    ['id','name'],
@@ -1015,15 +1068,14 @@ def setup_page():
 def run_setup():
     if not SHEET:
         return jsonify({'success': False, 'error': 'Not connected to Google Sheets. Check GOOGLE_CREDENTIALS_JSON env var.'})
-    
+
     results = []
     existing_titles = [ws.title for ws in SHEET.worksheets()]
-    
+
     for tab_name, headers in SHEET_SCHEMA.items():
         try:
             if tab_name in existing_titles:
                 ws = SHEET.worksheet(tab_name)
-                # Check if headers match — fix if row 1 is blank or wrong
                 existing_headers = ws.row_values(1)
                 if existing_headers == headers:
                     results.append({'tab': tab_name, 'status': 'ok', 'msg': 'Already correct'})
@@ -1036,7 +1088,7 @@ def run_setup():
                 results.append({'tab': tab_name, 'status': 'created', 'msg': f'Created with {len(headers)} columns'})
         except Exception as e:
             results.append({'tab': tab_name, 'status': 'error', 'msg': str(e)})
-    
+
     cache_clear_all()
     all_ok = all(r['status'] in ('ok', 'created', 'fixed') for r in results)
     return jsonify({'success': all_ok, 'results': results})
