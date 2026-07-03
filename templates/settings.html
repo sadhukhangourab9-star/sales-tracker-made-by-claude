@@ -4,12 +4,12 @@
 
 {% block content %}
 <div class="page-title mb-1">Settings</div>
-<p style="color:var(--muted); font-size:14px; margin-bottom: 24px;">Manage your cards, platforms, models, and order types</p>
+<p style="color:var(--muted); font-size:14px; margin-bottom: 24px;">Manage your cards, platforms, models, vouchers, and order types</p>
 
 <div class="row g-4">
-  
+
   <div class="col-lg-5 d-flex flex-column gap-4">
-    
+
     <div class="card-panel m-0">
       <div class="card-panel-title"><i class="bi bi-credit-card-2-front"></i> Cards</div>
       <div class="row g-2 mb-3">
@@ -46,9 +46,33 @@
       <ul class="list-group list-group-flush" id="list_platforms" style="max-height: 200px; overflow-y: auto; font-size:13px;"></ul>
     </div>
 
+    <!-- ── Vouchers ── -->
+    <div class="card-panel m-0" style="border-top: 4px solid var(--amber);">
+      <div class="card-panel-title"><i class="bi bi-ticket-perforated"></i> Vouchers</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+        Add voucher types used during online orders. Selecting a voucher in an order auto-fills its value and calculates the card deduction automatically.
+      </p>
+      <div class="row g-2 mb-3">
+        <div class="col-7">
+          <label class="form-label" style="font-size:10px;">VOUCHER NAME</label>
+          <input type="text" id="v_vname" class="form-control" placeholder="e.g. HDFC Gift Voucher">
+        </div>
+        <div class="col-5">
+          <label class="form-label" style="font-size:10px;">VOUCHER VALUE (₹)</label>
+          <input type="number" id="v_vvalue" class="form-control" placeholder="e.g. 6000" step="0.01">
+        </div>
+        <div class="col-12 mt-2">
+          <button class="btn-primary-custom w-100 justify-content-center" onclick="addVoucher()">
+            <i class="bi bi-plus"></i> Add Voucher
+          </button>
+        </div>
+      </div>
+      <ul class="list-group list-group-flush" id="list_vouchers" style="max-height: 200px; overflow-y: auto; font-size:13px;"></ul>
+    </div>
+
     <div class="card-panel m-0">
       <div class="card-panel-title"><i class="bi bi-phone"></i> Models & Variants</div>
-      
+
       <div class="row g-2 mb-3 pb-3 border-bottom" style="border-color:var(--border)!important;">
         <div class="col-8">
           <label class="form-label" style="font-size:10px;">MODEL NAME</label>
@@ -59,7 +83,6 @@
         </div>
       </div>
 
-      <!-- Variant add form — Cost + Sell Price side by side -->
       <div class="row g-2 mb-3">
         <div class="col-4">
           <label class="form-label" style="font-size:10px;">MODEL</label>
@@ -103,7 +126,7 @@
   <div class="col-lg-7">
     <div class="card-panel h-100 m-0" style="border-top: 4px solid var(--accent2);">
       <div class="card-panel-title mb-4"><i class="bi bi-shop-window"></i> Offline Master Data</div>
-      
+
       <div class="row g-4">
         <div class="col-md-4">
           <label class="form-label" style="font-size:10px;">SWIPING MACHINES</label>
@@ -113,7 +136,7 @@
           </div>
           <ul class="list-group list-group-flush" id="list_machines" style="font-size:13px;"></ul>
         </div>
-        
+
         <div class="col-md-4">
           <label class="form-label" style="font-size:10px;">VENDORS</label>
           <div class="d-flex gap-2 mb-3">
@@ -122,7 +145,7 @@
           </div>
           <ul class="list-group list-group-flush" id="list_vendors" style="font-size:13px;"></ul>
         </div>
-        
+
         <div class="col-md-4">
           <label class="form-label" style="font-size:10px;">BRANDS (MODELS)</label>
           <div class="d-flex gap-2 mb-3">
@@ -141,33 +164,43 @@
 
 {% block scripts %}
 <script>
-// --- HTML Rendering Helper ---
+// ── HTML Rendering Helper ─────────────────────────────────────────────────────
 function drawList(items, elementId, endpoint, formatTextFn) {
   const el = document.getElementById(elementId);
-  if(!el) return;
+  if (!el) return;
   el.innerHTML = items.map(i => `
-    <li class="list-group-item d-flex justify-content-between align-items-center px-1 py-2" style="background:transparent; color:var(--text); border-color:var(--border);">
+    <li class="list-group-item d-flex justify-content-between align-items-center px-1 py-2"
+        style="background:transparent; color:var(--text); border-color:var(--border);">
       <span>${formatTextFn(i)}</span>
-      <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delItem('${endpoint}', ${i.id})"><i class="bi bi-trash"></i></button>
+      <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delItem('${endpoint}', ${i.id})">
+        <i class="bi bi-trash"></i>
+      </button>
     </li>
   `).join('');
 }
 
-// --- Main Load Function ---
+// ── Main Load Function ────────────────────────────────────────────────────────
 async function loadSettings() {
-  const [cards, plats, models, vars, secs, machs, vends, brands] = await Promise.all([
+  const [cards, plats, models, vars, secs, machs, vends, brands, vouchers] = await Promise.all([
     api('/api/cards'), api('/api/platforms'), api('/api/models'), api('/api/variants'),
-    api('/api/sec-order-names'), api('/api/machines'), api('/api/vendors'), api('/api/brands')
+    api('/api/sec-order-names'), api('/api/machines'), api('/api/vendors'), api('/api/brands'),
+    api('/api/vouchers')
   ]);
 
-  drawList(cards, 'list_cards', 'cards', c => `<code style="color:var(--accent2)">•••• ${c.last_digits}</code> <span class="ms-2">${c.card_type}</span>`);
-  drawList(plats, 'list_platforms', 'platforms', p => `<b>${p.platform_name}</b> <span style="color:var(--muted)">(${p.account_name})</span>`);
-  drawList(secs, 'list_sec', 'sec-order-names', s => s.name);
-  drawList(machs, 'list_machines', 'machines', m => m.name);
-  drawList(vends, 'list_vendors', 'vendors', v => v.name);
-  drawList(brands, 'list_brands', 'brands', b => b.name);
+  drawList(cards,  'list_cards',    'cards',    c => `<code style="color:var(--accent2)">•••• ${c.last_digits}</code> <span class="ms-2">${c.card_type}</span>`);
+  drawList(plats,  'list_platforms','platforms', p => `<b>${p.platform_name}</b> <span style="color:var(--muted)">(${p.account_name})</span>`);
+  drawList(secs,   'list_sec',      'sec-order-names', s => s.name);
+  drawList(machs,  'list_machines', 'machines', m => m.name);
+  drawList(vends,  'list_vendors',  'vendors',  v => v.name);
+  drawList(brands, 'list_brands',   'brands',   b => b.name);
 
-  // Models & Variants — shows cost + sell price with edit button per variant
+  // Vouchers list
+  drawList(vouchers, 'list_vouchers', 'vouchers', v =>
+    `<span style="font-weight:600;">${v.name}</span>
+     <span style="color:var(--amber);margin-left:10px;">₹${parseFloat(v.value).toLocaleString('en-IN')}</span>`
+  );
+
+  // Models & Variants
   let modelHtml = '';
   models.forEach(m => {
     const mVars = vars.filter(v => v.model_id === m.id);
@@ -193,29 +226,28 @@ async function loadSettings() {
                 ${sellDisplay}
               </span>
               <div style="display:flex;gap:6px;align-items:center;">
-                <button class="btn-outline-custom" style="padding:3px 8px;font-size:11px;" 
+                <button class="btn-outline-custom" style="padding:3px 8px;font-size:11px;"
                   onclick="toggleEditPanel(${v.id})" title="Edit sell price">
                   <i class="bi bi-pencil"></i> Edit
                 </button>
                 <button class="btn btn-sm text-danger p-0" onclick="delItem('variants', ${v.id})"><i class="bi bi-x-lg"></i></button>
               </div>
             </div>
-            <!-- Inline edit panel — hidden by default -->
             <div id="edit_panel_${v.id}" style="display:none; background:var(--navy); border-radius:8px; padding:12px; margin:6px 10px 8px 12px;">
               <div class="row g-2 align-items-end">
                 <div class="col-5">
                   <label class="form-label" style="font-size:10px;">SELL PRICE (₹)</label>
-                  <input type="number" id="edit_sell_${v.id}" class="form-control" 
+                  <input type="number" id="edit_sell_${v.id}" class="form-control"
                     value="${v.selling_price || ''}" placeholder="Enter sell price"/>
                 </div>
                 <div class="col-4">
-                  <button class="btn-success-custom w-100 justify-content-center" 
+                  <button class="btn-success-custom w-100 justify-content-center"
                     onclick="saveVariantSell(${v.id}, '${v.variant_name.replace(/'/g, "\\'")}')">
                     <i class="bi bi-check-lg"></i> Save
                   </button>
                 </div>
                 <div class="col-3">
-                  <button class="btn-outline-custom w-100 justify-content-center" 
+                  <button class="btn-outline-custom w-100 justify-content-center"
                     onclick="toggleEditPanel(${v.id})">
                     Cancel
                   </button>
@@ -236,37 +268,36 @@ async function loadSettings() {
         }).join('')}
       </li>`;
   });
-  document.getElementById('list_models').innerHTML = modelHtml || '<li class="list-group-item" style="background:transparent;color:var(--muted);font-size:13px;">No models added yet.</li>';
+  document.getElementById('list_models').innerHTML = modelHtml ||
+    '<li class="list-group-item" style="background:transparent;color:var(--muted);font-size:13px;">No models added yet.</li>';
 
   // Populate Model Dropdown for Variant form
   const vSel = document.getElementById('v_model_sel');
-  vSel.innerHTML = '<option value="">Select...</option>' + models.map(m => `<option value="${m.id}">${m.model_name}</option>`).join('');
+  vSel.innerHTML = '<option value="">Select...</option>' +
+    models.map(m => `<option value="${m.id}">${m.model_name}</option>`).join('');
 }
 
-// Toggle the inline edit panel for a variant
+// ── Toggle inline edit panel ──────────────────────────────────────────────────
 function toggleEditPanel(varId) {
   const panel = document.getElementById(`edit_panel_${varId}`);
   if (!panel) return;
   const isVisible = panel.style.display !== 'none';
-  // Close all open panels first
   document.querySelectorAll('[id^="edit_panel_"]').forEach(p => p.style.display = 'none');
   if (!isVisible) panel.style.display = 'block';
 }
 
-// Save just the sell price on the variant master
+// ── Save sell price on variant master ─────────────────────────────────────────
 async function saveVariantSell(varId, variantName) {
   const sellInput = document.getElementById(`edit_sell_${varId}`);
   const sell = sellInput.value.trim();
   if (sell === '') { showToast('Enter a sell price first', 'error'); return; }
-
   const res = await api(`/api/variants/${varId}`, 'PUT', { selling_price: sell });
   if (!res.success) { showToast('Failed to save', 'error'); return; }
-
   showToast(`Sell price saved for ${variantName}`);
   loadSettings();
 }
 
-// Sync the current sell price in the input to ALL existing orders with this variant+costing pair
+// ── Sync sell price to existing orders ───────────────────────────────────────
 async function syncSellPrice(varId, variantName, varCosting) {
   const sellInput = document.getElementById(`edit_sell_${varId}`);
   const sell = sellInput.value.trim();
@@ -283,9 +314,8 @@ async function syncSellPrice(varId, variantName, varCosting) {
     const res = await api(`/api/variants/${varId}/sync-sell-price`, 'POST', {
       variant_name:  variantName,
       selling_price: sell,
-      costing:       varCosting        // ← passed so backend matches exact cost tier
+      costing:       varCosting
     });
-
     if (res.success) {
       const msg = res.updated > 0
         ? `Updated ${res.updated} order(s) — variant "${variantName}" @ ₹${varCosting}`
@@ -301,10 +331,10 @@ async function syncSellPrice(varId, variantName, varCosting) {
   }
 }
 
-// --- Add Functions ---
+// ── Add Functions ─────────────────────────────────────────────────────────────
 async function addSimple(endpoint, inputId, payloadKey) {
   const val = document.getElementById(inputId).value.trim();
-  if(!val) return showToast('Please enter a value', 'error');
+  if (!val) return showToast('Please enter a value', 'error');
   await api(`/api/${endpoint}`, 'POST', {[payloadKey]: val});
   document.getElementById(inputId).value = '';
   loadSettings();
@@ -313,19 +343,33 @@ async function addSimple(endpoint, inputId, payloadKey) {
 async function addCard() {
   const d = document.getElementById('c_digits').value.trim();
   const b = document.getElementById('c_bank').value.trim().toUpperCase();
-  if(!d || !b) return showToast('Enter both digits and bank name', 'error');
+  if (!d || !b) return showToast('Enter both digits and bank name', 'error');
   await api('/api/cards', 'POST', {last_digits: d, card_type: b});
-  document.getElementById('c_digits').value = ''; document.getElementById('c_bank').value = '';
+  document.getElementById('c_digits').value = '';
+  document.getElementById('c_bank').value = '';
   loadSettings();
 }
 
 async function addPlatform() {
   const p = document.getElementById('p_name').value.trim();
   const a = document.getElementById('p_acc').value.trim();
-  if(!p || !a) return showToast('Enter platform and account', 'error');
+  if (!p || !a) return showToast('Enter platform and account', 'error');
   await api('/api/platforms', 'POST', {platform_name: p, account_name: a});
-  document.getElementById('p_name').value = ''; document.getElementById('p_acc').value = '';
+  document.getElementById('p_name').value = '';
+  document.getElementById('p_acc').value = '';
   loadSettings();
+}
+
+async function addVoucher() {
+  const name  = document.getElementById('v_vname').value.trim();
+  const value = document.getElementById('v_vvalue').value.trim();
+  if (!name || !value) return showToast('Enter both voucher name and value', 'error');
+  if (isNaN(parseFloat(value))) return showToast('Voucher value must be a number', 'error');
+  await api('/api/vouchers', 'POST', {name, value: parseFloat(value)});
+  document.getElementById('v_vname').value  = '';
+  document.getElementById('v_vvalue').value = '';
+  loadSettings();
+  showToast(`Voucher "${name}" added`);
 }
 
 async function addVariant() {
@@ -333,7 +377,7 @@ async function addVariant() {
   const n    = document.getElementById('v_name').value.trim();
   const cost = document.getElementById('v_cost').value;
   const sell = document.getElementById('v_sell').value;
-  if(!m || !n) return showToast('Select model and enter variant name', 'error');
+  if (!m || !n) return showToast('Select model and enter variant name', 'error');
   await api('/api/variants', 'POST', {
     model_id:      parseInt(m),
     variant_name:  n,
@@ -347,9 +391,9 @@ async function addVariant() {
   showToast('Variant added');
 }
 
-// --- Delete Function ---
+// ── Delete Function ───────────────────────────────────────────────────────────
 async function delItem(endpoint, id) {
-  if(!confirm('Delete this item?')) return;
+  if (!confirm('Delete this item?')) return;
   await api(`/api/${endpoint}/${id}`, 'DELETE');
   loadSettings();
 }
