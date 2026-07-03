@@ -56,14 +56,30 @@
     </div>
     <div class="col-md-2">
       <label class="form-label">9. Costing (₹)</label>
-      <input type="number" id="f_costing" class="form-control" placeholder="Amount" step="0.01"/>
+      <input type="number" id="f_costing" class="form-control" placeholder="Amount" step="0.01" oninput="recalcCardValue('f')"/>
     </div>
     <div class="col-md-2">
       <label class="form-label">10. Selling Price (₹)</label>
       <input type="number" id="f_selling_price" class="form-control" placeholder="Optional" step="0.01"/>
     </div>
+    <!-- ── Voucher fields ── -->
     <div class="col-md-2">
-      <label class="form-label">11. Sale Batch</label>
+      <label class="form-label">11. Voucher <span style="color:var(--muted);font-size:10px;">(optional)</span></label>
+      <select id="f_voucher_name" class="form-select" onchange="onVoucherSelect('f')">
+        <option value="">No Voucher</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">12. Voucher Value (₹)</label>
+      <input type="number" id="f_voucher_value" class="form-control" placeholder="0.00" step="0.01" oninput="recalcCardValue('f')"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">13. Card Deduction (₹)</label>
+      <input type="number" id="f_card_value" class="form-control" readonly placeholder="Auto-calculated" style="color:var(--accent2)!important;"/>
+    </div>
+    <!-- ── End voucher fields ── -->
+    <div class="col-md-2">
+      <label class="form-label">14. Sale Batch</label>
       <input type="text" id="f_sale_batch" class="form-control" value="Current Sale" placeholder="e.g. Sale 1"/>
     </div>
     <div class="col-12 d-flex gap-2 mt-2">
@@ -117,13 +133,15 @@
           <th>Variant</th>
           <th>Delivery Date</th>
           <th>Costing</th>
+          <th>Voucher</th>
+          <th>Card Deduction</th>
           <th>Sale Price</th>
           <th>Profit</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody id="secTableBody">
-        <tr><td colspan="14"><div class="empty-state"><i class="bi bi-inbox"></i><p>Loading orders...</p></div></td></tr>
+        <tr><td colspan="16"><div class="empty-state"><i class="bi bi-inbox"></i><p>Loading orders...</p></div></td></tr>
       </tbody>
     </table>
   </div>
@@ -178,11 +196,25 @@
           </div>
           <div class="col-md-3">
             <label class="form-label">Costing (₹)</label>
-            <input type="number" id="e_costing" class="form-control" step="0.01"/>
+            <input type="number" id="e_costing" class="form-control" step="0.01" oninput="recalcCardValue('e')"/>
           </div>
           <div class="col-md-3">
             <label class="form-label">Selling Price (₹)</label>
             <input type="number" id="e_selling_price" class="form-control" step="0.01"/>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Voucher</label>
+            <select id="e_voucher_name" class="form-select" onchange="onVoucherSelect('e')">
+              <option value="">No Voucher</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Voucher Value (₹)</label>
+            <input type="number" id="e_voucher_value" class="form-control" step="0.01" oninput="recalcCardValue('e')"/>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Card Deduction (₹)</label>
+            <input type="number" id="e_card_value" class="form-control" readonly style="color:var(--accent2)!important;"/>
           </div>
           <div class="col-md-3">
             <label class="form-label">Sale Batch</label>
@@ -208,7 +240,7 @@
       </div>
       <div class="modal-body">
         <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
-          Apply one selling price to <strong id="bulkSellCount" style="color:var(--text);">0</strong> selected orders. Profit will be recalculated automatically.
+          Apply one selling price to <strong id="bulkSellCount" style="color:var(--text);">0</strong> selected orders.
         </p>
         <label class="form-label">Selling Price (₹)</label>
         <input type="number" id="bulk_sell_price" class="form-control" placeholder="e.g. 21450" step="0.01"/>
@@ -250,6 +282,7 @@
 <script>
 let allOrders = [];
 let filteredOrders = [];
+let allVouchers = [];
 let currentPage = 1;
 const PAGE_SIZE = 50;
 let modelTimer = null;
@@ -257,31 +290,73 @@ const editModal      = new bootstrap.Modal(document.getElementById('editModal'))
 const bulkSellModal  = new bootstrap.Modal(document.getElementById('bulkSellModal'));
 const bulkDelivModal = new bootstrap.Modal(document.getElementById('bulkDeliveryModal'));
 
+// ── Voucher helpers ───────────────────────────────────────────────────────────
+function populateVoucherDropdown(selectId, selectedName = '') {
+  const sel = document.getElementById(selectId);
+  sel.innerHTML = '<option value="">No Voucher</option>';
+  allVouchers.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.name;
+    opt.textContent = `${v.name} (₹${v.value})`;
+    opt.setAttribute('data-value', v.value);
+    if (v.name === selectedName) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function onVoucherSelect(prefix) {
+  const sel = document.getElementById(`${prefix}_voucher_name`);
+  const selectedOpt = sel.options[sel.selectedIndex];
+  const val = selectedOpt ? (selectedOpt.getAttribute('data-value') || '') : '';
+  document.getElementById(`${prefix}_voucher_value`).value = val;
+  recalcCardValue(prefix);
+}
+
+function recalcCardValue(prefix) {
+  const costing = parseFloat(document.getElementById(`${prefix}_costing`).value) || 0;
+  const voucher = parseFloat(document.getElementById(`${prefix}_voucher_value`).value) || 0;
+  const cardValEl = document.getElementById(`${prefix}_card_value`);
+  if (voucher > 0) {
+    cardValEl.value = (costing - voucher).toFixed(2);
+  } else {
+    cardValEl.value = '';
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   document.getElementById('f_delivery_date').value = '';
   document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
 
-  const platforms = await api('/api/platform-names');
+  const [platforms, models, secNames, vouchers] = await Promise.all([
+    api('/api/platform-names'),
+    api('/api/models'),
+    api('/api/sec-order-names'),
+    api('/api/vouchers')
+  ]);
+
+  allVouchers = vouchers;
+
   ['f_platform','e_platform'].forEach(id => {
     const sel = document.getElementById(id);
     sel.innerHTML = '<option value="">Select Platform</option>';
     platforms.forEach(p => { const opt = document.createElement('option'); opt.value = opt.textContent = p; sel.appendChild(opt); });
   });
 
-  const models = await api('/api/models');
   ['modelList','eModelList'].forEach(id => {
     const dl = document.getElementById(id);
     dl.innerHTML = '';
     models.forEach(m => { const opt = document.createElement('option'); opt.value = m.model_name; dl.appendChild(opt); });
   });
 
-  const secNames = await api('/api/sec-order-names');
   ['f_order_name','e_order_name'].forEach(id => {
     const sel = document.getElementById(id);
     sel.innerHTML = '<option value="">Select Order Name</option>';
     secNames.forEach(n => { const opt = document.createElement('option'); opt.value = opt.textContent = n.name; sel.appendChild(opt); });
   });
+
+  populateVoucherDropdown('f_voucher_name');
+  populateVoucherDropdown('e_voucher_name');
 
   await loadOrders();
 }
@@ -296,7 +371,7 @@ async function loadOrders() {
 function renderTable() {
   const body = document.getElementById('secTableBody');
   if (!filteredOrders.length) {
-    body.innerHTML = '<tr><td colspan="14"><div class="empty-state"><i class="bi bi-inbox"></i><p>No secondary orders found.</p></div></td></tr>';
+    body.innerHTML = '<tr><td colspan="16"><div class="empty-state"><i class="bi bi-inbox"></i><p>No secondary orders found.</p></div></td></tr>';
     document.getElementById('pageInfo').textContent = '0 - 0 of 0';
     document.getElementById('btnPrev').disabled = true;
     document.getElementById('btnNext').disabled = true;
@@ -314,6 +389,16 @@ function renderTable() {
     const pColor  = o.profit >= 0 ? 'var(--green)' : 'var(--red)';
     const dateStr = (o.created_at || '—').split(' ')[0];
     const hasSell = o.selling_price && parseFloat(o.selling_price) > 0;
+    const hasVoucher = o.voucher_value && parseFloat(o.voucher_value) > 0;
+
+    const voucherCell = hasVoucher
+      ? `<span style="font-size:11px;color:var(--amber);font-weight:600;">${o.voucher_name || ''} <span style="color:var(--muted);">₹${parseFloat(o.voucher_value).toLocaleString('en-IN')}</span></span>`
+      : `<span style="color:var(--muted);font-size:11px;">—</span>`;
+
+    const cardValCell = hasVoucher
+      ? `<span style="color:var(--accent2);font-weight:600;">${formatCost(o.card_value)}</span>`
+      : `<span style="color:var(--muted);font-size:11px;">—</span>`;
+
     return `<tr data-id="${o.id}">
       <td><input type="checkbox" class="row-check" value="${o.id}" onchange="onCheckChange()"/></td>
       <td><span class="badge-card" style="background:var(--navy);border:1px solid var(--border)">${o.sale_batch||'Current Sale'}</span></td>
@@ -326,6 +411,8 @@ function renderTable() {
       <td style="color:var(--muted)">${o.variant||'—'}</td>
       <td style="color:var(--muted)">${o.delivery_date||'—'}</td>
       <td style="color:var(--muted)">${formatCost(o.costing)}</td>
+      <td>${voucherCell}</td>
+      <td>${cardValCell}</td>
       <td style="color:${hasSell?'var(--text)':'var(--amber)'};font-weight:600">${hasSell ? formatCost(o.selling_price) : '<span style="font-size:11px;font-style:italic;">pending</span>'}</td>
       <td style="color:${pColor};font-weight:600">${hasSell ? formatCost(o.profit) : '—'}</td>
       <td>
@@ -379,9 +466,10 @@ function toggleForm() {
 }
 
 function clearForm() {
-  ['f_digits','f_bank','f_model','f_costing','f_selling_price'].forEach(id => document.getElementById(id).value = '');
+  ['f_digits','f_bank','f_model','f_costing','f_selling_price','f_voucher_value','f_card_value'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('f_platform').value = '';
   document.getElementById('f_order_name').value = '';
+  document.getElementById('f_voucher_name').value = '';
   document.getElementById('f_variant').innerHTML = '<option value="">Select Variant</option>';
   document.getElementById('f_sale_batch').value = 'Current Sale';
   document.getElementById('f_delivery_date').value = '';
@@ -411,6 +499,8 @@ async function submitOrder() {
     delivery_date: document.getElementById('f_delivery_date').value,
     costing:       document.getElementById('f_costing').value || null,
     selling_price: document.getElementById('f_selling_price').value || null,
+    voucher_name:  document.getElementById('f_voucher_name').value || '',
+    voucher_value: document.getElementById('f_voucher_value').value || '',
     sale_batch:    document.getElementById('f_sale_batch').value.trim() || 'Current Sale'
   };
   if (!payload.last_digits || !payload.platform || !payload.order_name || !payload.model) {
@@ -434,17 +524,24 @@ async function openEdit(id) {
   document.getElementById('e_delivery_date').value = o.delivery_date || '';
   document.getElementById('e_costing').value       = o.costing || '';
   document.getElementById('e_selling_price').value = o.selling_price || '';
+  document.getElementById('e_voucher_value').value = o.voucher_value || '';
+  document.getElementById('e_card_value').value    = o.card_value || '';
   document.getElementById('e_sale_batch').value    = o.sale_batch || 'Current Sale';
 
-  const platforms = await api('/api/platform-names');
+  const [platforms, secNames] = await Promise.all([
+    api('/api/platform-names'),
+    api('/api/sec-order-names')
+  ]);
+
   const ePlat = document.getElementById('e_platform');
   ePlat.innerHTML = '<option value="">Select Platform</option>';
   platforms.forEach(p => { const opt = document.createElement('option'); opt.value = opt.textContent = p; if (p === o.platform) opt.selected = true; ePlat.appendChild(opt); });
 
-  const secNames = await api('/api/sec-order-names');
   const eName = document.getElementById('e_order_name');
   eName.innerHTML = '<option value="">Select Order Name</option>';
   secNames.forEach(n => { const opt = document.createElement('option'); opt.value = opt.textContent = n.name; if (n.name === o.order_name) opt.selected = true; eName.appendChild(opt); });
+
+  populateVoucherDropdown('e_voucher_name', o.voucher_name || '');
 
   if (o.model) {
     const variants = await api(`/api/variants?model=${encodeURIComponent(o.model)}`);
@@ -478,6 +575,8 @@ async function saveEdit() {
     delivery_date: document.getElementById('e_delivery_date').value,
     costing:       document.getElementById('e_costing').value || null,
     selling_price: document.getElementById('e_selling_price').value || null,
+    voucher_name:  document.getElementById('e_voucher_name').value || '',
+    voucher_value: document.getElementById('e_voucher_value').value || '',
     sale_batch:    document.getElementById('e_sale_batch').value.trim() || 'Current Sale'
   };
   const res = await api(`/api/secondary-orders/${id}`, 'PUT', payload);
@@ -569,10 +668,7 @@ async function applyBulkDelivery() {
   try {
     const res = await api('/api/secondary-orders/bulk-set-delivery', 'POST', { ids, delivery_date: date });
     if (res.success) {
-      ids.forEach(id => {
-        const o = allOrders.find(x => x.id === id);
-        if (o) o.delivery_date = date;
-      });
+      ids.forEach(id => { const o = allOrders.find(x => x.id === id); if (o) o.delivery_date = date; });
       filterTable();
       bulkDelivModal.hide();
       document.getElementById('selectAll').checked = false; onCheckChange();
