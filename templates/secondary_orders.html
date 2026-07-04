@@ -27,7 +27,7 @@
     </div>
     <div class="col-md-2">
       <label class="form-label">2. Card Number *</label>
-      <input type="text" id="f_digits" class="form-control" placeholder="Last 4-5 digits" maxlength="5" oninput="onDigitsInput(this.value, 'f_bank')"/>
+      <input type="text" id="f_digits" class="form-control" placeholder="Last 4-5 digits" maxlength="5" oninput="onDigitsInput(this.value,'f_bank')"/>
     </div>
     <div class="col-md-2">
       <label class="form-label">3. Bank</label>
@@ -38,48 +38,50 @@
       <select id="f_platform" class="form-select"><option value="">Select Platform</option></select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">5. Order Name *</label>
-      <select id="f_order_name" class="form-select"><option value="">Select Order Name</option></select>
+      <label class="form-label">5. Ordered By <span style="color:var(--muted);font-size:10px;">(optional)</span></label>
+      <select id="f_ordered_by" class="form-select"><option value="">— Select or leave blank —</option></select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">6. Model *</label>
+      <label class="form-label">6. Order Name <span style="color:var(--muted);font-size:10px;">(optional)</span></label>
+      <input type="text" id="f_order_name" class="form-control" placeholder="e.g. Order #123"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">7. Model *</label>
       <input type="text" id="f_model" class="form-control" placeholder="e.g. iPhone 15" list="modelList" oninput="onModelInput(this.value,'f_variant')"/>
       <datalist id="modelList"></datalist>
     </div>
     <div class="col-md-2">
-      <label class="form-label">7. Variant</label>
-      <select id="f_variant" class="form-select" onchange="onVariantChange(this, 'f_costing')"><option value="">Select Variant</option></select>
+      <label class="form-label">8. Variant</label>
+      <select id="f_variant" class="form-select" onchange="onVariantChange(this,'f_costing')"><option value="">Select Variant</option></select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">8. Delivery Date</label>
+      <label class="form-label">9. Delivery Date</label>
       <input type="date" id="f_delivery_date" class="form-control"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">9. Costing (₹)</label>
+      <label class="form-label">10. Costing (₹)</label>
       <input type="number" id="f_costing" class="form-control" placeholder="Amount" step="0.01" oninput="recalcCardValue('f')"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">10. Selling Price (₹)</label>
+      <label class="form-label">11. Selling Price (₹)</label>
       <input type="number" id="f_selling_price" class="form-control" placeholder="Optional" step="0.01"/>
     </div>
-    <!-- ── Voucher fields ── -->
     <div class="col-md-2">
-      <label class="form-label">11. Voucher <span style="color:var(--muted);font-size:10px;">(optional)</span></label>
+      <label class="form-label">12. Voucher <span style="color:var(--muted);font-size:10px;">(optional)</span></label>
       <select id="f_voucher_name" class="form-select" onchange="onVoucherSelect('f')">
         <option value="">No Voucher</option>
       </select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">12. Voucher Value (₹)</label>
+      <label class="form-label">13. Voucher Value (₹)</label>
       <input type="number" id="f_voucher_value" class="form-control" placeholder="0.00" step="0.01" oninput="recalcCardValue('f')"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">13. Card Deduction (₹)</label>
+      <label class="form-label">14. Card Deduction (₹)</label>
       <input type="number" id="f_card_value" class="form-control" readonly placeholder="Auto-calculated" style="color:var(--accent2)!important;"/>
     </div>
-    <!-- ── End voucher fields ── -->
     <div class="col-md-2">
-      <label class="form-label">14. Sale Batch</label>
+      <label class="form-label">15. Sale Batch</label>
       <input type="text" id="f_sale_batch" class="form-control" value="Current Sale" placeholder="e.g. Sale 1"/>
     </div>
     <div class="col-12 d-flex gap-2 mt-2">
@@ -128,6 +130,7 @@
           <th>Card #</th>
           <th>Bank</th>
           <th>Platform</th>
+          <th>Ordered By</th>
           <th>Order Name</th>
           <th>Model</th>
           <th>Variant</th>
@@ -141,7 +144,7 @@
         </tr>
       </thead>
       <tbody id="secTableBody">
-        <tr><td colspan="16"><div class="empty-state"><i class="bi bi-inbox"></i><p>Loading orders...</p></div></td></tr>
+        <tr><td colspan="17"><div class="empty-state"><i class="bi bi-inbox"></i><p>Loading orders...</p></div></td></tr>
       </tbody>
     </table>
   </div>
@@ -178,8 +181,12 @@
             <select id="e_platform" class="form-select"><option value="">Select</option></select>
           </div>
           <div class="col-md-3">
+            <label class="form-label">Ordered By</label>
+            <select id="e_ordered_by" class="form-select"><option value="">— Select or leave blank —</option></select>
+          </div>
+          <div class="col-md-3">
             <label class="form-label">Order Name</label>
-            <select id="e_order_name" class="form-select"><option value="">Select</option></select>
+            <input type="text" id="e_order_name" class="form-control" placeholder="e.g. Order #123"/>
           </div>
           <div class="col-md-3">
             <label class="form-label">Model</label>
@@ -188,7 +195,7 @@
           </div>
           <div class="col-md-3">
             <label class="form-label">Variant</label>
-            <select id="e_variant" class="form-select" onchange="onVariantChange(this, 'e_costing')"><option value="">Select</option></select>
+            <select id="e_variant" class="form-select" onchange="onVariantChange(this,'e_costing')"><option value="">Select</option></select>
           </div>
           <div class="col-md-3">
             <label class="form-label">Delivery Date</label>
@@ -230,7 +237,7 @@
   </div>
 </div>
 
-<!-- ── Bulk Set Sell Price Modal ── -->
+<!-- ── Bulk Sell Modal ── -->
 <div class="modal fade" id="bulkSellModal" tabindex="-1">
   <div class="modal-dialog modal-sm">
     <div class="modal-content">
@@ -253,7 +260,7 @@
   </div>
 </div>
 
-<!-- ── Bulk Set Delivery Date Modal ── -->
+<!-- ── Bulk Delivery Modal ── -->
 <div class="modal fade" id="bulkDeliveryModal" tabindex="-1">
   <div class="modal-dialog modal-sm">
     <div class="modal-content">
@@ -280,9 +287,7 @@
 
 {% block scripts %}
 <script>
-let allOrders = [];
-let filteredOrders = [];
-let allVouchers = [];
+let allOrders = [], filteredOrders = [], allVouchers = [];
 let currentPage = 1;
 const PAGE_SIZE = 50;
 let modelTimer = null;
@@ -291,13 +296,12 @@ const bulkSellModal  = new bootstrap.Modal(document.getElementById('bulkSellModa
 const bulkDelivModal = new bootstrap.Modal(document.getElementById('bulkDeliveryModal'));
 
 // ── Voucher helpers ───────────────────────────────────────────────────────────
-function populateVoucherDropdown(selectId, selectedName = '') {
+function populateVoucherDropdown(selectId, selectedName='') {
   const sel = document.getElementById(selectId);
   sel.innerHTML = '<option value="">No Voucher</option>';
   allVouchers.forEach(v => {
     const opt = document.createElement('option');
-    opt.value = v.name;
-    opt.textContent = `${v.name} (₹${v.value})`;
+    opt.value = v.name; opt.textContent = `${v.name} (₹${v.value})`;
     opt.setAttribute('data-value', v.value);
     if (v.name === selectedName) opt.selected = true;
     sel.appendChild(opt);
@@ -306,35 +310,43 @@ function populateVoucherDropdown(selectId, selectedName = '') {
 
 function onVoucherSelect(prefix) {
   const sel = document.getElementById(`${prefix}_voucher_name`);
-  const selectedOpt = sel.options[sel.selectedIndex];
-  const val = selectedOpt ? (selectedOpt.getAttribute('data-value') || '') : '';
-  document.getElementById(`${prefix}_voucher_value`).value = val;
+  const opt = sel.options[sel.selectedIndex];
+  document.getElementById(`${prefix}_voucher_value`).value = opt ? (opt.getAttribute('data-value') || '') : '';
   recalcCardValue(prefix);
 }
 
 function recalcCardValue(prefix) {
   const costing = parseFloat(document.getElementById(`${prefix}_costing`).value) || 0;
   const voucher = parseFloat(document.getElementById(`${prefix}_voucher_value`).value) || 0;
-  const cardValEl = document.getElementById(`${prefix}_card_value`);
-  if (voucher > 0) {
-    cardValEl.value = (costing - voucher).toFixed(2);
-  } else {
-    cardValEl.value = '';
-  }
+  const el = document.getElementById(`${prefix}_card_value`);
+  el.value = voucher > 0 ? (costing - voucher).toFixed(2) : '';
+}
+
+// ── Ordered By dropdown helpers ───────────────────────────────────────────────
+function populateOrderedByDropdown(selectId, selectedName='') {
+  const sel = document.getElementById(selectId);
+  sel.innerHTML = '<option value="">— Select or leave blank —</option>';
+  allSecNames.forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n.name; opt.textContent = n.name;
+    if (n.name === selectedName) opt.selected = true;
+    sel.appendChild(opt);
+  });
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+let allSecNames = [];
+
 async function init() {
   document.getElementById('f_delivery_date').value = '';
   document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
 
   const [platforms, models, secNames, vouchers] = await Promise.all([
-    api('/api/platform-names'),
-    api('/api/models'),
-    api('/api/sec-order-names'),
-    api('/api/vouchers')
+    api('/api/platform-names'), api('/api/models'),
+    api('/api/sec-order-names'), api('/api/vouchers')
   ]);
 
+  allSecNames = secNames;
   allVouchers = vouchers;
 
   ['f_platform','e_platform'].forEach(id => {
@@ -344,17 +356,12 @@ async function init() {
   });
 
   ['modelList','eModelList'].forEach(id => {
-    const dl = document.getElementById(id);
-    dl.innerHTML = '';
+    const dl = document.getElementById(id); dl.innerHTML = '';
     models.forEach(m => { const opt = document.createElement('option'); opt.value = m.model_name; dl.appendChild(opt); });
   });
 
-  ['f_order_name','e_order_name'].forEach(id => {
-    const sel = document.getElementById(id);
-    sel.innerHTML = '<option value="">Select Order Name</option>';
-    secNames.forEach(n => { const opt = document.createElement('option'); opt.value = opt.textContent = n.name; sel.appendChild(opt); });
-  });
-
+  populateOrderedByDropdown('f_ordered_by');
+  populateOrderedByDropdown('e_ordered_by');
   populateVoucherDropdown('f_voucher_name');
   populateVoucherDropdown('e_voucher_name');
 
@@ -363,15 +370,14 @@ async function init() {
 
 async function loadOrders() {
   allOrders = await api('/api/secondary-orders');
-  populateSaleFilter();
-  filterTable();
+  populateSaleFilter(); filterTable();
 }
 
-// ── Pagination & Rendering ────────────────────────────────────────────────────
+// ── Render ────────────────────────────────────────────────────────────────────
 function renderTable() {
   const body = document.getElementById('secTableBody');
   if (!filteredOrders.length) {
-    body.innerHTML = '<tr><td colspan="16"><div class="empty-state"><i class="bi bi-inbox"></i><p>No secondary orders found.</p></div></td></tr>';
+    body.innerHTML = '<tr><td colspan="17"><div class="empty-state"><i class="bi bi-inbox"></i><p>No secondary orders found.</p></div></td></tr>';
     document.getElementById('pageInfo').textContent = '0 - 0 of 0';
     document.getElementById('btnPrev').disabled = true;
     document.getElementById('btnNext').disabled = true;
@@ -381,20 +387,19 @@ function renderTable() {
   const end   = Math.min(start + PAGE_SIZE, filteredOrders.length);
   const pageData = filteredOrders.slice(start, end);
 
-  document.getElementById('pageInfo').textContent = `${start + 1} - ${end} of ${filteredOrders.length}`;
+  document.getElementById('pageInfo').textContent = `${start+1} - ${end} of ${filteredOrders.length}`;
   document.getElementById('btnPrev').disabled = currentPage === 1;
   document.getElementById('btnNext').disabled = end >= filteredOrders.length;
 
   body.innerHTML = pageData.map(o => {
-    const pColor  = o.profit >= 0 ? 'var(--green)' : 'var(--red)';
-    const dateStr = (o.created_at || '—').split(' ')[0];
-    const hasSell = o.selling_price && parseFloat(o.selling_price) > 0;
+    const pColor     = o.profit >= 0 ? 'var(--green)' : 'var(--red)';
+    const dateStr    = (o.created_at || '—').split(' ')[0];
+    const hasSell    = o.selling_price && parseFloat(o.selling_price) > 0;
     const hasVoucher = o.voucher_value && parseFloat(o.voucher_value) > 0;
 
     const voucherCell = hasVoucher
-      ? `<span style="font-size:11px;color:var(--amber);font-weight:600;">${o.voucher_name || ''} <span style="color:var(--muted);">₹${parseFloat(o.voucher_value).toLocaleString('en-IN')}</span></span>`
+      ? `<span style="font-size:11px;color:var(--amber);font-weight:600;">${o.voucher_name||''} <span style="color:var(--muted);">₹${parseFloat(o.voucher_value).toLocaleString('en-IN')}</span></span>`
       : `<span style="color:var(--muted);font-size:11px;">—</span>`;
-
     const cardValCell = hasVoucher
       ? `<span style="color:var(--accent2);font-weight:600;">${formatCost(o.card_value)}</span>`
       : `<span style="color:var(--muted);font-size:11px;">—</span>`;
@@ -406,7 +411,8 @@ function renderTable() {
       <td><code style="color:var(--accent2);font-size:12px;">•••• ${o.last_digits||'—'}</code></td>
       <td>${cardBadge(o.card_type)}</td>
       <td>${o.platform||'—'}</td>
-      <td style="font-weight:500">${o.order_name||'—'}</td>
+      <td style="color:var(--accent2);font-weight:500;">${o.ordered_by||'<span style="color:var(--muted);font-size:11px;">—</span>'}</td>
+      <td style="color:var(--muted);">${o.order_name||'—'}</td>
       <td>${o.model||'—'}</td>
       <td style="color:var(--muted)">${o.variant||'—'}</td>
       <td style="color:var(--muted)">${o.delivery_date||'—'}</td>
@@ -416,9 +422,7 @@ function renderTable() {
       <td style="color:${hasSell?'var(--text)':'var(--amber)'};font-weight:600">${hasSell ? formatCost(o.selling_price) : '<span style="font-size:11px;font-style:italic;">pending</span>'}</td>
       <td style="color:${pColor};font-weight:600">${hasSell ? formatCost(o.profit) : '—'}</td>
       <td>
-        <div style="display:flex;gap:6px;">
-          <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})"><i class="bi bi-pencil"></i></button>
-        </div>
+        <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})"><i class="bi bi-pencil"></i></button>
       </td>
     </tr>`;
   }).join('');
@@ -428,47 +432,44 @@ function changePage(dir) { currentPage += dir; renderTable(); }
 
 function updateStats() {
   document.getElementById('totalCount').textContent = filteredOrders.length;
-  const totalCost   = filteredOrders.reduce((s,o) => s + (parseFloat(o.costing)||0), 0);
-  const totalProfit = filteredOrders.reduce((s,o) => s + (parseFloat(o.profit)||0), 0);
-  document.getElementById('totalCost').innerHTML = `<span style="color:var(--muted)">Spend:</span> ${formatCost(totalCost)} <span style="color:var(--muted);margin-left:8px;">Profit:</span> <span style="color:var(--green)">${formatCost(totalProfit)}</span>`;
+  const totalCost   = filteredOrders.reduce((s,o) => s+(parseFloat(o.costing)||0), 0);
+  const totalProfit = filteredOrders.reduce((s,o) => s+(parseFloat(o.profit)||0), 0);
+  document.getElementById('totalCost').innerHTML =
+    `<span style="color:var(--muted)">Spend:</span> ${formatCost(totalCost)} <span style="color:var(--muted);margin-left:8px;">Profit:</span> <span style="color:var(--green)">${formatCost(totalProfit)}</span>`;
 }
 
-// ── Search & Filters ──────────────────────────────────────────────────────────
 function populateSaleFilter() {
-  const sales = [...new Set(allOrders.map(o => o.sale_batch || 'Current Sale'))].sort();
-  const sel = document.getElementById('filterSale');
-  const currentVal = sel.value;
+  const sales = [...new Set(allOrders.map(o => o.sale_batch||'Current Sale'))].sort();
+  const sel = document.getElementById('filterSale'); const cv = sel.value;
   sel.innerHTML = '<option value="ALL">All Sales</option>';
   sales.forEach(s => { const opt = document.createElement('option'); opt.value = s; opt.textContent = s; sel.appendChild(opt); });
-  if ([...sel.options].some(o => o.value === currentVal)) sel.value = currentVal;
+  if ([...sel.options].some(o => o.value === cv)) sel.value = cv;
 }
 
 function filterTable() {
   const q = document.getElementById('searchInput').value.toLowerCase();
-  const saleFilter = document.getElementById('filterSale').value;
+  const sf = document.getElementById('filterSale').value;
   filteredOrders = allOrders.filter(o => {
-    const matchesSearch = Object.values(o).some(v => String(v||'').toLowerCase().includes(q));
-    const matchesSale   = (saleFilter === 'ALL') || ((o.sale_batch || 'Current Sale') === saleFilter);
-    return matchesSearch && matchesSale;
+    const ms = Object.values(o).some(v => String(v||'').toLowerCase().includes(q));
+    const mb = sf==='ALL' || (o.sale_batch||'Current Sale')===sf;
+    return ms && mb;
   });
-  currentPage = 1;
-  renderTable();
-  updateStats();
+  currentPage = 1; renderTable(); updateStats();
 }
 
 // ── Form ──────────────────────────────────────────────────────────────────────
 function toggleForm() {
-  const panel = document.getElementById('addFormPanel');
-  const btn   = document.getElementById('formToggleText');
+  const panel = document.getElementById('addFormPanel'); const btn = document.getElementById('formToggleText');
   const visible = panel.style.display !== 'none';
   panel.style.display = visible ? 'none' : 'block';
   btn.textContent = visible ? 'Add New Secondary Order' : 'Hide Form';
 }
 
 function clearForm() {
-  ['f_digits','f_bank','f_model','f_costing','f_selling_price','f_voucher_value','f_card_value'].forEach(id => document.getElementById(id).value = '');
+  ['f_digits','f_bank','f_model','f_costing','f_selling_price','f_order_name','f_voucher_value','f_card_value']
+    .forEach(id => document.getElementById(id).value = '');
   document.getElementById('f_platform').value = '';
-  document.getElementById('f_order_name').value = '';
+  document.getElementById('f_ordered_by').value = '';
   document.getElementById('f_voucher_name').value = '';
   document.getElementById('f_variant').innerHTML = '<option value="">Select Variant</option>';
   document.getElementById('f_sale_batch').value = 'Current Sale';
@@ -493,7 +494,8 @@ async function submitOrder() {
     last_digits:   document.getElementById('f_digits').value.trim(),
     card_type:     document.getElementById('f_bank').value.trim(),
     platform:      document.getElementById('f_platform').value,
-    order_name:    document.getElementById('f_order_name').value,
+    ordered_by:    document.getElementById('f_ordered_by').value || '',
+    order_name:    document.getElementById('f_order_name').value.trim(),
     model:         document.getElementById('f_model').value.trim(),
     variant:       document.getElementById('f_variant').value,
     delivery_date: document.getElementById('f_delivery_date').value,
@@ -503,23 +505,22 @@ async function submitOrder() {
     voucher_value: document.getElementById('f_voucher_value').value || '',
     sale_batch:    document.getElementById('f_sale_batch').value.trim() || 'Current Sale'
   };
-  if (!payload.last_digits || !payload.platform || !payload.order_name || !payload.model) {
-    showToast('Fill required fields: Last Digits, Platform, Order Name, Model', 'error'); return;
+  if (!payload.last_digits || !payload.platform || !payload.model) {
+    showToast('Fill required fields: Last Digits, Platform, Model', 'error'); return;
   }
   const res = await api('/api/secondary-orders', 'POST', payload);
   if (res.error) { showToast(res.error, 'error'); return; }
-  allOrders.unshift(res);
-  populateSaleFilter(); filterTable(); clearForm();
+  allOrders.unshift(res); populateSaleFilter(); filterTable(); clearForm();
   showToast('Secondary order saved!');
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────────
 async function openEdit(id) {
-  const o = allOrders.find(x => x.id === id);
-  if (!o) return;
+  const o = allOrders.find(x => x.id === id); if (!o) return;
   document.getElementById('e_id').value           = o.id;
   document.getElementById('e_digits').value        = o.last_digits || '';
   document.getElementById('e_bank').value          = o.card_type || '';
+  document.getElementById('e_order_name').value    = o.order_name || '';
   document.getElementById('e_model').value         = o.model || '';
   document.getElementById('e_delivery_date').value = o.delivery_date || '';
   document.getElementById('e_costing').value       = o.costing || '';
@@ -528,19 +529,12 @@ async function openEdit(id) {
   document.getElementById('e_card_value').value    = o.card_value || '';
   document.getElementById('e_sale_batch').value    = o.sale_batch || 'Current Sale';
 
-  const [platforms, secNames] = await Promise.all([
-    api('/api/platform-names'),
-    api('/api/sec-order-names')
-  ]);
-
+  const platforms = await api('/api/platform-names');
   const ePlat = document.getElementById('e_platform');
   ePlat.innerHTML = '<option value="">Select Platform</option>';
-  platforms.forEach(p => { const opt = document.createElement('option'); opt.value = opt.textContent = p; if (p === o.platform) opt.selected = true; ePlat.appendChild(opt); });
+  platforms.forEach(p => { const opt = document.createElement('option'); opt.value = opt.textContent = p; if (p===o.platform) opt.selected=true; ePlat.appendChild(opt); });
 
-  const eName = document.getElementById('e_order_name');
-  eName.innerHTML = '<option value="">Select Order Name</option>';
-  secNames.forEach(n => { const opt = document.createElement('option'); opt.value = opt.textContent = n.name; if (n.name === o.order_name) opt.selected = true; eName.appendChild(opt); });
-
+  populateOrderedByDropdown('e_ordered_by', o.ordered_by || '');
   populateVoucherDropdown('e_voucher_name', o.voucher_name || '');
 
   if (o.model) {
@@ -549,13 +543,12 @@ async function openEdit(id) {
     eVar.innerHTML = '<option value="">Select Variant</option>';
     variants.forEach(v => {
       const opt = document.createElement('option');
-      const vName = typeof v === 'object' ? v.variant_name : v;
-      const vCost = typeof v === 'object' ? (v.costing || '') : '';
-      const vSell = typeof v === 'object' ? (v.selling_price || '') : '';
-      opt.value = vName; opt.textContent = vName;
-      opt.setAttribute('data-costing', vCost);
-      opt.setAttribute('data-selling', vSell);
-      if (vName === o.variant) opt.selected = true;
+      const vName = typeof v==='object' ? v.variant_name : v;
+      const vCost = typeof v==='object' ? (v.costing||'') : '';
+      const vSell = typeof v==='object' ? (v.selling_price||'') : '';
+      opt.value=vName; opt.textContent=vName;
+      opt.setAttribute('data-costing',vCost); opt.setAttribute('data-selling',vSell);
+      if (vName===o.variant) opt.selected=true;
       eVar.appendChild(opt);
     });
   }
@@ -568,8 +561,8 @@ async function saveEdit() {
     last_digits:   document.getElementById('e_digits').value.trim(),
     card_type:     document.getElementById('e_bank').value.trim(),
     platform:      document.getElementById('e_platform').value,
-    account:       '',
-    order_name:    document.getElementById('e_order_name').value,
+    ordered_by:    document.getElementById('e_ordered_by').value || '',
+    order_name:    document.getElementById('e_order_name').value.trim(),
     model:         document.getElementById('e_model').value.trim(),
     variant:       document.getElementById('e_variant').value,
     delivery_date: document.getElementById('e_delivery_date').value,
@@ -580,17 +573,14 @@ async function saveEdit() {
     sale_batch:    document.getElementById('e_sale_batch').value.trim() || 'Current Sale'
   };
   const res = await api(`/api/secondary-orders/${id}`, 'PUT', payload);
-  if (!res.success) { showToast('Update failed. Please try again.', 'error'); return; }
+  if (!res.success) { showToast('Update failed.', 'error'); return; }
   const idx = allOrders.findIndex(x => x.id === id);
   if (idx !== -1) allOrders[idx] = { ...allOrders[idx], ...res };
-  populateSaleFilter(); filterTable(); editModal.hide();
-  showToast('Order updated!');
+  populateSaleFilter(); filterTable(); editModal.hide(); showToast('Order updated!');
 }
 
 // ── Bulk Selection ────────────────────────────────────────────────────────────
-function getSelectedIds() {
-  return [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
-}
+function getSelectedIds() { return [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value)); }
 
 function onCheckChange() {
   const count = getSelectedIds().length;
@@ -601,88 +591,55 @@ function onCheckChange() {
   });
 }
 
-function toggleSelectAll(cb) {
-  document.querySelectorAll('.row-check').forEach(c => { c.checked = cb.checked; });
-  onCheckChange();
-}
+function toggleSelectAll(cb) { document.querySelectorAll('.row-check').forEach(c => { c.checked = cb.checked; }); onCheckChange(); }
 
-// ── Bulk Set Sell Price ───────────────────────────────────────────────────────
 function openBulkSell() {
-  const count = getSelectedIds().length;
-  if (!count) return;
+  const count = getSelectedIds().length; if (!count) return;
   document.getElementById('bulkSellCount').textContent = count;
   document.getElementById('bulk_sell_price').value = '';
   bulkSellModal.show();
 }
 
 async function applyBulkSell() {
-  const ids  = getSelectedIds();
-  const sell = document.getElementById('bulk_sell_price').value.trim();
-  if (!sell) { showToast('Enter a selling price', 'error'); return; }
-
+  const ids = getSelectedIds(); const sell = document.getElementById('bulk_sell_price').value.trim();
+  if (!sell) { showToast('Enter a selling price','error'); return; }
   const btn = document.querySelector('#bulkSellModal .btn-success-custom');
-  const orig = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-
+  const orig = btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> Saving...';
   try {
-    const res = await api('/api/secondary-orders/bulk-set-sell', 'POST', { ids, selling_price: parseFloat(sell) });
+    const res = await api('/api/secondary-orders/bulk-set-sell', 'POST', {ids, selling_price: parseFloat(sell)});
     if (res.success) {
       const sellF = parseFloat(sell);
-      ids.forEach(id => {
-        const o = allOrders.find(x => x.id === id);
-        if (o) { o.selling_price = sellF; o.profit = sellF - (parseFloat(o.costing) || 0); }
-      });
-      populateSaleFilter(); filterTable();
-      bulkSellModal.hide();
-      document.getElementById('selectAll').checked = false; onCheckChange();
+      ids.forEach(id => { const o=allOrders.find(x=>x.id===id); if(o){o.selling_price=sellF; o.profit=sellF-(parseFloat(o.costing)||0);} });
+      populateSaleFilter(); filterTable(); bulkSellModal.hide();
+      document.getElementById('selectAll').checked=false; onCheckChange();
       showToast(`Sell price set for ${res.updated} order(s)`);
-    } else {
-      showToast('Failed to update sell price', 'error');
-    }
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = orig;
-  }
+    } else { showToast('Failed to update sell price','error'); }
+  } finally { btn.disabled=false; btn.innerHTML=orig; }
 }
 
-// ── Bulk Set Delivery Date ────────────────────────────────────────────────────
 function openBulkDelivery() {
-  const count = getSelectedIds().length;
-  if (!count) return;
+  const count = getSelectedIds().length; if (!count) return;
   document.getElementById('bulkDeliveryCount').textContent = count;
   document.getElementById('bulk_delivery_date').value = '';
   bulkDelivModal.show();
 }
 
 async function applyBulkDelivery() {
-  const ids  = getSelectedIds();
-  const date = document.getElementById('bulk_delivery_date').value;
-  if (!date) { showToast('Select a delivery date', 'error'); return; }
-
+  const ids = getSelectedIds(); const date = document.getElementById('bulk_delivery_date').value;
+  if (!date) { showToast('Select a delivery date','error'); return; }
   const btn = document.querySelector('#bulkDeliveryModal .btn-primary-custom');
-  const orig = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-
+  const orig = btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> Saving...';
   try {
-    const res = await api('/api/secondary-orders/bulk-set-delivery', 'POST', { ids, delivery_date: date });
+    const res = await api('/api/secondary-orders/bulk-set-delivery', 'POST', {ids, delivery_date: date});
     if (res.success) {
-      ids.forEach(id => { const o = allOrders.find(x => x.id === id); if (o) o.delivery_date = date; });
-      filterTable();
-      bulkDelivModal.hide();
-      document.getElementById('selectAll').checked = false; onCheckChange();
+      ids.forEach(id => { const o=allOrders.find(x=>x.id===id); if(o) o.delivery_date=date; });
+      filterTable(); bulkDelivModal.hide();
+      document.getElementById('selectAll').checked=false; onCheckChange();
       showToast(`Delivery date set for ${res.updated} order(s)`);
-    } else {
-      showToast('Failed to update delivery date', 'error');
-    }
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = orig;
-  }
+    } else { showToast('Failed to update delivery date','error'); }
+  } finally { btn.disabled=false; btn.innerHTML=orig; }
 }
 
-// ── Bulk Sale & Delete ────────────────────────────────────────────────────────
 async function bulkDelete() {
   const ids = getSelectedIds();
   if (!ids.length || !confirm(`Delete ${ids.length} selected orders?`)) return;
@@ -690,21 +647,19 @@ async function bulkDelete() {
   if (res.success) {
     allOrders = allOrders.filter(o => !ids.includes(o.id));
     populateSaleFilter(); filterTable();
-    document.getElementById('selectAll').checked = false; onCheckChange();
+    document.getElementById('selectAll').checked=false; onCheckChange();
     showToast(`${res.deleted} orders deleted.`);
   }
 }
 
 async function promptBulkSale() {
-  const ids = getSelectedIds();
-  if (!ids.length) return;
-  const newBatch = prompt(`Enter Sale Batch name for ${ids.length} orders:`, 'Sale 1');
+  const ids = getSelectedIds(); if (!ids.length) return;
+  const newBatch = prompt(`Enter Sale Batch name for ${ids.length} orders:`,'Sale 1');
   if (!newBatch) return;
-  const res = await api('/api/secondary-orders/bulk-update-sale', 'POST', {ids, sale_batch: newBatch});
+  const res = await api('/api/secondary-orders/bulk-update-sale','POST',{ids,sale_batch:newBatch});
   if (res.success) {
     showToast(`Assigned ${ids.length} orders to ${newBatch}`);
-    await loadOrders();
-    document.getElementById('selectAll').checked = false; onCheckChange();
+    await loadOrders(); document.getElementById('selectAll').checked=false; onCheckChange();
   }
 }
 
