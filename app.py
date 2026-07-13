@@ -59,6 +59,8 @@ def main_orders(): return render_template('main_orders.html')
 def secondary_orders(): return render_template('secondary_orders.html')
 @app.route('/offline')
 def offline_orders(): return render_template('offline_orders.html')
+@app.route('/jiomart')
+def jiomart_orders(): return render_template('jiomart_orders.html')
 @app.route('/inventory')
 def inventory(): return render_template('inventory.html')
 @app.route('/dashboard')
@@ -693,7 +695,173 @@ SHEET_SCHEMA = {
     'machines':        ['id','name'],
     'vendors':         ['id','name'],
     'brands':          ['id','name'],
+    'jiomart_orders':  ['id','card_type','last_digits','account','order_name','order_id',
+                        'model','variant','costing','selling_price','profit',
+                        'delivery_date','sale_batch','created_at'],
 }
+
+
+# ── Jiomart Orders API ────────────────────────────────────────────────────────
+# id(1) card_type(2) last_digits(3) account(4) order_name(5) order_id(6)
+# model(7) variant(8) costing(9) selling_price(10) profit(11)
+# delivery_date(12) sale_batch(13) created_at(14)
+
+@app.route('/api/jiomart-orders', methods=['GET', 'POST'])
+def api_jiomart_orders():
+    if not SHEET: return jsonify([])
+    ws = SHEET.worksheet('jiomart_orders')
+
+    if request.method == 'GET':
+        cached = cache_get('jiomart_orders')
+        if cached: return jsonify(cached)
+        try: records = ws.get_all_records()
+        except: records = []
+        for o in records:
+            if str(o.get('last_digits','')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
+        result = list(reversed(records)); cache_set('jiomart_orders', result); return jsonify(result)
+
+    try:
+        data = request.json; next_id = get_next_id(ws)
+        costing = safe_float(data.get('costing')); selling = safe_float(data.get('selling_price'))
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ld = str(data.get('last_digits', '')); sd = f"'{ld}" if ld else ""
+        ws.append_row([
+            next_id, data.get('card_type',''), sd, data.get('account',''),
+            data.get('order_name',''), data.get('order_id',''),
+            data.get('model',''), data.get('variant',''),
+            costing, selling, selling - costing,
+            data.get('delivery_date',''), data.get('sale_batch','Current Sale'), now
+        ])
+        cache_clear('jiomart_orders')
+        return jsonify({
+            'success': True, 'id': next_id,
+            'card_type': data.get('card_type',''), 'last_digits': ld,
+            'account': data.get('account',''),
+            'order_name': data.get('order_name',''), 'order_id': data.get('order_id',''),
+            'model': data.get('model',''), 'variant': data.get('variant',''),
+            'costing': costing, 'selling_price': selling, 'profit': selling - costing,
+            'delivery_date': data.get('delivery_date',''),
+            'sale_batch': data.get('sale_batch','Current Sale'), 'created_at': now
+        })
+    except Exception as e:
+        print(f"Jiomart POST Error: {e}"); return jsonify({'success': False}), 500
+
+@app.route('/api/jiomart-orders/bulk-delete', methods=['POST'])
+def bulk_del_jiomart():
+    if not SHEET: return jsonify({'success': False})
+    ids = request.json.get('ids', []); ws = SHEET.worksheet('jiomart_orders')
+    try: records = ws.get_all_records()
+    except: records = []
+    rows_to_delete = [i+2 for i,r in enumerate(records) if r.get('id') in ids]
+    for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_row(r_idx)
+    cache_clear('jiomart_orders'); return jsonify({'success': True, 'deleted': len(rows_to_delete)})
+
+@app.route('/api/jiomart-orders/bulk-update-sale', methods=['POST'])
+def bulk_sale_jiomart():
+    if not SHEET: return jsonify({'success': False})
+    ids = request.json.get('ids', []); new_batch = request.json.get('sale_batch', 'Current Sale')
+    ws = SHEET.worksheet('jiomart_orders')
+    try:
+        records = ws.get_all_records()
+        for i, r in enumerate(records):
+            if r.get('id') in ids: ws.update_cell(i+2, 13, new_batch)  # col 13 = sale_batch
+        cache_clear('jiomart_orders'); return jsonify({'success': True})
+    except Exception as e: print("Jiomart Bulk Sale Error:", e); return jsonify({'success': False})
+
+@app.route('/api/jiomart-orders/bulk-set-sell', methods=['POST'])
+def bulk_sell_jiomart():
+    if not SHEET: return jsonify({'success': False})
+    ids = request.json.get('ids', []); new_sell = request.json.get('selling_price')
+    if not ids or new_sell is None: return jsonify({'success': False})
+    try: new_sell_f = float(new_sell)
+    except: return jsonify({'success': False})
+    ws = SHEET.worksheet('jiomart_orders')
+    try:
+        records = ws.get_all_records(); updated = 0
+        for i, r in enumerate(records):
+            if r.get('id') in ids:
+                cost = safe_float(r.get('costing'))
+                ws.update_cell(i+2, 10, new_sell_f)               # selling_price col 10
+                ws.update_cell(i+2, 11, round(new_sell_f-cost,2)) # profit col 11
+                updated += 1
+        cache_clear('jiomart_orders'); return jsonify({'success': True, 'updated': updated})
+    except Exception as e: print("Jiomart Bulk Sell Error:", e); return jsonify({'success': False})
+
+@app.route('/api/jiomart-orders/bulk-set-delivery', methods=['POST'])
+def bulk_delivery_jiomart():
+    if not SHEET: return jsonify({'success': False})
+    ids = request.json.get('ids', []); new_date = request.json.get('delivery_date', '')
+    if not ids or not new_date: return jsonify({'success': False})
+    ws = SHEET.worksheet('jiomart_orders')
+    try:
+        records = ws.get_all_records(); updated = 0
+        for i, r in enumerate(records):
+            if r.get('id') in ids:
+                ws.update_cell(i+2, 12, new_date)  # delivery_date col 12
+                updated += 1
+        cache_clear('jiomart_orders'); return jsonify({'success': True, 'updated': updated})
+    except Exception as e: print("Jiomart Bulk Delivery Error:", e); return jsonify({'success': False})
+
+@app.route('/api/jiomart-orders/export')
+def export_jiomart():
+    if not SHEET: return "No sheet connected", 500
+    fmt = request.args.get('format', 'csv'); sale_filter = request.args.get('sale', '')
+    try: records = SHEET.worksheet('jiomart_orders').get_all_records()
+    except: records = []
+    for o in records:
+        if str(o.get('last_digits','')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
+    if sale_filter and sale_filter != 'ALL':
+        records = [r for r in records if r.get('sale_batch','') == sale_filter]
+    headers = ['id','card_type','last_digits','account','order_name','order_id',
+               'model','variant','costing','selling_price','profit',
+               'delivery_date','sale_batch','created_at']
+    if fmt == 'csv':
+        out = io.StringIO(); w = csv.DictWriter(out, fieldnames=headers, extrasaction='ignore')
+        w.writeheader(); w.writerows(records); out.seek(0)
+        return send_file(io.BytesIO(out.getvalue().encode('utf-8')), mimetype='text/csv',
+            as_attachment=True, download_name=f'jiomart_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.csv')
+    wb = openpyxl.Workbook(); ws_xl = wb.active; ws_xl.title = "Jiomart Orders"
+    hf = PatternFill("solid", fgColor="1A2D45"); hfont = Font(bold=True, color="F5A623")
+    ws_xl.append(headers)
+    for c in ws_xl[1]: c.fill = hf; c.font = hfont
+    for r in records: ws_xl.append([r.get(h,'') for h in headers])
+    for col in ws_xl.columns:
+        ws_xl.column_dimensions[col[0].column_letter].width = min(max((len(str(c.value or '')) for c in col), default=10)+4, 40)
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True, download_name=f'jiomart_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx')
+
+@app.route('/api/jiomart-orders/<int:id>', methods=['DELETE', 'PUT'])
+def modify_jiomart(id):
+    if request.method == 'DELETE':
+        cache_clear('jiomart_orders'); return delete_master_table('jiomart_orders', id)
+    if not SHEET: return jsonify({'success': False})
+    data = request.json; ws = SHEET.worksheet('jiomart_orders')
+    try:
+        cell = ws.find(str(id), in_column=1)
+        cost = safe_float(data.get('costing')); sell = safe_float(data.get('selling_price'))
+        ld = str(data.get('last_digits','')); sd = f"'{ld}" if ld else ""
+        # B(2) through M(13) = 12 values
+        ws.update(f'B{cell.row}:M{cell.row}', [[
+            data.get('card_type',''), sd, data.get('account',''),
+            data.get('order_name',''), data.get('order_id',''),
+            data.get('model',''), data.get('variant',''),
+            cost, sell, sell - cost,
+            data.get('delivery_date',''), data.get('sale_batch','Current Sale')
+        ]])
+        cache_clear('jiomart_orders')
+        return jsonify({
+            'success': True, 'id': id,
+            'card_type': data.get('card_type',''), 'last_digits': ld,
+            'account': data.get('account',''),
+            'order_name': data.get('order_name',''), 'order_id': data.get('order_id',''),
+            'model': data.get('model',''), 'variant': data.get('variant',''),
+            'costing': cost, 'selling_price': sell, 'profit': sell - cost,
+            'delivery_date': data.get('delivery_date',''),
+            'sale_batch': data.get('sale_batch','Current Sale')
+        })
+    except Exception as e: print("Jiomart Edit Error:", e); return jsonify({'success': False})
+
 
 @app.route('/setup')
 def setup_page(): return render_template('setup.html')
