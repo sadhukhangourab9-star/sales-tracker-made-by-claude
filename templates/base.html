@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{% block title %}Order Tracker{% endblock %}</title>
-  
+
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0f1c2e">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
@@ -13,7 +13,7 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-  
+
   <style>
     :root {
       --navy:    #0f1c2e;
@@ -66,10 +66,8 @@
       font-size: 15px; font-weight: 700;
       color: var(--text); letter-spacing: 0.3px;
     }
-    .sidebar-brand p {
-      font-size: 11px; color: var(--muted); margin-top: 2px;
-    }
-    .sidebar-nav { padding: 16px 12px; flex: 1; }
+    .sidebar-brand p { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .sidebar-nav { padding: 16px 12px; flex: 1; overflow-y: auto; }
     .nav-label {
       font-size: 10px; font-weight: 600;
       color: var(--muted); letter-spacing: 1px;
@@ -85,19 +83,16 @@
     }
     .nav-link i { font-size: 16px; }
     .nav-link:hover  { background: var(--navy3); color: var(--text); }
-    .nav-link.active { background: linear-gradient(135deg, rgba(59,157,221,0.2), rgba(91,184,245,0.1));
-                       color: var(--accent2); border: 1px solid rgba(59,157,221,0.25); }
+    .nav-link.active {
+      background: linear-gradient(135deg, rgba(59,157,221,0.2), rgba(91,184,245,0.1));
+      color: var(--accent2); border: 1px solid rgba(59,157,221,0.25);
+    }
     .sidebar-footer {
       padding: 16px; border-top: 1px solid var(--border);
       font-size: 11px; color: var(--muted); text-align: center;
     }
     /* ── Main ── */
-    .main-content {
-      margin-left: 240px;
-      flex: 1;
-      min-height: 100vh;
-      padding: 28px 32px;
-    }
+    .main-content { margin-left: 240px; flex: 1; min-height: 100vh; padding: 28px 32px; }
     /* ── Page header ── */
     .page-header {
       display: flex; align-items: center; justify-content: space-between;
@@ -124,8 +119,10 @@
       display: flex; align-items: center; gap: 8px;
     }
     /* ── Form controls ── */
-    .form-label { font-size: 12px; font-weight: 600; color: var(--muted);
-                  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .form-label {
+      font-size: 12px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+    }
     .form-control, .form-select {
       background: var(--input-bg) !important;
       border: 1px solid var(--border) !important;
@@ -176,9 +173,7 @@
     .btn-success-custom:hover, .btn-danger-custom:hover { opacity: 0.85; }
     /* ── Table ── */
     .data-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
-    .data-table {
-      width: 100%; border-collapse: collapse; font-size: 13px;
-    }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .data-table thead th {
       background: var(--navy3);
       color: var(--muted); font-size: 11px; font-weight: 600;
@@ -186,16 +181,10 @@
       padding: 12px 14px; border-bottom: 1px solid var(--border);
       white-space: nowrap;
     }
-    .data-table tbody tr {
-      border-bottom: 1px solid var(--border);
-      transition: background 0.15s;
-    }
+    .data-table tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
     .data-table tbody tr:last-child { border-bottom: none; }
     .data-table tbody tr:hover { background: rgba(59,157,221,0.04); }
-    .data-table tbody td {
-      padding: 11px 14px; color: var(--text); vertical-align: middle;
-      white-space: nowrap;
-    }
+    .data-table tbody td { padding: 11px 14px; color: var(--text); vertical-align: middle; white-space: nowrap; }
     .data-table tbody tr.selected { background: rgba(59,157,221,0.08); }
     /* ── Badges ── */
     .badge-card {
@@ -207,10 +196,7 @@
     .badge-amex    { background: rgba(59,157,221,0.12); color: var(--accent2); border: 1px solid rgba(59,157,221,0.25); }
     .badge-default { background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid var(--border); }
     /* ── Toolbar ── */
-    .toolbar {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      margin-bottom: 16px;
-    }
+    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
     .toolbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
     .search-input {
       background: var(--input-bg); border: 1px solid var(--border);
@@ -218,8 +204,7 @@
       font-size: 13px; width: 220px;
     }
     .search-wrap { position: relative; }
-    .search-wrap i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-                     color: var(--muted); font-size: 14px; }
+    .search-wrap i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 14px; }
     /* ── Toast ── */
     .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; }
     .toast-msg {
@@ -234,15 +219,10 @@
     @keyframes slideIn { from { transform: translateX(60px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     /* ── Modal ── */
     .modal-content {
-      background: var(--navy2) !important;
-      border: 1px solid var(--border) !important;
-      border-radius: 14px !important;
-      color: var(--text) !important;
+      background: var(--navy2) !important; border: 1px solid var(--border) !important;
+      border-radius: 14px !important; color: var(--text) !important;
     }
-    .modal-header {
-      border-bottom: 1px solid var(--border) !important;
-      padding: 20px 24px !important;
-    }
+    .modal-header { border-bottom: 1px solid var(--border) !important; padding: 20px 24px !important; }
     .modal-footer { border-top: 1px solid var(--border) !important; padding: 16px 24px !important; }
     .modal-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; }
     .btn-close { filter: invert(1); }
@@ -271,9 +251,7 @@
     }
     .toggle-form-btn:hover { border-color: var(--accent); color: var(--accent); }
     /* ── Empty state ── */
-    .empty-state {
-      text-align: center; padding: 60px 20px; color: var(--muted);
-    }
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
     .empty-state i { font-size: 42px; margin-bottom: 12px; display: block; opacity: 0.4; }
     .empty-state p { font-size: 14px; }
     /* ── Responsive ── */
@@ -283,25 +261,14 @@
     }
     /* ── Sticky Table Columns for Mobile ── */
     .data-table th:nth-child(1), .data-table td:nth-child(1) {
-      position: sticky;
-      left: 0;
-      background: var(--navy2);
-      z-index: 2;
+      position: sticky; left: 0; background: var(--navy2); z-index: 2;
     }
     .data-table th:nth-child(2), .data-table td:nth-child(2) {
-      position: sticky;
-      left: 38px;
-      background: var(--navy2);
-      border-right: 1px solid var(--border);
-      z-index: 2;
+      position: sticky; left: 38px; background: var(--navy2);
+      border-right: 1px solid var(--border); z-index: 2;
     }
-    .data-table thead th:nth-child(1), .data-table thead th:nth-child(2) {
-      background: var(--navy3);
-      z-index: 3;
-    }
-    .data-table tbody tr:hover td:nth-child(1), .data-table tbody tr:hover td:nth-child(2) {
-      background: var(--navy3);
-    }
+    .data-table thead th:nth-child(1), .data-table thead th:nth-child(2) { background: var(--navy3); z-index: 3; }
+    .data-table tbody tr:hover td:nth-child(1), .data-table tbody tr:hover td:nth-child(2) { background: var(--navy3); }
   </style>
 </head>
 <body>
@@ -312,11 +279,12 @@
     <h1>OrderTrack</h1>
     <p>Mobile Sales Manager</p>
   </div>
- <div class="sidebar-nav">
+  <div class="sidebar-nav">
     <div class="nav-label">Analytics</div>
     <a href="/dashboard" class="nav-link {% if active=='dashboard' %}active{% endif %}">
       <i class="bi bi-graph-up-arrow"></i> Dashboard
     </a>
+
     <div class="nav-label">Online Operations</div>
     <a href="/" class="nav-link {% if active=='main' %}active{% endif %}">
       <i class="bi bi-journal-text"></i> Main Orders
@@ -324,6 +292,10 @@
     <a href="/secondary" class="nav-link {% if active=='secondary' %}active{% endif %}">
       <i class="bi bi-journals"></i> Secondary Orders
     </a>
+    <a href="/jiomart" class="nav-link {% if active=='jiomart' %}active{% endif %}">
+      <i class="bi bi-bag-heart"></i> Jiomart Orders
+    </a>
+
     <div class="nav-label">Offline Operations</div>
     <a href="/offline" class="nav-link {% if active=='offline' %}active{% endif %}">
       <i class="bi bi-shop"></i> Offline Sales
@@ -331,6 +303,7 @@
     <a href="/inventory" class="nav-link {% if active=='inventory' %}active{% endif %}">
       <i class="bi bi-credit-card-2-front"></i> Card Inventory
     </a>
+
     <div class="nav-label">Config</div>
     <a href="/settings" class="nav-link {% if active=='settings' %}active{% endif %}">
       <i class="bi bi-gear"></i> Settings
@@ -352,7 +325,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
 <script>
-  // Global toast function
   function showToast(msg, type='success') {
     const c = document.getElementById('toastContainer');
     const t = document.createElement('div');
@@ -362,7 +334,6 @@
     setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(60px)'; t.style.transition='all 0.3s'; setTimeout(()=>t.remove(),300); }, 3000);
   }
 
-  // Global API helper
   async function api(url, method='GET', body=null) {
     const opts = { method, headers: {'Content-Type':'application/json'} };
     if (body) opts.body = JSON.stringify(body);
@@ -370,7 +341,6 @@
     return res.json();
   }
 
-  // Card lookup helper
   async function lookupCard(digits, targetInput) {
     if (!digits || digits.length < 4) { targetInput.value = ''; return; }
     const data = await api(`/api/card-lookup?digits=${encodeURIComponent(digits)}`);
@@ -378,7 +348,6 @@
     if (!data.found && digits.length >= 4) showToast('Card digits not found in settings', 'error');
   }
 
-  // Platform lookup helper
   async function lookupPlatformAccounts(platform, accountSelect) {
     const accounts = await api(`/api/platform-lookup?platform=${encodeURIComponent(platform)}`);
     accountSelect.innerHTML = '<option value="">Select Account</option>';
@@ -390,54 +359,31 @@
   }
 
   // ── Client-side variant cache ─────────────────────────────────────────────
-  // Keyed by model name. Persists for the lifetime of the page — no repeat
-  // network calls when the same model is selected again (add form, edit modal, etc.)
   const _variantCache = new Map();
-  // If a fetch is already in-flight for a model, queue callers instead of
-  // firing duplicate requests (handles rapid re-selections gracefully).
   const _variantInflight = new Map();
 
   async function lookupVariants(modelName, variantSelect) {
     if (!modelName) {
-      variantSelect.innerHTML = '<option value="">Select Variant</option>';
-      return;
+      variantSelect.innerHTML = '<option value="">Select Variant</option>'; return;
     }
-
-    // Cache hit — populate instantly, zero latency
     if (_variantCache.has(modelName)) {
-      _populateVariantSelect(variantSelect, _variantCache.get(modelName));
-      return;
+      _populateVariantSelect(variantSelect, _variantCache.get(modelName)); return;
     }
-
-    // In-flight dedup — show loading only once, queue extra callers
     if (_variantInflight.has(modelName)) {
       variantSelect.innerHTML = '<option value="">Loading...</option>';
-      _variantInflight.get(modelName).push(variantSelect);
-      return;
+      _variantInflight.get(modelName).push(variantSelect); return;
     }
-
-    // Cache miss — first fetch for this model
     variantSelect.innerHTML = '<option value="">Loading...</option>';
     _variantInflight.set(modelName, [variantSelect]);
-
     try {
       const variants = await api(`/api/variants?model=${encodeURIComponent(modelName)}`);
       _variantCache.set(modelName, variants);
-
-      // Populate every select that was waiting on this model
-      for (const sel of _variantInflight.get(modelName)) {
-        _populateVariantSelect(sel, variants);
-      }
+      for (const sel of _variantInflight.get(modelName)) { _populateVariantSelect(sel, variants); }
     } catch (e) {
-      for (const sel of _variantInflight.get(modelName)) {
-        sel.innerHTML = '<option value="">Error loading variants</option>';
-      }
-    } finally {
-      _variantInflight.delete(modelName);
-    }
+      for (const sel of _variantInflight.get(modelName)) { sel.innerHTML = '<option value="">Error loading variants</option>'; }
+    } finally { _variantInflight.delete(modelName); }
   }
 
-  // Shared render helper used by both cache-hit and fetch paths
   function _populateVariantSelect(variantSelect, variants) {
     variantSelect.innerHTML = '<option value="">Select Variant</option>';
     variants.forEach(v => {
@@ -445,41 +391,28 @@
       const vName = typeof v === 'object' ? v.variant_name     : v;
       const vCost = typeof v === 'object' ? (v.costing       || '') : '';
       const vSell = typeof v === 'object' ? (v.selling_price || '') : '';
-      opt.value = vName;
-      opt.textContent = vName;
+      opt.value = vName; opt.textContent = vName;
       opt.setAttribute('data-costing', vCost);
       opt.setAttribute('data-selling', vSell);
       variantSelect.appendChild(opt);
     });
   }
 
-  // onVariantChange — auto-fills BOTH costing AND selling price from variant defaults.
-  // costingInputId e.g. 'f_costing' → selling price id derived as 'f_selling_price'
-  // Also works for 'e_costing' → 'e_selling_price' in edit modals.
   function onVariantChange(selectElem, costingInputId) {
     const selectedOpt = selectElem.options[selectElem.selectedIndex];
     if (!selectedOpt) return;
-
-    // Auto-fill costing
     const cost = selectedOpt.getAttribute('data-costing');
-    if (cost !== null && cost !== '') {
-      document.getElementById(costingInputId).value = cost;
-    }
-
-    // Auto-fill selling price — derive the sell field id from the cost field id
+    if (cost !== null && cost !== '') document.getElementById(costingInputId).value = cost;
     const sell = selectedOpt.getAttribute('data-selling');
     if (sell !== null && sell !== '') {
-      // 'f_costing' → 'f_selling_price' | 'e_costing' → 'e_selling_price'
       const sellInputId = costingInputId.replace('costing', 'selling_price');
       const sellEl = document.getElementById(sellInputId);
       if (sellEl) sellEl.value = sell;
     }
   }
 
-  // Format currency
   function formatCost(v) { return v != null && v !== '' ? '₹' + parseFloat(v).toLocaleString('en-IN') : '—'; }
 
-  // Card badge
   function cardBadge(type) {
     if (!type) return '<span class="badge-card badge-default">—</span>';
     const lc = type.toLowerCase();
@@ -493,9 +426,7 @@
 
 <script>
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js');
-    });
+    window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js'); });
   }
 </script>
 {% block scripts %}{% endblock %}
