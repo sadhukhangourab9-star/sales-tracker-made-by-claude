@@ -8,6 +8,7 @@
 
 <div class="row g-4">
 
+  <!-- ── LEFT COLUMN ── -->
   <div class="col-lg-5 d-flex flex-column gap-4">
 
     <div class="card-panel m-0">
@@ -46,36 +47,28 @@
       <ul class="list-group list-group-flush" id="list_platforms" style="max-height:200px;overflow-y:auto;font-size:13px;"></ul>
     </div>
 
-    <!-- ── Vouchers ── -->
     <div class="card-panel m-0" style="border-top:4px solid var(--amber);">
       <div class="card-panel-title"><i class="bi bi-ticket-perforated"></i> Vouchers</div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
-        Add voucher types used in online orders. Selecting a voucher auto-fills its value and calculates the card deduction.
-      </p>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">Add voucher types used in online orders. Selecting a voucher auto-fills its value and calculates the card deduction.</p>
       <div class="row g-2 mb-3">
         <div class="col-7">
           <label class="form-label" style="font-size:10px;">VOUCHER NAME</label>
           <input type="text" id="v_vname" class="form-control" placeholder="e.g. HDFC Gift Voucher">
         </div>
         <div class="col-5">
-          <label class="form-label" style="font-size:10px;">VOUCHER VALUE (₹)</label>
+          <label class="form-label" style="font-size:10px;">VALUE (₹)</label>
           <input type="number" id="v_vvalue" class="form-control" placeholder="e.g. 6000" step="0.01">
         </div>
         <div class="col-12 mt-2">
-          <button class="btn-primary-custom w-100 justify-content-center" onclick="addVoucher()">
-            <i class="bi bi-plus"></i> Add Voucher
-          </button>
+          <button class="btn-primary-custom w-100 justify-content-center" onclick="addVoucher()"><i class="bi bi-plus"></i> Add Voucher</button>
         </div>
       </div>
       <ul class="list-group list-group-flush" id="list_vouchers" style="max-height:200px;overflow-y:auto;font-size:13px;"></ul>
     </div>
 
-    <!-- ── Ordered By Names ── -->
     <div class="card-panel m-0" style="border-top:4px solid var(--accent2);">
       <div class="card-panel-title"><i class="bi bi-person-check"></i> Ordered By Names</div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
-        Names used in the Secondary Orders "Ordered By" dropdown. Leave blank on an order if not applicable.
-      </p>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">Names used in the Secondary Orders "Ordered By" dropdown. Leave blank on an order if not applicable.</p>
       <div class="row g-2 mb-3">
         <div class="col-8">
           <label class="form-label" style="font-size:10px;">NAME</label>
@@ -125,8 +118,11 @@
 
   </div>
 
-  <div class="col-lg-7">
-    <div class="card-panel h-100 m-0" style="border-top:4px solid var(--green);">
+  <!-- ── RIGHT COLUMN ── -->
+  <div class="col-lg-7 d-flex flex-column gap-4">
+
+    <!-- ── Offline Master Data ── -->
+    <div class="card-panel m-0" style="border-top:4px solid var(--green);">
       <div class="card-panel-title mb-4"><i class="bi bi-shop-window"></i> Offline Master Data</div>
       <div class="row g-4">
         <div class="col-md-4">
@@ -155,13 +151,71 @@
         </div>
       </div>
     </div>
-  </div>
 
+    <!-- ── Jiomart Master Data ── -->
+    <div class="card-panel m-0" style="border-top:4px solid var(--amber);">
+      <div class="card-panel-title mb-3" style="color:var(--amber);">
+        <i class="bi bi-bag-heart"></i> Jiomart Master Data
+        <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px;">Separate from main orders</span>
+      </div>
+
+      <!-- Jiomart Accounts -->
+      <div class="row g-3 mb-4 pb-4" style="border-bottom:1px solid var(--border);">
+        <div class="col-12">
+          <label class="form-label" style="font-size:10px;">JIOMART ACCOUNTS</label>
+          <div class="d-flex gap-2 mb-3">
+            <input type="text" id="jm_acc" class="form-control" placeholder="e.g. JioMart Account 1">
+            <button class="btn-primary-custom" style="white-space:nowrap;" onclick="addJmAccount()"><i class="bi bi-plus"></i> Add</button>
+          </div>
+          <ul class="list-group list-group-flush" id="list_jm_accounts" style="max-height:160px;overflow-y:auto;font-size:13px;"></ul>
+        </div>
+      </div>
+
+      <!-- Jiomart Models -->
+      <div class="row g-2 mb-3 pb-3" style="border-bottom:1px solid var(--border);">
+        <div class="col-8">
+          <label class="form-label" style="font-size:10px;">JIOMART MODEL NAME</label>
+          <input type="text" id="jm_model_name" class="form-control" placeholder="e.g. Samsung S24">
+        </div>
+        <div class="col-4 d-flex align-items-end">
+          <button class="btn-primary-custom w-100 justify-content-center" onclick="addJmModel()"><i class="bi bi-plus"></i> Add Model</button>
+        </div>
+      </div>
+
+      <!-- Jiomart Variants -->
+      <div class="row g-2 mb-3">
+        <div class="col-4">
+          <label class="form-label" style="font-size:10px;">JIOMART MODEL</label>
+          <select id="jm_v_model_sel" class="form-select"></select>
+        </div>
+        <div class="col-8">
+          <label class="form-label" style="font-size:10px;">VARIANT NAME</label>
+          <input type="text" id="jm_v_name" class="form-control" placeholder="e.g. 256GB Black">
+        </div>
+        <div class="col-6">
+          <label class="form-label" style="font-size:10px;">COST PRICE (₹)</label>
+          <input type="number" id="jm_v_cost" class="form-control" placeholder="0">
+        </div>
+        <div class="col-6">
+          <label class="form-label" style="font-size:10px;">SELL PRICE (₹) <span style="color:var(--amber);">↓ auto-fills Jiomart orders</span></label>
+          <input type="number" id="jm_v_sell" class="form-control" placeholder="0">
+        </div>
+        <div class="col-12 mt-2">
+          <button class="btn-primary-custom w-100 justify-content-center" style="background:linear-gradient(135deg,var(--amber),#e8941a);" onclick="addJmVariant()"><i class="bi bi-plus"></i> Add Jiomart Variant</button>
+        </div>
+      </div>
+
+      <!-- Jiomart Models+Variants list -->
+      <ul class="list-group list-group-flush" id="list_jm_models" style="max-height:350px;overflow-y:auto;font-size:13px;"></ul>
+    </div>
+
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+// ── Generic list renderer ─────────────────────────────────────────────────────
 function drawList(items, elementId, endpoint, formatTextFn) {
   const el = document.getElementById(elementId); if (!el) return;
   el.innerHTML = items.map(i => `
@@ -174,45 +228,24 @@ function drawList(items, elementId, endpoint, formatTextFn) {
     </li>`).join('');
 }
 
-async function loadSettings() {
-  const [cards, plats, models, vars, secs, machs, vends, brands, vouchers] = await Promise.all([
-    api('/api/cards'), api('/api/platforms'), api('/api/models'), api('/api/variants'),
-    api('/api/sec-order-names'), api('/api/machines'), api('/api/vendors'), api('/api/brands'),
-    api('/api/vouchers')
-  ]);
-
-  drawList(cards,    'list_cards',    'cards',    c => `<code style="color:var(--accent2)">•••• ${c.last_digits}</code> <span class="ms-2">${c.card_type}</span>`);
-  drawList(plats,    'list_platforms','platforms', p => `<b>${p.platform_name}</b> <span style="color:var(--muted)">(${p.account_name})</span>`);
-  drawList(machs,    'list_machines', 'machines', m => m.name);
-  drawList(vends,    'list_vendors',  'vendors',  v => v.name);
-  drawList(brands,   'list_brands',   'brands',   b => b.name);
-
-  // Vouchers
-  drawList(vouchers, 'list_vouchers', 'vouchers', v =>
-    `<span style="font-weight:600;">${v.name}</span>
-     <span style="color:var(--amber);margin-left:10px;">₹${parseFloat(v.value).toLocaleString('en-IN')}</span>`
-  );
-
-  // Ordered By Names (sec_order_names)
-  drawList(secs, 'list_sec', 'sec-order-names', s =>
-    `<span style="color:var(--accent2);font-weight:500;">${s.name}</span>`
-  );
-
-  // Models & Variants
-  let modelHtml = '';
+// ── Variant list renderer (shared by main and jiomart) ────────────────────────
+function drawModelVariantList(models, vars, containerElId, variantEndpoint, modelEndpoint, syncFnName) {
+  let html = '';
   models.forEach(m => {
     const mVars = vars.filter(v => v.model_id === m.id);
-    modelHtml += `
+    const nameField = m.model_name !== undefined ? 'model_name' : 'name';
+    html += `
       <li class="list-group-item px-1 py-2" style="background:transparent;color:var(--text);border-color:var(--border);">
         <div class="d-flex justify-content-between align-items-center mb-1">
-          <strong style="color:var(--accent2);">${m.model_name}</strong>
-          <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delItem('models',${m.id})"><i class="bi bi-trash"></i></button>
+          <strong style="color:var(--accent2);">${m[nameField]}</strong>
+          <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delItem('${modelEndpoint}',${m.id})"><i class="bi bi-trash"></i></button>
         </div>
         ${mVars.map(v => {
-          const hasSell = v.selling_price!=='' && v.selling_price!=null && v.selling_price!=0;
+          const hasSell = v.selling_price !== '' && v.selling_price != null && v.selling_price != 0;
           const sellDisplay = hasSell
             ? `<span style="color:var(--green);font-weight:600;">sell ₹${v.selling_price}</span>`
             : `<span style="color:var(--amber);font-style:italic;">no sell price</span>`;
+          const panelId = `ep_${variantEndpoint.replace(/-/g,'_')}_${v.id}`;
           return `
           <div style="border-left:2px solid var(--border);margin-top:4px;">
             <div class="d-flex justify-content-between align-items-center ps-3 py-1" style="font-size:12px;">
@@ -225,33 +258,33 @@ async function loadSettings() {
               </span>
               <div style="display:flex;gap:6px;align-items:center;">
                 <button class="btn-outline-custom" style="padding:3px 8px;font-size:11px;"
-                  onclick="toggleEditPanel(${v.id})"><i class="bi bi-pencil"></i> Edit</button>
-                <button class="btn btn-sm text-danger p-0" onclick="delItem('variants',${v.id})"><i class="bi bi-x-lg"></i></button>
+                  onclick="togglePanel('${panelId}')"><i class="bi bi-pencil"></i> Edit</button>
+                <button class="btn btn-sm text-danger p-0" onclick="delItem('${variantEndpoint}',${v.id})"><i class="bi bi-x-lg"></i></button>
               </div>
             </div>
-            <div id="edit_panel_${v.id}" style="display:none;background:var(--navy);border-radius:8px;padding:12px;margin:6px 10px 8px 12px;">
+            <div id="${panelId}" style="display:none;background:var(--navy);border-radius:8px;padding:12px;margin:6px 10px 8px 12px;">
               <div class="row g-2 align-items-end">
                 <div class="col-5">
                   <label class="form-label" style="font-size:10px;">SELL PRICE (₹)</label>
-                  <input type="number" id="edit_sell_${v.id}" class="form-control" value="${v.selling_price||''}" placeholder="Enter sell price"/>
+                  <input type="number" id="es_${variantEndpoint.replace(/-/g,'_')}_${v.id}" class="form-control"
+                    value="${v.selling_price||''}" placeholder="Enter sell price"/>
                 </div>
                 <div class="col-4">
                   <button class="btn-success-custom w-100 justify-content-center"
-                    onclick="saveVariantSell(${v.id},'${v.variant_name.replace(/'/g,"\\'")}')">
+                    onclick="saveVariantSell('${variantEndpoint}',${v.id},'${v.variant_name.replace(/'/g,"\\'")}')">
                     <i class="bi bi-check-lg"></i> Save
                   </button>
                 </div>
                 <div class="col-3">
-                  <button class="btn-outline-custom w-100 justify-content-center" onclick="toggleEditPanel(${v.id})">Cancel</button>
+                  <button class="btn-outline-custom w-100 justify-content-center" onclick="togglePanel('${panelId}')">Cancel</button>
                 </div>
               </div>
               <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
                 <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">
-                  <i class="bi bi-info-circle"></i>
-                  Save first, then sync to push this price to all existing orders with <strong style="color:var(--text);">"${v.variant_name}"</strong>.
+                  <i class="bi bi-info-circle"></i> Save first, then sync to push to all existing orders with <strong style="color:var(--text);">"${v.variant_name}"</strong>.
                 </div>
                 <button class="btn-primary-custom" style="font-size:11px;padding:6px 12px;"
-                  onclick="syncSellPrice(${v.id},'${v.variant_name.replace(/'/g,"\\'")}','${v.costing||0}')">
+                  onclick="${syncFnName}('${variantEndpoint}',${v.id},'${v.variant_name.replace(/'/g,"\\'")}','${v.costing||0}')">
                   <i class="bi bi-arrow-repeat"></i> Sync to All Existing Orders
                 </button>
               </div>
@@ -260,43 +293,87 @@ async function loadSettings() {
         }).join('')}
       </li>`;
   });
-  document.getElementById('list_models').innerHTML = modelHtml ||
+  document.getElementById(containerElId).innerHTML = html ||
     '<li class="list-group-item" style="background:transparent;color:var(--muted);font-size:13px;">No models added yet.</li>';
-
-  const vSel = document.getElementById('v_model_sel');
-  vSel.innerHTML = '<option value="">Select...</option>' +
-    models.map(m => `<option value="${m.id}">${m.model_name}</option>`).join('');
 }
 
-function toggleEditPanel(varId) {
-  const panel = document.getElementById(`edit_panel_${varId}`); if (!panel) return;
+function togglePanel(panelId) {
+  const panel = document.getElementById(panelId); if (!panel) return;
   const isVisible = panel.style.display !== 'none';
-  document.querySelectorAll('[id^="edit_panel_"]').forEach(p => p.style.display='none');
+  document.querySelectorAll('[id^="ep_"]').forEach(p => p.style.display='none');
   if (!isVisible) panel.style.display = 'block';
 }
 
-async function saveVariantSell(varId, variantName) {
-  const sell = document.getElementById(`edit_sell_${varId}`).value.trim();
+// ── Save sell price on a variant ──────────────────────────────────────────────
+async function saveVariantSell(endpoint, varId, variantName) {
+  const inputId = `es_${endpoint.replace(/-/g,'_')}_${varId}`;
+  const sell = document.getElementById(inputId).value.trim();
   if (sell==='') { showToast('Enter a sell price first','error'); return; }
-  const res = await api(`/api/variants/${varId}`,'PUT',{selling_price:sell});
+  const res = await api(`/api/${endpoint}/${varId}`,'PUT',{selling_price:sell});
   if (!res.success) { showToast('Failed to save','error'); return; }
   showToast(`Sell price saved for ${variantName}`); loadSettings();
 }
 
-async function syncSellPrice(varId, variantName, varCosting) {
-  const sell = document.getElementById(`edit_sell_${varId}`).value.trim();
+// ── Sync sell price to orders ─────────────────────────────────────────────────
+async function syncSellPrice(endpoint, varId, variantName, varCosting) {
+  const inputId = `es_${endpoint.replace(/-/g,'_')}_${varId}`;
+  const sell = document.getElementById(inputId).value.trim();
   if (sell==='') { showToast('Enter and save a sell price first','error'); return; }
   if (!confirm(`Push ₹${sell} as sell price to all existing orders where:\n  Variant = "${variantName}"\n  Costing = ₹${varCosting}\n\nProfit will be recalculated. Cannot be undone.`)) return;
-  const btn = event.target.closest('button'); const orig = btn.innerHTML;
+  const btn = event.target.closest('button'); const orig=btn.innerHTML;
   btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> Syncing...';
   try {
-    const res = await api(`/api/variants/${varId}/sync-sell-price`,'POST',{variant_name:variantName,selling_price:sell,costing:varCosting});
+    // Pick correct sync endpoint based on which variant table this is
+    const syncUrl = endpoint === 'jiomart-variants'
+      ? `/api/jiomart-variants/${varId}/sync-sell-price`
+      : `/api/variants/${varId}/sync-sell-price`;
+    const res = await api(syncUrl,'POST',{variant_name:variantName,selling_price:sell,costing:varCosting});
     if (res.success) {
-      showToast(res.updated>0 ? `Updated ${res.updated} order(s) — "${variantName}" @ ₹${varCosting}` : `No matching orders found`);
+      showToast(res.updated>0 ? `Updated ${res.updated} order(s) — "${variantName}" @ ₹${varCosting}` : 'No matching orders found');
     } else { showToast(res.error||'Sync failed','error'); }
   } finally { btn.disabled=false; btn.innerHTML=orig; }
 }
 
+// ── Main load ─────────────────────────────────────────────────────────────────
+async function loadSettings() {
+  const [cards, plats, models, vars, secs, machs, vends, brands, vouchers,
+         jmAccounts, jmModels, jmVars] = await Promise.all([
+    api('/api/cards'), api('/api/platforms'), api('/api/models'), api('/api/variants'),
+    api('/api/sec-order-names'), api('/api/machines'), api('/api/vendors'), api('/api/brands'),
+    api('/api/vouchers'),
+    api('/api/jiomart-accounts'), api('/api/jiomart-models'), api('/api/jiomart-variants')
+  ]);
+
+  // ── Main master data lists ──
+  drawList(cards,    'list_cards',    'cards',    c => `<code style="color:var(--accent2)">•••• ${c.last_digits}</code> <span class="ms-2">${c.card_type}</span>`);
+  drawList(plats,    'list_platforms','platforms', p => `<b>${p.platform_name}</b> <span style="color:var(--muted)">(${p.account_name})</span>`);
+  drawList(machs,    'list_machines', 'machines', m => m.name);
+  drawList(vends,    'list_vendors',  'vendors',  v => v.name);
+  drawList(brands,   'list_brands',   'brands',   b => b.name);
+  drawList(vouchers, 'list_vouchers', 'vouchers', v =>
+    `<span style="font-weight:600;">${v.name}</span><span style="color:var(--amber);margin-left:10px;">₹${parseFloat(v.value).toLocaleString('en-IN')}</span>`);
+  drawList(secs,     'list_sec',      'sec-order-names', s =>
+    `<span style="color:var(--accent2);font-weight:500;">${s.name}</span>`);
+
+  // ── Main models + variants ──
+  drawModelVariantList(models, vars, 'list_models', 'variants', 'models', 'syncSellPrice');
+
+  // Populate model dropdown for variant add form
+  const vSel = document.getElementById('v_model_sel');
+  vSel.innerHTML = '<option value="">Select...</option>' + models.map(m => `<option value="${m.id}">${m.model_name}</option>`).join('');
+
+  // ── Jiomart accounts list ──
+  drawList(jmAccounts, 'list_jm_accounts', 'jiomart-accounts', a => `<span style="color:var(--amber);font-weight:500;">${a.name}</span>`);
+
+  // ── Jiomart models + variants ──
+  drawModelVariantList(jmModels, jmVars, 'list_jm_models', 'jiomart-variants', 'jiomart-models', 'syncSellPrice');
+
+  // Populate jiomart model dropdown for variant add form
+  const jmVSel = document.getElementById('jm_v_model_sel');
+  jmVSel.innerHTML = '<option value="">Select...</option>' + jmModels.map(m => `<option value="${m.id}">${m.model_name}</option>`).join('');
+}
+
+// ── Add functions ─────────────────────────────────────────────────────────────
 async function addSimple(endpoint, inputId, payloadKey) {
   const val = document.getElementById(inputId).value.trim();
   if (!val) return showToast('Please enter a value','error');
@@ -343,6 +420,35 @@ async function addVariant() {
   loadSettings(); showToast('Variant added');
 }
 
+// ── Jiomart-specific add functions ────────────────────────────────────────────
+async function addJmAccount() {
+  const name = document.getElementById('jm_acc').value.trim();
+  if (!name) return showToast('Enter an account name','error');
+  await api('/api/jiomart-accounts','POST',{name});
+  document.getElementById('jm_acc').value='';
+  loadSettings(); showToast(`Jiomart account "${name}" added`);
+}
+
+async function addJmModel() {
+  const name = document.getElementById('jm_model_name').value.trim();
+  if (!name) return showToast('Enter a model name','error');
+  await api('/api/jiomart-models','POST',{model_name:name});
+  document.getElementById('jm_model_name').value='';
+  loadSettings(); showToast(`Jiomart model "${name}" added`);
+}
+
+async function addJmVariant() {
+  const m    = document.getElementById('jm_v_model_sel').value;
+  const n    = document.getElementById('jm_v_name').value.trim();
+  const cost = document.getElementById('jm_v_cost').value;
+  const sell = document.getElementById('jm_v_sell').value;
+  if (!m||!n) return showToast('Select a Jiomart model and enter variant name','error');
+  await api('/api/jiomart-variants','POST',{model_id:parseInt(m),variant_name:n,costing:cost,selling_price:sell});
+  document.getElementById('jm_v_name').value=''; document.getElementById('jm_v_cost').value=''; document.getElementById('jm_v_sell').value='';
+  loadSettings(); showToast('Jiomart variant added');
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
 async function delItem(endpoint, id) {
   if (!confirm('Delete this item?')) return;
   await api(`/api/${endpoint}/${id}`,'DELETE'); loadSettings();
