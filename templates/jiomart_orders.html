@@ -18,7 +18,7 @@
   <i class="bi bi-plus-circle"></i> <span id="formToggleText">Add New Jiomart Order</span>
 </button>
 
-<div class="card-panel" id="addFormPanel" style="display:none;" >
+<div class="card-panel" id="addFormPanel" style="display:none;">
   <div class="card-panel-title" style="color:var(--amber);"><i class="bi bi-bag-heart"></i> New Jiomart Order</div>
   <div class="row g-3">
     <div class="col-md-2">
@@ -35,7 +35,7 @@
     </div>
     <div class="col-md-2">
       <label class="form-label">4. Account</label>
-      <input type="text" id="f_account" class="form-control" placeholder="Account name / no."/>
+      <select id="f_account" class="form-select"><option value="">Select Account</option></select>
     </div>
     <div class="col-md-2">
       <label class="form-label">5. Order Name</label>
@@ -47,12 +47,12 @@
     </div>
     <div class="col-md-2">
       <label class="form-label">7. Model</label>
-      <input type="text" id="f_model" class="form-control" placeholder="e.g. iPhone 15" list="modelList" oninput="onModelInput(this.value,'f_variant')"/>
-      <datalist id="modelList"></datalist>
+      <input type="text" id="f_model" class="form-control" placeholder="e.g. iPhone 15" list="jmModelList" oninput="onModelInput(this.value,'f_variant')"/>
+      <datalist id="jmModelList"></datalist>
     </div>
     <div class="col-md-2">
       <label class="form-label">8. Variant</label>
-      <select id="f_variant" class="form-select" onchange="onVariantChange(this,'f_costing')">
+      <select id="f_variant" class="form-select" onchange="onJmVariantChange(this,'f_costing')">
         <option value="">Select Variant</option>
       </select>
     </div>
@@ -130,7 +130,7 @@
         </tr>
       </thead>
       <tbody id="jiomartTableBody">
-        <tr><td colspan="15"><div class="empty-state"><i class="bi bi-inbox"></i><p>Loading orders...</p></div></td></tr>
+        <tr><td colspan="15"><div class="empty-state"><i class="bi bi-bag-heart"></i><p>Loading orders...</p></div></td></tr>
       </tbody>
     </table>
   </div>
@@ -164,7 +164,7 @@
           </div>
           <div class="col-md-2">
             <label class="form-label">Account</label>
-            <input type="text" id="e_account" class="form-control"/>
+            <select id="e_account" class="form-select"><option value="">Select Account</option></select>
           </div>
           <div class="col-md-2">
             <label class="form-label">Order Name</label>
@@ -176,12 +176,12 @@
           </div>
           <div class="col-md-2">
             <label class="form-label">Model</label>
-            <input type="text" id="e_model" class="form-control" list="eModelList" oninput="onModelInput(this.value,'e_variant')"/>
-            <datalist id="eModelList"></datalist>
+            <input type="text" id="e_model" class="form-control" list="eJmModelList" oninput="onModelInput(this.value,'e_variant')"/>
+            <datalist id="eJmModelList"></datalist>
           </div>
           <div class="col-md-2">
             <label class="form-label">Variant</label>
-            <select id="e_variant" class="form-select" onchange="onVariantChange(this,'e_costing')">
+            <select id="e_variant" class="form-select" onchange="onJmVariantChange(this,'e_costing')">
               <option value="">Select Variant</option>
             </select>
           </div>
@@ -211,7 +211,7 @@
   </div>
 </div>
 
-<!-- ── Bulk Set Sell Price Modal ── -->
+<!-- ── Bulk Sell Modal ── -->
 <div class="modal fade" id="bulkSellModal" tabindex="-1">
   <div class="modal-dialog modal-sm">
     <div class="modal-content">
@@ -234,7 +234,7 @@
   </div>
 </div>
 
-<!-- ── Bulk Set Delivery Date Modal ── -->
+<!-- ── Bulk Delivery Modal ── -->
 <div class="modal fade" id="bulkDeliveryModal" tabindex="-1">
   <div class="modal-dialog modal-sm">
     <div class="modal-content">
@@ -262,6 +262,7 @@
 {% block scripts %}
 <script>
 let allOrders = [], filteredOrders = [];
+let allJmAccounts = [], allJmModels = [];
 let currentPage = 1;
 const PAGE_SIZE = 50;
 let modelTimer = null;
@@ -269,13 +270,84 @@ const editModal      = new bootstrap.Modal(document.getElementById('editModal'))
 const bulkSellModal  = new bootstrap.Modal(document.getElementById('bulkSellModal'));
 const bulkDelivModal = new bootstrap.Modal(document.getElementById('bulkDeliveryModal'));
 
+// ── Jiomart-specific variant helpers ─────────────────────────────────────────
+// Uses /api/jiomart-variants instead of /api/variants
+const _jmVariantCache    = new Map();
+const _jmVariantInflight = new Map();
+
+async function lookupJmVariants(modelName, variantSelect) {
+  if (!modelName) { variantSelect.innerHTML = '<option value="">Select Variant</option>'; return; }
+  if (_jmVariantCache.has(modelName)) { _populateJmVariantSelect(variantSelect, _jmVariantCache.get(modelName)); return; }
+  if (_jmVariantInflight.has(modelName)) {
+    variantSelect.innerHTML = '<option value="">Loading...</option>';
+    _jmVariantInflight.get(modelName).push(variantSelect); return;
+  }
+  variantSelect.innerHTML = '<option value="">Loading...</option>';
+  _jmVariantInflight.set(modelName, [variantSelect]);
+  try {
+    const variants = await api(`/api/jiomart-variants?model=${encodeURIComponent(modelName)}`);
+    _jmVariantCache.set(modelName, variants);
+    for (const sel of _jmVariantInflight.get(modelName)) { _populateJmVariantSelect(sel, variants); }
+  } catch(e) {
+    for (const sel of _jmVariantInflight.get(modelName)) { sel.innerHTML = '<option value="">Error</option>'; }
+  } finally { _jmVariantInflight.delete(modelName); }
+}
+
+function _populateJmVariantSelect(variantSelect, variants) {
+  variantSelect.innerHTML = '<option value="">Select Variant</option>';
+  variants.forEach(v => {
+    const opt   = document.createElement('option');
+    const vName = typeof v==='object' ? v.variant_name     : v;
+    const vCost = typeof v==='object' ? (v.costing       || '') : '';
+    const vSell = typeof v==='object' ? (v.selling_price || '') : '';
+    opt.value = vName; opt.textContent = vName;
+    opt.setAttribute('data-costing', vCost);
+    opt.setAttribute('data-selling', vSell);
+    variantSelect.appendChild(opt);
+  });
+}
+
+function onJmVariantChange(selectElem, costingInputId) {
+  const opt = selectElem.options[selectElem.selectedIndex]; if (!opt) return;
+  const cost = opt.getAttribute('data-costing');
+  if (cost !== null && cost !== '') document.getElementById(costingInputId).value = cost;
+  const sell = opt.getAttribute('data-selling');
+  if (sell !== null && sell !== '') {
+    const sellEl = document.getElementById(costingInputId.replace('costing','selling_price'));
+    if (sellEl) sellEl.value = sell;
+  }
+}
+
+// ── Populate account dropdowns ────────────────────────────────────────────────
+function populateAccountDropdown(selectId, selectedVal='') {
+  const sel = document.getElementById(selectId);
+  sel.innerHTML = '<option value="">Select Account</option>';
+  allJmAccounts.forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a.name; opt.textContent = a.name;
+    if (a.name === selectedVal) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
 
-  const [models] = await Promise.all([api('/api/models')]);
+  const [accounts, models] = await Promise.all([
+    api('/api/jiomart-accounts'),
+    api('/api/jiomart-models')
+  ]);
 
-  ['modelList','eModelList'].forEach(id => {
+  allJmAccounts = accounts;
+  allJmModels   = models;
+
+  // Populate account dropdowns
+  populateAccountDropdown('f_account');
+  populateAccountDropdown('e_account');
+
+  // Populate model datalists
+  ['jmModelList','eJmModelList'].forEach(id => {
     const dl = document.getElementById(id); dl.innerHTML = '';
     models.forEach(m => { const opt = document.createElement('option'); opt.value = m.model_name; dl.appendChild(opt); });
   });
@@ -286,6 +358,13 @@ async function init() {
 async function loadOrders() {
   allOrders = await api('/api/jiomart-orders');
   populateSaleFilter(); filterTable();
+}
+
+// ── Model input — uses Jiomart variants ───────────────────────────────────────
+function onModelInput(val, variantId) {
+  clearTimeout(modelTimer);
+  if (val.trim()) modelTimer = setTimeout(() => lookupJmVariants(val.trim(), document.getElementById(variantId)), 600);
+  else document.getElementById(variantId).innerHTML = '<option value="">Select Variant</option>';
 }
 
 // ── Pagination & Rendering ────────────────────────────────────────────────────
@@ -302,13 +381,13 @@ function renderTable() {
   const end   = Math.min(start + PAGE_SIZE, filteredOrders.length);
   const pageData = filteredOrders.slice(start, end);
 
-  document.getElementById('pageInfo').textContent = `${start + 1} - ${end} of ${filteredOrders.length}`;
+  document.getElementById('pageInfo').textContent = `${start+1} - ${end} of ${filteredOrders.length}`;
   document.getElementById('btnPrev').disabled = currentPage === 1;
   document.getElementById('btnNext').disabled = end >= filteredOrders.length;
 
   body.innerHTML = pageData.map(o => {
-    const pColor  = (parseFloat(o.profit) || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-    const dateStr = (o.created_at || '—').split(' ')[0];
+    const pColor  = (parseFloat(o.profit)||0) >= 0 ? 'var(--green)' : 'var(--red)';
+    const dateStr = (o.created_at||'—').split(' ')[0];
     const hasSell = o.selling_price && parseFloat(o.selling_price) > 0;
     return `<tr data-id="${o.id}">
       <td><input type="checkbox" class="row-check" value="${o.id}" onchange="onCheckChange()"/></td>
@@ -316,7 +395,7 @@ function renderTable() {
       <td style="color:var(--muted);font-size:12px;">${dateStr}</td>
       <td><code style="color:var(--accent2);font-size:12px;">•••• ${o.last_digits||'—'}</code></td>
       <td>${cardBadge(o.card_type)}</td>
-      <td style="color:var(--muted)">${o.account||'—'}</td>
+      <td style="color:var(--amber);font-weight:500;">${o.account||'—'}</td>
       <td style="font-weight:500">${o.order_name||'—'}</td>
       <td style="color:var(--muted);font-size:12px;">${o.order_id||'—'}</td>
       <td>${o.model||'—'}</td>
@@ -328,9 +407,7 @@ function renderTable() {
       </td>
       <td style="color:${pColor};font-weight:600">${hasSell ? formatCost(o.profit) : '—'}</td>
       <td>
-        <div style="display:flex;gap:6px;">
-          <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})"><i class="bi bi-pencil"></i></button>
-        </div>
+        <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})"><i class="bi bi-pencil"></i></button>
       </td>
     </tr>`;
   }).join('');
@@ -340,19 +417,18 @@ function changePage(dir) { currentPage += dir; renderTable(); }
 
 function updateStats() {
   document.getElementById('totalCount').textContent = filteredOrders.length;
-  const totalCost   = filteredOrders.reduce((s,o) => s + (parseFloat(o.costing)||0), 0);
-  const totalProfit = filteredOrders.reduce((s,o) => s + (parseFloat(o.profit)||0), 0);
+  const totalCost   = filteredOrders.reduce((s,o) => s+(parseFloat(o.costing)||0), 0);
+  const totalProfit = filteredOrders.reduce((s,o) => s+(parseFloat(o.profit)||0), 0);
   document.getElementById('totalCost').innerHTML =
     `<span style="color:var(--muted)">Spend:</span> ${formatCost(totalCost)} <span style="color:var(--muted);margin-left:8px;">Profit:</span> <span style="color:var(--green)">${formatCost(totalProfit)}</span>`;
 }
 
-// ── Filters ───────────────────────────────────────────────────────────────────
 function populateSaleFilter() {
   const sales = [...new Set(allOrders.map(o => o.sale_batch||'Current Sale'))].sort();
   const sel = document.getElementById('filterSale'); const cv = sel.value;
   sel.innerHTML = '<option value="ALL">All Sales</option>';
-  sales.forEach(s => { const opt = document.createElement('option'); opt.value = s; opt.textContent = s; sel.appendChild(opt); });
-  if ([...sel.options].some(o => o.value === cv)) sel.value = cv;
+  sales.forEach(s => { const opt = document.createElement('option'); opt.value=s; opt.textContent=s; sel.appendChild(opt); });
+  if ([...sel.options].some(o => o.value===cv)) sel.value=cv;
 }
 
 function filterTable() {
@@ -363,7 +439,7 @@ function filterTable() {
     const mb = sf==='ALL' || (o.sale_batch||'Current Sale')===sf;
     return ms && mb;
   });
-  currentPage = 1; renderTable(); updateStats();
+  currentPage=1; renderTable(); updateStats();
 }
 
 // ── Form ──────────────────────────────────────────────────────────────────────
@@ -376,31 +452,27 @@ function toggleForm() {
 }
 
 function clearForm() {
-  ['f_digits','f_bank','f_account','f_order_name','f_order_id','f_model','f_costing','f_selling_price']
-    .forEach(id => document.getElementById(id).value = '');
-  document.getElementById('f_variant').innerHTML = '<option value="">Select Variant</option>';
-  document.getElementById('f_sale_batch').value = 'Current Sale';
-  document.getElementById('f_delivery_date').value = '';
-  document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
+  ['f_digits','f_bank','f_order_name','f_order_id','f_model','f_costing','f_selling_price']
+    .forEach(id => document.getElementById(id).value='');
+  document.getElementById('f_account').value='';
+  document.getElementById('f_variant').innerHTML='<option value="">Select Variant</option>';
+  document.getElementById('f_sale_batch').value='Current Sale';
+  document.getElementById('f_delivery_date').value='';
+  document.getElementById('f_created_at').value=new Date().toLocaleString('en-IN');
 }
 
-let digitTimer = null;
+let digitTimer=null;
 function onDigitsInput(val, targetId) {
   clearTimeout(digitTimer);
-  if (val.length >= 4) digitTimer = setTimeout(() => lookupCard(val, document.getElementById(targetId)), 500);
-  else document.getElementById(targetId).value = '';
-}
-
-function onModelInput(val, variantId) {
-  clearTimeout(modelTimer);
-  if (val.trim()) modelTimer = setTimeout(() => lookupVariants(val.trim(), document.getElementById(variantId)), 600);
+  if (val.length>=4) digitTimer=setTimeout(()=>lookupCard(val,document.getElementById(targetId)),500);
+  else document.getElementById(targetId).value='';
 }
 
 async function submitOrder() {
   const payload = {
     last_digits:   document.getElementById('f_digits').value.trim(),
     card_type:     document.getElementById('f_bank').value.trim(),
-    account:       document.getElementById('f_account').value.trim(),
+    account:       document.getElementById('f_account').value,
     order_name:    document.getElementById('f_order_name').value.trim(),
     order_id:      document.getElementById('f_order_id').value.trim(),
     model:         document.getElementById('f_model').value.trim(),
@@ -410,42 +482,33 @@ async function submitOrder() {
     selling_price: document.getElementById('f_selling_price').value || null,
     sale_batch:    document.getElementById('f_sale_batch').value.trim() || 'Current Sale'
   };
-  // No mandatory fields — submit whatever is filled
-  const res = await api('/api/jiomart-orders', 'POST', payload);
-  if (res.error) { showToast(res.error, 'error'); return; }
+  const res = await api('/api/jiomart-orders','POST',payload);
+  if (res.error) { showToast(res.error,'error'); return; }
   allOrders.unshift(res); populateSaleFilter(); filterTable(); clearForm();
   showToast('Jiomart order saved!');
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────────
 async function openEdit(id) {
-  const o = allOrders.find(x => x.id === id); if (!o) return;
-  document.getElementById('e_id').value            = o.id;
-  document.getElementById('e_digits').value         = o.last_digits || '';
-  document.getElementById('e_bank').value           = o.card_type || '';
-  document.getElementById('e_account').value        = o.account || '';
-  document.getElementById('e_order_name').value     = o.order_name || '';
-  document.getElementById('e_order_id').value       = o.order_id || '';
-  document.getElementById('e_model').value          = o.model || '';
-  document.getElementById('e_delivery_date').value  = o.delivery_date || '';
-  document.getElementById('e_costing').value        = o.costing || '';
-  document.getElementById('e_selling_price').value  = o.selling_price || '';
-  document.getElementById('e_sale_batch').value     = o.sale_batch || 'Current Sale';
+  const o = allOrders.find(x=>x.id===id); if (!o) return;
+  document.getElementById('e_id').value           = o.id;
+  document.getElementById('e_digits').value        = o.last_digits||'';
+  document.getElementById('e_bank').value          = o.card_type||'';
+  document.getElementById('e_order_name').value    = o.order_name||'';
+  document.getElementById('e_order_id').value      = o.order_id||'';
+  document.getElementById('e_model').value         = o.model||'';
+  document.getElementById('e_delivery_date').value = o.delivery_date||'';
+  document.getElementById('e_costing').value       = o.costing||'';
+  document.getElementById('e_selling_price').value = o.selling_price||'';
+  document.getElementById('e_sale_batch').value    = o.sale_batch||'Current Sale';
+
+  populateAccountDropdown('e_account', o.account||'');
 
   if (o.model) {
-    const variants = await api(`/api/variants?model=${encodeURIComponent(o.model)}`);
+    await lookupJmVariants(o.model, document.getElementById('e_variant'));
+    // After populating, re-select the saved variant
     const eVar = document.getElementById('e_variant');
-    eVar.innerHTML = '<option value="">Select Variant</option>';
-    variants.forEach(v => {
-      const opt = document.createElement('option');
-      const vName = typeof v==='object' ? v.variant_name : v;
-      const vCost = typeof v==='object' ? (v.costing||'') : '';
-      const vSell = typeof v==='object' ? (v.selling_price||'') : '';
-      opt.value = vName; opt.textContent = vName;
-      opt.setAttribute('data-costing', vCost); opt.setAttribute('data-selling', vSell);
-      if (vName === o.variant) opt.selected = true;
-      eVar.appendChild(opt);
-    });
+    [...eVar.options].forEach(opt => { if (opt.value===o.variant) opt.selected=true; });
   }
   editModal.show();
 }
@@ -455,118 +518,79 @@ async function saveEdit() {
   const payload = {
     last_digits:   document.getElementById('e_digits').value.trim(),
     card_type:     document.getElementById('e_bank').value.trim(),
-    account:       document.getElementById('e_account').value.trim(),
+    account:       document.getElementById('e_account').value,
     order_name:    document.getElementById('e_order_name').value.trim(),
     order_id:      document.getElementById('e_order_id').value.trim(),
     model:         document.getElementById('e_model').value.trim(),
     variant:       document.getElementById('e_variant').value,
     delivery_date: document.getElementById('e_delivery_date').value,
-    costing:       document.getElementById('e_costing').value || null,
-    selling_price: document.getElementById('e_selling_price').value || null,
-    sale_batch:    document.getElementById('e_sale_batch').value.trim() || 'Current Sale'
+    costing:       document.getElementById('e_costing').value||null,
+    selling_price: document.getElementById('e_selling_price').value||null,
+    sale_batch:    document.getElementById('e_sale_batch').value.trim()||'Current Sale'
   };
-  const res = await api(`/api/jiomart-orders/${id}`, 'PUT', payload);
-  if (!res.success) { showToast('Update failed.', 'error'); return; }
-  const idx = allOrders.findIndex(x => x.id === id);
-  if (idx !== -1) allOrders[idx] = { ...allOrders[idx], ...res };
+  const res = await api(`/api/jiomart-orders/${id}`,'PUT',payload);
+  if (!res.success) { showToast('Update failed.','error'); return; }
+  const idx = allOrders.findIndex(x=>x.id===id);
+  if (idx!==-1) allOrders[idx]={...allOrders[idx],...res};
   populateSaleFilter(); filterTable(); editModal.hide(); showToast('Order updated!');
 }
 
 // ── Bulk Selection ────────────────────────────────────────────────────────────
-function getSelectedIds() { return [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value)); }
-
+function getSelectedIds() { return [...document.querySelectorAll('.row-check:checked')].map(c=>parseInt(c.value)); }
 function onCheckChange() {
-  const count = getSelectedIds().length;
-  document.getElementById('selCount').textContent = count;
-  const show = count > 0;
-  ['bulkSellBtn','bulkDeliveryBtn','bulkSaleBtn','bulkDeleteBtn'].forEach(id => {
-    document.getElementById(id).style.display = show ? 'inline-flex' : 'none';
-  });
+  const count=getSelectedIds().length; document.getElementById('selCount').textContent=count;
+  const show=count>0;
+  ['bulkSellBtn','bulkDeliveryBtn','bulkSaleBtn','bulkDeleteBtn'].forEach(id=>{document.getElementById(id).style.display=show?'inline-flex':'none';});
 }
+function toggleSelectAll(cb){document.querySelectorAll('.row-check').forEach(c=>{c.checked=cb.checked;}); onCheckChange();}
 
-function toggleSelectAll(cb) {
-  document.querySelectorAll('.row-check').forEach(c => { c.checked = cb.checked; });
-  onCheckChange();
-}
-
-// ── Bulk Set Sell Price ───────────────────────────────────────────────────────
-function openBulkSell() {
-  const count = getSelectedIds().length; if (!count) return;
-  document.getElementById('bulkSellCount').textContent = count;
-  document.getElementById('bulk_sell_price').value = '';
-  bulkSellModal.show();
-}
-
-async function applyBulkSell() {
-  const ids  = getSelectedIds();
-  const sell = document.getElementById('bulk_sell_price').value.trim();
-  if (!sell) { showToast('Enter a selling price', 'error'); return; }
-  const btn = document.querySelector('#bulkSellModal .btn-success-custom');
-  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-  try {
-    const res = await api('/api/jiomart-orders/bulk-set-sell', 'POST', { ids, selling_price: parseFloat(sell) });
-    if (res.success) {
-      const sellF = parseFloat(sell);
-      ids.forEach(id => { const o = allOrders.find(x => x.id===id); if(o){ o.selling_price=sellF; o.profit=sellF-(parseFloat(o.costing)||0); } });
-      populateSaleFilter(); filterTable(); bulkSellModal.hide();
-      document.getElementById('selectAll').checked = false; onCheckChange();
+function openBulkSell(){const count=getSelectedIds().length;if(!count)return;document.getElementById('bulkSellCount').textContent=count;document.getElementById('bulk_sell_price').value='';bulkSellModal.show();}
+async function applyBulkSell(){
+  const ids=getSelectedIds();const sell=document.getElementById('bulk_sell_price').value.trim();
+  if(!sell){showToast('Enter a selling price','error');return;}
+  const btn=document.querySelector('#bulkSellModal .btn-success-custom');const orig=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> Saving...';
+  try{
+    const res=await api('/api/jiomart-orders/bulk-set-sell','POST',{ids,selling_price:parseFloat(sell)});
+    if(res.success){
+      const sellF=parseFloat(sell);
+      ids.forEach(id=>{const o=allOrders.find(x=>x.id===id);if(o){o.selling_price=sellF;o.profit=sellF-(parseFloat(o.costing)||0);}});
+      populateSaleFilter();filterTable();bulkSellModal.hide();document.getElementById('selectAll').checked=false;onCheckChange();
       showToast(`Sell price set for ${res.updated} order(s)`);
-    } else { showToast('Failed to update sell price', 'error'); }
-  } finally { btn.disabled = false; btn.innerHTML = orig; }
+    }else{showToast('Failed to update sell price','error');}
+  }finally{btn.disabled=false;btn.innerHTML=orig;}
 }
 
-// ── Bulk Set Delivery ─────────────────────────────────────────────────────────
-function openBulkDelivery() {
-  const count = getSelectedIds().length; if (!count) return;
-  document.getElementById('bulkDeliveryCount').textContent = count;
-  document.getElementById('bulk_delivery_date').value = '';
-  bulkDelivModal.show();
-}
-
-async function applyBulkDelivery() {
-  const ids  = getSelectedIds();
-  const date = document.getElementById('bulk_delivery_date').value;
-  if (!date) { showToast('Select a delivery date', 'error'); return; }
-  const btn = document.querySelector('#bulkDeliveryModal .btn-primary-custom');
-  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-  try {
-    const res = await api('/api/jiomart-orders/bulk-set-delivery', 'POST', { ids, delivery_date: date });
-    if (res.success) {
-      ids.forEach(id => { const o = allOrders.find(x => x.id===id); if(o) o.delivery_date=date; });
-      filterTable(); bulkDelivModal.hide();
-      document.getElementById('selectAll').checked = false; onCheckChange();
+function openBulkDelivery(){const count=getSelectedIds().length;if(!count)return;document.getElementById('bulkDeliveryCount').textContent=count;document.getElementById('bulk_delivery_date').value='';bulkDelivModal.show();}
+async function applyBulkDelivery(){
+  const ids=getSelectedIds();const date=document.getElementById('bulk_delivery_date').value;
+  if(!date){showToast('Select a delivery date','error');return;}
+  const btn=document.querySelector('#bulkDeliveryModal .btn-primary-custom');const orig=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> Saving...';
+  try{
+    const res=await api('/api/jiomart-orders/bulk-set-delivery','POST',{ids,delivery_date:date});
+    if(res.success){
+      ids.forEach(id=>{const o=allOrders.find(x=>x.id===id);if(o)o.delivery_date=date;});
+      filterTable();bulkDelivModal.hide();document.getElementById('selectAll').checked=false;onCheckChange();
       showToast(`Delivery date set for ${res.updated} order(s)`);
-    } else { showToast('Failed to update delivery date', 'error'); }
-  } finally { btn.disabled = false; btn.innerHTML = orig; }
+    }else{showToast('Failed to update delivery date','error');}
+  }finally{btn.disabled=false;btn.innerHTML=orig;}
 }
 
-// ── Bulk Sale & Delete ────────────────────────────────────────────────────────
-async function bulkDelete() {
-  const ids = getSelectedIds();
-  if (!ids.length || !confirm(`Delete ${ids.length} selected orders?`)) return;
-  const res = await api('/api/jiomart-orders/bulk-delete', 'POST', { ids });
-  if (res.success) {
-    allOrders = allOrders.filter(o => !ids.includes(o.id));
-    populateSaleFilter(); filterTable();
-    document.getElementById('selectAll').checked = false; onCheckChange();
-    showToast(`${res.deleted} orders deleted.`);
-  }
+async function bulkDelete(){
+  const ids=getSelectedIds();if(!ids.length||!confirm(`Delete ${ids.length} selected orders?`))return;
+  const res=await api('/api/jiomart-orders/bulk-delete','POST',{ids});
+  if(res.success){allOrders=allOrders.filter(o=>!ids.includes(o.id));populateSaleFilter();filterTable();document.getElementById('selectAll').checked=false;onCheckChange();showToast(`${res.deleted} orders deleted.`);}
 }
 
-async function promptBulkSale() {
-  const ids = getSelectedIds(); if (!ids.length) return;
-  const newBatch = prompt(`Enter Sale Batch name for ${ids.length} orders:`, 'Sale 1');
-  if (!newBatch) return;
-  const res = await api('/api/jiomart-orders/bulk-update-sale', 'POST', { ids, sale_batch: newBatch });
-  if (res.success) {
-    showToast(`Assigned ${ids.length} orders to ${newBatch}`);
-    await loadOrders(); document.getElementById('selectAll').checked = false; onCheckChange();
-  }
+async function promptBulkSale(){
+  const ids=getSelectedIds();if(!ids.length)return;
+  const newBatch=prompt(`Enter Sale Batch name for ${ids.length} orders:`,'Sale 1');if(!newBatch)return;
+  const res=await api('/api/jiomart-orders/bulk-update-sale','POST',{ids,sale_batch:newBatch});
+  if(res.success){showToast(`Assigned ${ids.length} orders to ${newBatch}`);await loadOrders();document.getElementById('selectAll').checked=false;onCheckChange();}
 }
 
-function exportOrders(fmt) {
-  const sale = document.getElementById('filterSale').value;
-  window.location.href = `/api/jiomart-orders/export?format=${fmt}&sale=${encodeURIComponent(sale)}`;
+function exportOrders(fmt){
+  const sale=document.getElementById('filterSale').value;
+  window.location.href=`/api/jiomart-orders/export?format=${fmt}&sale=${encodeURIComponent(sale)}`;
 }
 
 init();
