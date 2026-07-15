@@ -694,11 +694,109 @@ SHEET_SCHEMA = {
     'vouchers':        ['id','name','value'],
     'machines':        ['id','name'],
     'vendors':         ['id','name'],
-    'brands':          ['id','name'],
-    'jiomart_orders':  ['id','card_type','last_digits','account','order_name','order_id',
-                        'model','variant','costing','selling_price','profit',
-                        'delivery_date','sale_batch','created_at'],
+    'brands':           ['id','name'],
+    'jiomart_orders':   ['id','card_type','last_digits','account','order_name','order_id',
+                         'model','variant','costing','selling_price','profit',
+                         'delivery_date','sale_batch','created_at'],
+    'jiomart_accounts': ['id','name'],
+    'jiomart_models':   ['id','model_name'],
+    'jiomart_variants': ['id','model_id','variant_name','costing','selling_price'],
 }
+
+
+# ── Jiomart Master Data APIs ─────────────────────────────────────────────────
+
+@app.route('/api/jiomart-accounts', methods=['GET', 'POST'])
+def api_jiomart_accounts(): return handle_master_table('jiomart_accounts', request, 'name')
+@app.route('/api/jiomart-accounts/<int:id>', methods=['DELETE'])
+def api_del_jiomart_accounts(id):
+    cache_clear('master_jiomart_accounts')
+    return delete_master_table('jiomart_accounts', id)
+
+@app.route('/api/jiomart-models', methods=['GET', 'POST'])
+def api_jiomart_models(): return handle_master_table('jiomart_models', request, 'model_name')
+@app.route('/api/jiomart-models/<int:id>', methods=['DELETE'])
+def api_del_jiomart_models(id):
+    cache_clear('master_jiomart_models')
+    return delete_master_table('jiomart_models', id)
+
+@app.route('/api/jiomart-variants', methods=['GET', 'POST'])
+def api_jiomart_variants():
+    if not SHEET: return jsonify([])
+    ws = SHEET.worksheet('jiomart_variants')
+    if request.method == 'GET':
+        model_name = request.args.get('model')
+        cache_key = f'jiomart_variants_{model_name}' if model_name else 'jiomart_variants_all'
+        cached = cache_get(cache_key)
+        if cached: return jsonify(cached)
+        try: variants = ws.get_all_records()
+        except: variants = []
+        if model_name:
+            try: models = SHEET.worksheet('jiomart_models').get_all_records()
+            except: models = []
+            m_id = next((m['id'] for m in models if m['model_name'] == model_name), None)
+            result = [v for v in variants if v['model_id'] == m_id] if m_id else []
+        else:
+            result = variants
+        cache_set(cache_key, result)
+        return jsonify(result)
+    # POST
+    data = request.json; new_id = get_next_id(ws)
+    ws.append_row([new_id, data.get('model_id'), data.get('variant_name',''),
+                   data.get('costing',''), data.get('selling_price','')])
+    for k in list(_cache.keys()):
+        if k.startswith('jiomart_variants'): cache_clear(k)
+    return jsonify({'success': True})
+
+@app.route('/api/jiomart-variants/<int:var_id>', methods=['DELETE', 'PUT'])
+def modify_jiomart_variant(var_id):
+    if request.method == 'DELETE':
+        for k in list(_cache.keys()):
+            if k.startswith('jiomart_variants'): cache_clear(k)
+        return delete_master_table('jiomart_variants', var_id)
+    if not SHEET: return jsonify({'success': False})
+    data = request.json; ws = SHEET.worksheet('jiomart_variants')
+    try:
+        cell = ws.find(str(var_id), in_column=1); row = ws.row_values(cell.row)
+        new_cost = data.get('costing',       row[3] if len(row) > 3 else '')
+        new_sell = data.get('selling_price', row[4] if len(row) > 4 else '')
+        ws.update(f'D{cell.row}:E{cell.row}', [[new_cost, new_sell]])
+        for k in list(_cache.keys()):
+            if k.startswith('jiomart_variants'): cache_clear(k)
+        return jsonify({'success': True, 'costing': new_cost, 'selling_price': new_sell})
+    except Exception as e:
+        print("Jiomart Variant PUT error:", e); return jsonify({'success': False})
+
+@app.route('/api/jiomart-variants/<int:var_id>/sync-sell-price', methods=['POST'])
+def sync_jiomart_variant_sell_price(var_id):
+    if not SHEET: return jsonify({'success': False})
+    data = request.json
+    variant_name  = data.get('variant_name', '')
+    new_sell      = data.get('selling_price', '')
+    match_costing = data.get('costing', '')
+    if not variant_name or new_sell == '':
+        return jsonify({'success': False, 'error': 'variant_name and selling_price required'})
+    try: new_sell_f = float(new_sell)
+    except: return jsonify({'success': False, 'error': 'invalid selling_price'})
+    try: match_cost_f = float(match_costing) if match_costing != '' else None
+    except: match_cost_f = None
+    updated = 0; errors = []
+    # jiomart_orders: variant=H(8), costing=I(9), sell=J(10), profit=K(11)
+    try:
+        ws = SHEET.worksheet('jiomart_orders'); all_rows = ws.get_all_values()
+        if all_rows:
+            for row_idx, row in enumerate(all_rows[1:], start=2):
+                cell_variant = row[7] if len(row) >= 8 else ''
+                if cell_variant.strip() != variant_name.strip(): continue
+                try: row_cost_f = float(row[8]) if len(row) >= 9 and row[8] else 0.0
+                except: row_cost_f = 0.0
+                if match_cost_f is not None and round(row_cost_f,2) != round(match_cost_f,2): continue
+                ws.update_cell(row_idx, 10, new_sell_f)
+                ws.update_cell(row_idx, 11, round(new_sell_f - row_cost_f, 2))
+                updated += 1
+    except Exception as e: errors.append(f"jiomart_orders: {e}")
+    cache_clear('jiomart_orders')
+    return jsonify({'success': True, 'updated': updated, 'errors': errors})
 
 
 # ── Jiomart Orders API ────────────────────────────────────────────────────────
