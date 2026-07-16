@@ -52,6 +52,13 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
+def _safe_int(val, default=-1):
+    """Safely cast a value to int — handles strings, floats, and None from gspread."""
+    try:
+        return int(val) if val not in (None, '', 'None') else default
+    except (ValueError, TypeError):
+        return default
+
 # ── Page Routes ───────────────────────────────────────────────────────────────
 @app.route('/')
 def main_orders(): return render_template('main_orders.html')
@@ -210,12 +217,16 @@ def api_variants():
             try: models = SHEET.worksheet('models').get_all_records()
             except: models = []
             m_id = next((m['id'] for m in models if m['model_name'] == model_name), None)
-            result = [v for v in variants if v['model_id'] == m_id] if m_id else []
+            try: m_id_int = int(m_id) if m_id is not None else None
+            except: m_id_int = None
+            result = [v for v in variants if m_id_int is not None and _safe_int(v.get('model_id')) == m_id_int] if m_id_int else []
         else:
             result = variants
         cache_set(cache_key, result); return jsonify(result)
     data = request.json; new_id = get_next_id(ws)
-    ws.append_row([new_id, data.get('model_id'), data.get('variant_name', ''), data.get('costing', ''), data.get('selling_price', '')])
+    try: v_model_id_int = int(data.get('model_id', 0))
+    except: v_model_id_int = 0
+    ws.append_row([new_id, v_model_id_int, data.get('variant_name', ''), data.get('costing', ''), data.get('selling_price', '')])
     for k in list(_cache.keys()):
         if k.startswith('variants'): cache_clear(k)
     return jsonify({'success': True})
@@ -735,14 +746,19 @@ def api_jiomart_variants():
             try: models = SHEET.worksheet('jiomart_models').get_all_records()
             except: models = []
             m_id = next((m['id'] for m in models if m['model_name'] == model_name), None)
-            result = [v for v in variants if v['model_id'] == m_id] if m_id else []
+            # Cast both sides to int — gspread can return strings or ints inconsistently
+            try: m_id_int = int(m_id) if m_id is not None else None
+            except: m_id_int = None
+            result = [v for v in variants if m_id_int is not None and _safe_int(v.get('model_id')) == m_id_int] if m_id_int else []
         else:
             result = variants
         cache_set(cache_key, result)
         return jsonify(result)
-    # POST
+    # POST — always store model_id as integer to avoid string/int mismatch on read
     data = request.json; new_id = get_next_id(ws)
-    ws.append_row([new_id, data.get('model_id'), data.get('variant_name',''),
+    try: model_id_int = int(data.get('model_id', 0))
+    except: model_id_int = 0
+    ws.append_row([new_id, model_id_int, data.get('variant_name',''),
                    data.get('costing',''), data.get('selling_price','')])
     for k in list(_cache.keys()):
         if k.startswith('jiomart_variants'): cache_clear(k)
