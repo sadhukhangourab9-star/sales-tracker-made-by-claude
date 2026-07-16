@@ -977,6 +977,101 @@ def modify_jiomart(id):
     except Exception as e: print("Jiomart Edit Error:", e); return jsonify({'success': False})
 
 
+# ── Jiomart Migration API ────────────────────────────────────────────────────
+# Move selected main_orders rows into jiomart_orders, then delete from main_orders.
+# Field mapping:
+#   main: card_type last_digits account order_name model variant costing
+#         selling_price profit delivery_date sale_batch created_at
+#   jiomart: card_type last_digits account order_name order_id(blank) model
+#            variant costing selling_price profit delivery_date sale_batch created_at
+
+@app.route('/api/main-orders/migrate-to-jiomart', methods=['POST'])
+def migrate_to_jiomart():
+    if not SHEET: return jsonify({'success': False, 'error': 'Not connected'})
+    ids          = request.json.get('ids', [])
+    delete_after = request.json.get('delete_after', True)
+    if not ids: return jsonify({'success': False, 'error': 'No orders selected'})
+
+    try:
+        main_ws   = SHEET.worksheet('main_orders')
+        jiomart_ws = SHEET.worksheet('jiomart_orders')
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+    try:
+        main_records = main_ws.get_all_records()
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Could not read main_orders: {e}'})
+
+    # Filter selected rows
+    to_migrate = [r for r in main_records if r.get('id') in ids]
+    if not to_migrate:
+        return jsonify({'success': False, 'error': 'No matching orders found'})
+
+    # Get next jiomart id
+    next_id = get_next_id(jiomart_ws)
+    migrated = 0
+    errors   = []
+
+    for r in to_migrate:
+        try:
+            # Strip the apostrophe prefix gspread adds to last_digits
+            ld = str(r.get('last_digits', ''))
+            if ld.startswith("'"): ld = ld[1:]
+            safe_ld = f"'{ld}" if ld else ""
+
+            costing = safe_float(r.get('costing'))
+            selling = safe_float(r.get('selling_price'))
+            profit  = safe_float(r.get('profit'))
+
+            jiomart_ws.append_row([
+                next_id,
+                r.get('card_type', ''),
+                safe_ld,
+                r.get('account', ''),        # account from main order
+                r.get('order_name', ''),      # order_name maps to jiomart order_name
+                '',                           # order_id — blank (not in main orders)
+                r.get('model', ''),
+                r.get('variant', ''),
+                costing,
+                selling,
+                profit,
+                r.get('delivery_date', ''),
+                r.get('sale_batch', 'Current Sale'),
+                r.get('created_at', '')
+            ])
+            next_id += 1
+            migrated += 1
+        except Exception as e:
+            errors.append(f"Order {r.get('id')}: {e}")
+
+    # Delete from main_orders if requested
+    deleted = 0
+    if delete_after and migrated > 0:
+        try:
+            # Re-read records to get fresh row numbers after potential appends
+            fresh_records = main_ws.get_all_records()
+            rows_to_delete = [
+                i + 2 for i, rec in enumerate(fresh_records)
+                if rec.get('id') in ids
+            ]
+            for row_idx in sorted(rows_to_delete, reverse=True):
+                main_ws.delete_row(row_idx)
+                deleted += 1
+        except Exception as e:
+            errors.append(f"Delete step: {e}")
+
+    cache_clear('main_orders')
+    cache_clear('jiomart_orders')
+
+    return jsonify({
+        'success': migrated > 0,
+        'migrated': migrated,
+        'deleted': deleted,
+        'errors': errors
+    })
+
+
 @app.route('/setup')
 def setup_page(): return render_template('setup.html')
 
