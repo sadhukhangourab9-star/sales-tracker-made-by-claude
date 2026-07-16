@@ -232,7 +232,7 @@ function drawList(items, elementId, endpoint, formatTextFn) {
 function drawModelVariantList(models, vars, containerElId, variantEndpoint, modelEndpoint, syncFnName) {
   let html = '';
   models.forEach(m => {
-    const mVars = vars.filter(v => v.model_id === m.id);
+    const mVars = vars.filter(v => parseInt(v.model_id) === parseInt(m.id));
     const nameField = m.model_name !== undefined ? 'model_name' : 'name';
     html += `
       <li class="list-group-item px-1 py-2" style="background:transparent;color:var(--text);border-color:var(--border);">
