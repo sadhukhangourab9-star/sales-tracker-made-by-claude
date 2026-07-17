@@ -116,9 +116,6 @@
     <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">
       <i class="bi bi-trash3"></i> Delete (<span id="selCount">0</span>)
     </button>
-    <button class="btn-outline-custom" id="bulkJiomartBtn" onclick="openMigrateModal()" style="display:none;color:var(--amber);border-color:var(--amber);">
-      <i class="bi bi-bag-heart"></i> Move to Jiomart
-    </button>
     <button class="btn-outline-custom" onclick="exportOrders('csv')"><i class="bi bi-filetype-csv"></i> CSV</button>
     <button class="btn-outline-custom" onclick="exportOrders('excel')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
   </div>
@@ -288,58 +285,6 @@
   </div>
 </div>
 
-<!-- ── Move to Jiomart Migration Modal ── -->
-<div class="modal fade" id="jiomartMigrateModal" tabindex="-1">
-  <div class="modal-dialog modal-md">
-    <div class="modal-content">
-      <div class="modal-header" style="border-bottom:1px solid var(--amber)!important;">
-        <h5 class="modal-title" style="color:var(--amber);">
-          <i class="bi bi-bag-heart me-2"></i>Move to Jiomart Orders
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
-          You are about to move <strong id="migrateCount" style="color:var(--amber);">0</strong> selected order(s)
-          from <strong style="color:var(--text);">Main Orders</strong> into <strong style="color:var(--amber);">Jiomart Orders</strong>.
-        </p>
-
-        <div style="background:var(--navy);border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;">
-          <div style="color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Field Mapping</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;color:var(--text);">
-            <div><span style="color:var(--muted);">Card, Bank</span> → Card, Bank</div>
-            <div><span style="color:var(--muted);">Account No.</span> → Account</div>
-            <div><span style="color:var(--muted);">Order Name</span> → Order Name</div>
-            <div><span style="color:var(--muted);">Model, Variant</span> → Model, Variant</div>
-            <div><span style="color:var(--muted);">Costing, Selling, Profit</span> → ✓ Carried over</div>
-            <div><span style="color:var(--muted);">Delivery Date, Batch</span> → ✓ Carried over</div>
-            <div><span style="color:var(--muted);">Order ID</span> → <em style="color:var(--muted);">left blank</em></div>
-            <div><span style="color:var(--muted);">Platform, Voucher</span> → <em style="color:var(--muted);">not in Jiomart</em></div>
-          </div>
-        </div>
-
-        <div class="form-check" style="margin-bottom:8px;">
-          <input class="form-check-input" type="checkbox" id="deleteAfterMigrate" checked>
-          <label class="form-check-label" style="font-size:13px;color:var(--text);">
-            Delete from Main Orders after moving
-          </label>
-        </div>
-        <p style="font-size:11px;color:var(--muted);">
-          <i class="bi bi-info-circle"></i> Uncheck to keep a copy in Main Orders (not recommended — creates duplicates).
-        </p>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn-primary-custom" id="migrateConfirmBtn"
-          style="background:linear-gradient(135deg,var(--amber),#e8941a);"
-          onclick="confirmMigrate()">
-          <i class="bi bi-bag-heart"></i> Move to Jiomart
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
 {% endblock %}
 
 {% block scripts %}
@@ -350,10 +295,9 @@ let allVouchers = [];
 let currentPage = 1;
 const PAGE_SIZE = 50;
 let modelTimer = null;
-const editModal            = new bootstrap.Modal(document.getElementById('editModal'));
-const bulkSellModal        = new bootstrap.Modal(document.getElementById('bulkSellModal'));
-const bulkDelivModal       = new bootstrap.Modal(document.getElementById('bulkDeliveryModal'));
-const jiomartMigrateModal  = new bootstrap.Modal(document.getElementById('jiomartMigrateModal'));
+const editModal       = new bootstrap.Modal(document.getElementById('editModal'));
+const bulkSellModal   = new bootstrap.Modal(document.getElementById('bulkSellModal'));
+const bulkDelivModal  = new bootstrap.Modal(document.getElementById('bulkDeliveryModal'));
 
 // ── Voucher helpers ───────────────────────────────────────────────────────────
 function populateVoucherDropdown(selectId, selectedName = '') {
@@ -652,7 +596,7 @@ function onCheckChange() {
   const count = ids.length;
   document.getElementById('selCount').textContent = count;
   const show = count > 0;
-  ['bulkSellBtn','bulkDeliveryBtn','bulkSaleBtn','bulkDeleteBtn','bulkJiomartBtn'].forEach(id => {
+  ['bulkSellBtn','bulkDeliveryBtn','bulkSaleBtn','bulkDeleteBtn'].forEach(id => {
     document.getElementById(id).style.display = show ? 'inline-flex' : 'none';
   });
 }
@@ -767,60 +711,6 @@ async function promptBulkSale() {
 function exportOrders(fmt) {
   const sale = document.getElementById('filterSale').value;
   window.location.href = `/api/main-orders/export?format=${fmt}&sale=${encodeURIComponent(sale)}`;
-}
-
-// ── Move to Jiomart ───────────────────────────────────────────────────────────
-function openMigrateModal() {
-  const ids = getSelectedIds();
-  if (!ids.length) return;
-  document.getElementById('migrateCount').textContent = ids.length;
-  document.getElementById('deleteAfterMigrate').checked = true;
-  jiomartMigrateModal.show();
-}
-
-async function confirmMigrate() {
-  const ids         = getSelectedIds();
-  const deleteAfter = document.getElementById('deleteAfterMigrate').checked;
-
-  if (!ids.length) { showToast('No orders selected', 'error'); return; }
-
-  const btn  = document.getElementById('migrateConfirmBtn');
-  const orig = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Moving...';
-
-  try {
-    const res = await api('/api/main-orders/migrate-to-jiomart', 'POST', {
-      ids, delete_after: deleteAfter
-    });
-
-    if (res.success) {
-      // Remove migrated orders from local array if they were deleted
-      if (deleteAfter) {
-        allOrders = allOrders.filter(o => !ids.includes(o.id));
-      }
-      populateSaleFilter();
-      filterTable();
-      jiomartMigrateModal.hide();
-      document.getElementById('selectAll').checked = false;
-      onCheckChange();
-
-      let msg = `${res.migrated} order(s) moved to Jiomart`;
-      if (deleteAfter) msg += ` and removed from Main Orders`;
-      if (res.errors && res.errors.length) msg += ` (${res.errors.length} error(s) — check console)`;
-      showToast(msg);
-
-      if (res.errors && res.errors.length) console.warn('Migration errors:', res.errors);
-    } else {
-      showToast(res.error || 'Migration failed', 'error');
-    }
-  } catch (e) {
-    showToast('Migration failed — check console', 'error');
-    console.error(e);
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = orig;
-  }
 }
 
 init();
