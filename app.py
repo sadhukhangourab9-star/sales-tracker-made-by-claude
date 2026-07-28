@@ -714,7 +714,7 @@ SHEET_SCHEMA = {
     'jiomart_accounts': ['id','name'],
     'jiomart_models':   ['id','model_name'],
     'jiomart_variants': ['id','model_id','variant_name','costing','selling_price'],
-    'voucher_tracker':  ['id','platform','voucher_pin','amount','discount_pct','profit','month','is_redeemed','created_at'],
+    'voucher_tracker':  ['id','platform','voucher_code','voucher_pin','amount','discount_pct','profit','month','is_redeemed','created_at'],
 }
 
 
@@ -1003,13 +1003,15 @@ def api_voucher_tracker():
         is_redeemed  = 1 if data.get('is_redeemed') else 0
         now          = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         ws.append_row([
-            next_id, data.get('platform',''), data.get('voucher_pin',''),
-            amount, disc_pct, profit, data.get('month',''), is_redeemed, now
+            next_id, data.get('platform',''), data.get('voucher_code',''),
+            data.get('voucher_pin',''), amount, disc_pct, profit,
+            data.get('month',''), is_redeemed, now
         ])
         cache_clear('voucher_tracker')
         return jsonify({
             'success':True,'id':next_id,
-            'platform':data.get('platform',''),'voucher_pin':data.get('voucher_pin',''),
+            'platform':data.get('platform',''),'voucher_code':data.get('voucher_code',''),
+            'voucher_pin':data.get('voucher_pin',''),
             'amount':amount,'discount_pct':disc_pct,'profit':profit,
             'month':data.get('month',''),'is_redeemed':is_redeemed,'created_at':now
         })
@@ -1030,15 +1032,17 @@ def modify_voucher_tracker(id):
         disc_pct     = safe_float(data.get('discount_pct'))
         profit       = round(amount * disc_pct / 100, 2)
         is_redeemed  = 1 if data.get('is_redeemed') else 0
-        # Cols B-I = platform(2) pin(3) amount(4) disc(5) profit(6) month(7) is_redeemed(8)
-        ws.update(f'B{cell.row}:H{cell.row}', [[
-            data.get('platform',''), data.get('voucher_pin',''),
-            amount, disc_pct, profit, data.get('month',''), is_redeemed
+        # Cols B-I = platform(2) code(3) pin(4) amount(5) disc(6) profit(7) month(8) is_redeemed(9)
+        ws.update(f'B{cell.row}:I{cell.row}', [[
+            data.get('platform',''), data.get('voucher_code',''),
+            data.get('voucher_pin',''), amount, disc_pct, profit,
+            data.get('month',''), is_redeemed
         ]])
         cache_clear('voucher_tracker')
         return jsonify({
             'success':True,'id':id,
-            'platform':data.get('platform',''),'voucher_pin':data.get('voucher_pin',''),
+            'platform':data.get('platform',''),'voucher_code':data.get('voucher_code',''),
+            'voucher_pin':data.get('voucher_pin',''),
             'amount':amount,'discount_pct':disc_pct,'profit':profit,
             'month':data.get('month',''),'is_redeemed':is_redeemed
         })
