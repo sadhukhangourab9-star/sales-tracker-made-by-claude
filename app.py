@@ -990,8 +990,24 @@ def api_voucher_tracker():
     if request.method == 'GET':
         cached = cache_get('voucher_tracker')
         if cached: return jsonify(cached)
-        try: records = ws.get_all_records()
-        except: records = []
+        try:
+            records = ws.get_all_records()
+        except Exception as e:
+            print(f"Voucher Tracker GET error (get_all_records): {e}")
+            # Fallback: read raw values and map manually using current schema headers
+            try:
+                all_vals = ws.get_all_values()
+                if not all_vals or len(all_vals) < 2:
+                    return jsonify([])
+                headers = all_vals[0]
+                records = []
+                for row in all_vals[1:]:
+                    # Pad short rows
+                    padded = row + [''] * (len(headers) - len(row))
+                    records.append(dict(zip(headers, padded)))
+            except Exception as e2:
+                print(f"Voucher Tracker GET fallback error: {e2}")
+                records = []
         result = list(reversed(records))
         cache_set('voucher_tracker', result)
         return jsonify(result)
