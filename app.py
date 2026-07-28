@@ -68,6 +68,8 @@ def secondary_orders(): return render_template('secondary_orders.html')
 def offline_orders(): return render_template('offline_orders.html')
 @app.route('/jiomart')
 def jiomart_orders(): return render_template('jiomart_orders.html')
+@app.route('/voucher-tracker')
+def voucher_tracker(): return render_template('voucher_tracker.html')
 @app.route('/inventory')
 def inventory(): return render_template('inventory.html')
 @app.route('/dashboard')
@@ -712,6 +714,7 @@ SHEET_SCHEMA = {
     'jiomart_accounts': ['id','name'],
     'jiomart_models':   ['id','model_name'],
     'jiomart_variants': ['id','model_id','variant_name','costing','selling_price'],
+    'voucher_tracker':  ['id','platform','voucher_pin','total_amount','used_amount','unused_amount','discount_pct','profit','month','is_used','created_at'],
 }
 
 
@@ -975,6 +978,174 @@ def modify_jiomart(id):
             'sale_batch': data.get('sale_batch','Current Sale')
         })
     except Exception as e: print("Jiomart Edit Error:", e); return jsonify({'success': False})
+
+
+# ── Voucher Tracker API ──────────────────────────────────────────────────────
+# id(1) platform(2) amount(3) discount_pct(4) profit(5) month(6) created_at(7)
+
+@app.route('/api/voucher-tracker', methods=['GET', 'POST'])
+def api_voucher_tracker():
+    if not SHEET: return jsonify([])
+    ws = SHEET.worksheet('voucher_tracker')
+    if request.method == 'GET':
+        cached = cache_get('voucher_tracker')
+        if cached: return jsonify(cached)
+        try: records = ws.get_all_records()
+        except: records = []
+        result = list(reversed(records))
+        cache_set('voucher_tracker', result)
+        return jsonify(result)
+    try:
+        data         = request.json; next_id = get_next_id(ws)
+        total_amount = safe_float(data.get('total_amount'))
+        used_amount  = safe_float(data.get('used_amount'))
+        unused_amount = round(total_amount - used_amount, 2)
+        disc_pct     = safe_float(data.get('discount_pct'))
+        profit       = round(used_amount * disc_pct / 100, 2)
+        is_used      = 1 if data.get('is_used') else 0
+        now          = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ws.append_row([
+            next_id, data.get('platform',''), data.get('voucher_pin',''),
+            total_amount, used_amount, unused_amount,
+            disc_pct, profit, data.get('month',''), is_used, now
+        ])
+        cache_clear('voucher_tracker')
+        return jsonify({
+            'success':True,'id':next_id,
+            'platform':data.get('platform',''),'voucher_pin':data.get('voucher_pin',''),
+            'total_amount':total_amount,'used_amount':used_amount,'unused_amount':unused_amount,
+            'discount_pct':disc_pct,'profit':profit,'month':data.get('month',''),
+            'is_used':is_used,'created_at':now
+        })
+    except Exception as e:
+        print(f"Voucher Tracker POST Error: {e}"); return jsonify({'success': False}), 500
+
+@app.route('/api/voucher-tracker/<int:id>', methods=['DELETE', 'PUT'])
+def modify_voucher_tracker(id):
+    if request.method == 'DELETE':
+        cache_clear('voucher_tracker')
+        return delete_master_table('voucher_tracker', id)
+    # PUT — toggle is_used or update fields
+    if not SHEET: return jsonify({'success': False})
+    data = request.json; ws = SHEET.worksheet('voucher_tracker')
+    try:
+        cell         = ws.find(str(id), in_column=1)
+        total_amount = safe_float(data.get('total_amount'))
+        used_amount  = safe_float(data.get('used_amount'))
+        unused_amount = round(total_amount - used_amount, 2)
+        disc_pct     = safe_float(data.get('discount_pct'))
+        profit       = round(used_amount * disc_pct / 100, 2)
+        is_used      = 1 if data.get('is_used') else 0
+        # Cols B-J = platform(2) pin(3) total(4) used(5) unused(6) disc(7) profit(8) month(9) is_used(10)
+        ws.update(f'B{cell.row}:J{cell.row}', [[
+            data.get('platform',''), data.get('voucher_pin',''),
+            total_amount, used_amount, unused_amount,
+            disc_pct, profit, data.get('month',''), is_used
+        ]])
+        cache_clear('voucher_tracker')
+        return jsonify({
+            'success':True,'id':id,
+            'platform':data.get('platform',''),'voucher_pin':data.get('voucher_pin',''),
+            'total_amount':total_amount,'used_amount':used_amount,'unused_amount':unused_amount,
+            'discount_pct':disc_pct,'profit':profit,'month':data.get('month',''),'is_used':is_used
+        })
+    except Exception as e:
+        print("Voucher Tracker PUT Error:", e); return jsonify({'success': False})
+
+
+# ── Jiomart Migration API ────────────────────────────────────────────────────
+# Move selected main_orders rows into jiomart_orders, then delete from main_orders.
+# Field mapping:
+#   main: card_type last_digits account order_name model variant costing
+#         selling_price profit delivery_date sale_batch created_at
+#   jiomart: card_type last_digits account order_name order_id(blank) model
+#            variant costing selling_price profit delivery_date sale_batch created_at
+
+@app.route('/api/main-orders/migrate-to-jiomart', methods=['POST'])
+def migrate_to_jiomart():
+    if not SHEET: return jsonify({'success': False, 'error': 'Not connected'})
+    ids          = request.json.get('ids', [])
+    delete_after = request.json.get('delete_after', True)
+    if not ids: return jsonify({'success': False, 'error': 'No orders selected'})
+
+    try:
+        main_ws   = SHEET.worksheet('main_orders')
+        jiomart_ws = SHEET.worksheet('jiomart_orders')
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+    try:
+        main_records = main_ws.get_all_records()
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Could not read main_orders: {e}'})
+
+    # Filter selected rows
+    to_migrate = [r for r in main_records if r.get('id') in ids]
+    if not to_migrate:
+        return jsonify({'success': False, 'error': 'No matching orders found'})
+
+    # Get next jiomart id
+    next_id = get_next_id(jiomart_ws)
+    migrated = 0
+    errors   = []
+
+    for r in to_migrate:
+        try:
+            # Strip the apostrophe prefix gspread adds to last_digits
+            ld = str(r.get('last_digits', ''))
+            if ld.startswith("'"): ld = ld[1:]
+            safe_ld = f"'{ld}" if ld else ""
+
+            costing = safe_float(r.get('costing'))
+            selling = safe_float(r.get('selling_price'))
+            profit  = safe_float(r.get('profit'))
+
+            jiomart_ws.append_row([
+                next_id,
+                r.get('card_type', ''),
+                safe_ld,
+                r.get('account', ''),        # account from main order
+                r.get('order_name', ''),      # order_name maps to jiomart order_name
+                '',                           # order_id — blank (not in main orders)
+                r.get('model', ''),
+                r.get('variant', ''),
+                costing,
+                selling,
+                profit,
+                r.get('delivery_date', ''),
+                r.get('sale_batch', 'Current Sale'),
+                r.get('created_at', '')
+            ])
+            next_id += 1
+            migrated += 1
+        except Exception as e:
+            errors.append(f"Order {r.get('id')}: {e}")
+
+    # Delete from main_orders if requested
+    deleted = 0
+    if delete_after and migrated > 0:
+        try:
+            # Re-read records to get fresh row numbers after potential appends
+            fresh_records = main_ws.get_all_records()
+            rows_to_delete = [
+                i + 2 for i, rec in enumerate(fresh_records)
+                if rec.get('id') in ids
+            ]
+            for row_idx in sorted(rows_to_delete, reverse=True):
+                main_ws.delete_row(row_idx)
+                deleted += 1
+        except Exception as e:
+            errors.append(f"Delete step: {e}")
+
+    cache_clear('main_orders')
+    cache_clear('jiomart_orders')
+
+    return jsonify({
+        'success': migrated > 0,
+        'migrated': migrated,
+        'deleted': deleted,
+        'errors': errors
+    })
 
 
 @app.route('/setup')
