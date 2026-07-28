@@ -714,7 +714,7 @@ SHEET_SCHEMA = {
     'jiomart_accounts': ['id','name'],
     'jiomart_models':   ['id','model_name'],
     'jiomart_variants': ['id','model_id','variant_name','costing','selling_price'],
-    'voucher_tracker':  ['id','platform','voucher_pin','total_amount','used_amount','unused_amount','discount_pct','profit','month','is_used','created_at'],
+    'voucher_tracker':  ['id','platform','voucher_pin','amount','discount_pct','profit','month','is_redeemed','created_at'],
 }
 
 
@@ -997,25 +997,21 @@ def api_voucher_tracker():
         return jsonify(result)
     try:
         data         = request.json; next_id = get_next_id(ws)
-        total_amount = safe_float(data.get('total_amount'))
-        used_amount  = safe_float(data.get('used_amount'))
-        unused_amount = round(total_amount - used_amount, 2)
+        amount       = safe_float(data.get('amount'))
         disc_pct     = safe_float(data.get('discount_pct'))
-        profit       = round(used_amount * disc_pct / 100, 2)
-        is_used      = 1 if data.get('is_used') else 0
+        profit       = round(amount * disc_pct / 100, 2)
+        is_redeemed  = 1 if data.get('is_redeemed') else 0
         now          = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         ws.append_row([
             next_id, data.get('platform',''), data.get('voucher_pin',''),
-            total_amount, used_amount, unused_amount,
-            disc_pct, profit, data.get('month',''), is_used, now
+            amount, disc_pct, profit, data.get('month',''), is_redeemed, now
         ])
         cache_clear('voucher_tracker')
         return jsonify({
             'success':True,'id':next_id,
             'platform':data.get('platform',''),'voucher_pin':data.get('voucher_pin',''),
-            'total_amount':total_amount,'used_amount':used_amount,'unused_amount':unused_amount,
-            'discount_pct':disc_pct,'profit':profit,'month':data.get('month',''),
-            'is_used':is_used,'created_at':now
+            'amount':amount,'discount_pct':disc_pct,'profit':profit,
+            'month':data.get('month',''),'is_redeemed':is_redeemed,'created_at':now
         })
     except Exception as e:
         print(f"Voucher Tracker POST Error: {e}"); return jsonify({'success': False}), 500
@@ -1030,24 +1026,21 @@ def modify_voucher_tracker(id):
     data = request.json; ws = SHEET.worksheet('voucher_tracker')
     try:
         cell         = ws.find(str(id), in_column=1)
-        total_amount = safe_float(data.get('total_amount'))
-        used_amount  = safe_float(data.get('used_amount'))
-        unused_amount = round(total_amount - used_amount, 2)
+        amount       = safe_float(data.get('amount'))
         disc_pct     = safe_float(data.get('discount_pct'))
-        profit       = round(used_amount * disc_pct / 100, 2)
-        is_used      = 1 if data.get('is_used') else 0
-        # Cols B-J = platform(2) pin(3) total(4) used(5) unused(6) disc(7) profit(8) month(9) is_used(10)
-        ws.update(f'B{cell.row}:J{cell.row}', [[
+        profit       = round(amount * disc_pct / 100, 2)
+        is_redeemed  = 1 if data.get('is_redeemed') else 0
+        # Cols B-I = platform(2) pin(3) amount(4) disc(5) profit(6) month(7) is_redeemed(8)
+        ws.update(f'B{cell.row}:H{cell.row}', [[
             data.get('platform',''), data.get('voucher_pin',''),
-            total_amount, used_amount, unused_amount,
-            disc_pct, profit, data.get('month',''), is_used
+            amount, disc_pct, profit, data.get('month',''), is_redeemed
         ]])
         cache_clear('voucher_tracker')
         return jsonify({
             'success':True,'id':id,
             'platform':data.get('platform',''),'voucher_pin':data.get('voucher_pin',''),
-            'total_amount':total_amount,'used_amount':used_amount,'unused_amount':unused_amount,
-            'discount_pct':disc_pct,'profit':profit,'month':data.get('month',''),'is_used':is_used
+            'amount':amount,'discount_pct':disc_pct,'profit':profit,
+            'month':data.get('month',''),'is_redeemed':is_redeemed
         })
     except Exception as e:
         print("Voucher Tracker PUT Error:", e); return jsonify({'success': False})
