@@ -29,6 +29,10 @@
       </select>
     </div>
     <div class="col-md-2">
+      <label class="form-label">Voucher Code</label>
+      <input type="text" id="f_code" class="form-control" placeholder="e.g. FLIP100OFF"/>
+    </div>
+    <div class="col-md-2">
       <label class="form-label">Voucher PIN</label>
       <input type="text" id="f_pin" class="form-control" placeholder="e.g. ABCD-1234"/>
     </div>
@@ -104,6 +108,7 @@
           <th>Redeemed</th>
           <th>Month</th>
           <th>Platform</th>
+          <th>Voucher Code</th>
           <th>Voucher PIN</th>
           <th>Amount (₹)</th>
           <th>Discount %</th>
@@ -167,6 +172,10 @@
               <option value="Flipkart">Flipkart</option>
               <option value="Amazon">Amazon</option>
             </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Voucher Code</label>
+            <input type="text" id="e_code" class="form-control"/>
           </div>
           <div class="col-md-4">
             <label class="form-label">Voucher PIN</label>
@@ -240,6 +249,7 @@ async function init() {
 async function submitEntry() {
   const payload = {
     platform:     document.getElementById('f_platform').value,
+    voucher_code: document.getElementById('f_code').value.trim(),
     voucher_pin:  document.getElementById('f_pin').value.trim(),
     month:        document.getElementById('f_month').value,
     amount:       document.getElementById('f_amount').value || 0,
@@ -251,6 +261,7 @@ async function submitEntry() {
   allEntries.unshift(res);
   filterTable();
   // Clear fields, keep platform / month / discount for quick repeat entry
+  document.getElementById('f_code').value   = '';
   document.getElementById('f_pin').value    = '';
   document.getElementById('f_amount').value = '';
   document.getElementById('f_profit').value = '';
@@ -294,7 +305,7 @@ function filterTable() {
 function renderTable() {
   const body = document.getElementById('tableBody');
   if (!filteredEntries.length) {
-    body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><i class="bi bi-ticket-perforated"></i><p>No vouchers found.</p></div></td></tr>';
+    body.innerHTML = '<tr><td colspan="10"><div class="empty-state"><i class="bi bi-ticket-perforated"></i><p>No vouchers found.</p></div></td></tr>';
     document.getElementById('pageInfo').textContent = '0 - 0 of 0';
     document.getElementById('btnPrev').disabled = true;
     document.getElementById('btnNext').disabled = true;
@@ -342,6 +353,7 @@ function renderTable() {
       <td style="text-align:center;">${statusCell}</td>
       <td style="font-weight:500;color:var(--muted);">${monthLabel}</td>
       <td>${platformBadge}</td>
+      <td style="color:var(--text);font-size:12px;font-weight:500;">${e.voucher_code||'—'}</td>
       <td>${pinDisplay}</td>
       <td style="color:var(--text);font-weight:600;">${formatCost(e.amount)}</td>
       <td>
@@ -384,8 +396,9 @@ function updateStats() {
 async function quickToggle(id, checked) {
   const e = allEntries.find(x => x.id === id); if (!e) return;
   const payload = {
-    platform:    e.platform,    voucher_pin: e.voucher_pin,
-    month:       e.month,       amount:      e.amount,
+    platform:    e.platform,    voucher_code: e.voucher_code,
+    voucher_pin: e.voucher_pin, month:        e.month,
+    amount:      e.amount,
     discount_pct:e.discount_pct, is_redeemed: checked
   };
   const res = await api(`/api/voucher-tracker/${id}`, 'PUT', payload);
@@ -405,6 +418,7 @@ function openEdit(id) {
   const e = allEntries.find(x => x.id === id); if (!e) return;
   document.getElementById('e_id').value          = e.id;
   document.getElementById('e_platform').value    = e.platform || '';
+  document.getElementById('e_code').value        = e.voucher_code || '';
   document.getElementById('e_pin').value         = e.voucher_pin || '';
   document.getElementById('e_month').value       = e.month || '';
   document.getElementById('e_amount').value      = e.amount || '';
@@ -418,6 +432,7 @@ async function saveEdit() {
   const id = parseInt(document.getElementById('e_id').value);
   const payload = {
     platform:     document.getElementById('e_platform').value,
+    voucher_code: document.getElementById('e_code').value.trim(),
     voucher_pin:  document.getElementById('e_pin').value.trim(),
     month:        document.getElementById('e_month').value,
     amount:       document.getElementById('e_amount').value || 0,
