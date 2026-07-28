@@ -1,0 +1,551 @@
+{% extends 'base.html' %}
+{% set active = 'voucher-tracker' %}
+{% block title %}Voucher Tracker — OrderTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Voucher Tracker</div>
+    <div class="page-subtitle">Track platform voucher discounts and monthly profit</div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <div class="stat-pill"><strong id="totalCount">0</strong> Vouchers</div>
+    <div class="stat-pill"><span style="color:var(--green);">Redeemed Profit:</span> <strong id="statProfit" style="color:var(--green);">₹0</strong></div>
+    <div class="stat-pill"><span style="color:var(--amber);">Pending:</span> <strong id="statPending" style="color:var(--amber);">₹0</strong></div>
+    <div class="stat-pill"><span style="color:var(--muted);">Total Value:</span> <strong id="statTotal" style="color:var(--text);">₹0</strong></div>
+  </div>
+</div>
+
+<!-- ── Add Form ── -->
+<div class="card-panel" style="border-top:4px solid var(--green);">
+  <div class="card-panel-title" style="color:var(--green);"><i class="bi bi-ticket-perforated-fill"></i> Add Voucher</div>
+  <div class="row g-3 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label">Platform</label>
+      <select id="f_platform" class="form-select">
+        <option value="">Select Platform</option>
+        <option value="Flipkart">Flipkart</option>
+        <option value="Amazon">Amazon</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Voucher PIN</label>
+      <input type="text" id="f_pin" class="form-control" placeholder="e.g. ABCD-1234"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Month</label>
+      <input type="month" id="f_month" class="form-control"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Amount (₹)</label>
+      <input type="number" id="f_amount" class="form-control" placeholder="e.g. 4000"
+             step="0.01" oninput="calcProfit()"/>
+    </div>
+    <div class="col-md-1">
+      <label class="form-label">Discount %</label>
+      <div style="position:relative;">
+        <input type="number" id="f_disc" class="form-control" placeholder="e.g. 4"
+               step="0.01" min="0" max="100" oninput="calcProfit()" style="padding-right:26px;"/>
+        <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;">%</span>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Profit (₹)</label>
+      <input type="number" id="f_profit" class="form-control" readonly
+             style="color:var(--green)!important;font-weight:600;" placeholder="Auto"/>
+    </div>
+    <div class="col-md-1" style="display:flex;flex-direction:column;gap:6px;">
+      <label class="form-label" style="white-space:nowrap;">Redeemed?</label>
+      <div style="display:flex;align-items:center;height:38px;">
+        <input type="checkbox" id="f_is_redeemed"
+               style="width:20px;height:20px;accent-color:var(--green);cursor:pointer;"/>
+      </div>
+    </div>
+    <div class="col-md-2 col-lg-1">
+      <button class="btn-primary-custom w-100 justify-content-center"
+              style="background:linear-gradient(135deg,var(--green),#25a97a);"
+              onclick="submitEntry()">
+        <i class="bi bi-plus-lg"></i> Add
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Filters ── -->
+<div class="toolbar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <div class="search-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search PIN…" oninput="filterTable()"/>
+    </div>
+    <select id="filterPlatform" class="form-select" style="width:150px;" onchange="filterTable()">
+      <option value="ALL">All Platforms</option>
+      <option value="Flipkart">Flipkart</option>
+      <option value="Amazon">Amazon</option>
+    </select>
+    <input type="month" id="filterMonth" class="form-control" style="width:170px;" onchange="filterTable()"/>
+    <select id="filterRedeemed" class="form-select" style="width:150px;" onchange="filterTable()">
+      <option value="ALL">All Status</option>
+      <option value="pending">Pending Only</option>
+      <option value="redeemed">Redeemed Only</option>
+    </select>
+    <button class="btn-outline-custom" onclick="clearFilters()">
+      <i class="bi bi-x-circle"></i> Clear
+    </button>
+  </div>
+</div>
+
+<!-- ── Main Table ── -->
+<div class="card-panel" style="padding:0;overflow:hidden;">
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Redeemed</th>
+          <th>Month</th>
+          <th>Platform</th>
+          <th>Voucher PIN</th>
+          <th>Amount (₹)</th>
+          <th>Discount %</th>
+          <th>Profit (₹)</th>
+          <th>Date Added</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="9"><div class="empty-state"><i class="bi bi-ticket-perforated"></i><p>Loading vouchers...</p></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-top:1px solid var(--border);">
+    <span id="pageInfo" style="color:var(--muted);font-size:12px;font-weight:600;">0 - 0 of 0</span>
+    <div style="display:flex;gap:8px;">
+      <button id="btnPrev" onclick="changePage(-1)" class="btn-outline-custom" disabled>Previous</button>
+      <button id="btnNext" onclick="changePage(1)" class="btn-outline-custom" disabled>Next</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Monthly Breakdown ── -->
+<div class="card-panel" id="breakdownPanel" style="display:none;">
+  <div class="card-panel-title"><i class="bi bi-bar-chart-steps"></i> Monthly Breakdown</div>
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Platform</th>
+          <th>Total Vouchers</th>
+          <th>Redeemed</th>
+          <th>Pending</th>
+          <th>Total Amount (₹)</th>
+          <th>Redeemed Profit (₹)</th>
+          <th>Pending Profit (₹)</th>
+          <th>Avg Discount %</th>
+        </tr>
+      </thead>
+      <tbody id="breakdownBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Edit Modal ── -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Voucher</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="e_id"/>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Platform</label>
+            <select id="e_platform" class="form-select">
+              <option value="">Select</option>
+              <option value="Flipkart">Flipkart</option>
+              <option value="Amazon">Amazon</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Voucher PIN</label>
+            <input type="text" id="e_pin" class="form-control"/>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Month</label>
+            <input type="month" id="e_month" class="form-control"/>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Amount (₹)</label>
+            <input type="number" id="e_amount" class="form-control" step="0.01" oninput="calcEditProfit()"/>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Discount %</label>
+            <input type="number" id="e_disc" class="form-control" step="0.01" oninput="calcEditProfit()"/>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Profit (₹)</label>
+            <input type="number" id="e_profit" class="form-control" readonly
+                   style="color:var(--green)!important;font-weight:600;"/>
+          </div>
+          <div class="col-md-12">
+            <label style="display:flex;align-items:center;gap:12px;cursor:pointer;font-size:14px;color:var(--text);">
+              <input type="checkbox" id="e_is_redeemed"
+                     style="width:20px;height:20px;accent-color:var(--green);cursor:pointer;"/>
+              <span>Redeemed (full voucher amount used)</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-primary-custom" onclick="saveEdit()"><i class="bi bi-check-lg"></i> Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allEntries = [], filteredEntries = [];
+let currentPage = 1;
+const PAGE_SIZE = 50;
+const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+
+// ── Profit calculator ─────────────────────────────────────────────────────────
+function calcProfit() {
+  const amount = parseFloat(document.getElementById('f_amount').value) || 0;
+  const disc   = parseFloat(document.getElementById('f_disc').value)   || 0;
+  const profit = amount * disc / 100;
+  document.getElementById('f_profit').value = profit > 0 ? profit.toFixed(2) : '';
+}
+
+function calcEditProfit() {
+  const amount = parseFloat(document.getElementById('e_amount').value) || 0;
+  const disc   = parseFloat(document.getElementById('e_disc').value)   || 0;
+  document.getElementById('e_profit').value = (amount * disc / 100).toFixed(2);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
+  allEntries = await api('/api/voucher-tracker');
+  filterTable();
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+async function submitEntry() {
+  const payload = {
+    platform:     document.getElementById('f_platform').value,
+    voucher_pin:  document.getElementById('f_pin').value.trim(),
+    month:        document.getElementById('f_month').value,
+    amount:       document.getElementById('f_amount').value || 0,
+    discount_pct: document.getElementById('f_disc').value   || 0,
+    is_redeemed:  document.getElementById('f_is_redeemed').checked,
+  };
+  const res = await api('/api/voucher-tracker', 'POST', payload);
+  if (!res.success) { showToast('Failed to save', 'error'); return; }
+  allEntries.unshift(res);
+  filterTable();
+  // Clear fields, keep platform / month / discount for quick repeat entry
+  document.getElementById('f_pin').value    = '';
+  document.getElementById('f_amount').value = '';
+  document.getElementById('f_profit').value = '';
+  document.getElementById('f_is_redeemed').checked = false;
+  showToast(`Voucher saved — Profit: ${formatCost(res.profit)}`);
+}
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+function clearFilters() {
+  document.getElementById('filterPlatform').value  = 'ALL';
+  document.getElementById('filterMonth').value     = '';
+  document.getElementById('filterRedeemed').value  = 'ALL';
+  document.getElementById('searchInput').value     = '';
+  filterTable();
+}
+
+function filterTable() {
+  const fp = document.getElementById('filterPlatform').value;
+  const fm = document.getElementById('filterMonth').value;
+  const fr = document.getElementById('filterRedeemed').value;
+  const q  = document.getElementById('searchInput').value.toLowerCase();
+
+  filteredEntries = allEntries.filter(e => {
+    const redeemed = parseInt(e.is_redeemed) === 1;
+    const mp = fp === 'ALL' || e.platform === fp;
+    const mm = !fm || e.month === fm;
+    const mr = fr === 'ALL'
+      || (fr === 'redeemed' && redeemed)
+      || (fr === 'pending'  && !redeemed);
+    const mq = !q || Object.values(e).some(v => String(v||'').toLowerCase().includes(q));
+    return mp && mm && mr && mq;
+  });
+
+  currentPage = 1;
+  renderTable();
+  updateStats();
+  renderBreakdown();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderTable() {
+  const body = document.getElementById('tableBody');
+  if (!filteredEntries.length) {
+    body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><i class="bi bi-ticket-perforated"></i><p>No vouchers found.</p></div></td></tr>';
+    document.getElementById('pageInfo').textContent = '0 - 0 of 0';
+    document.getElementById('btnPrev').disabled = true;
+    document.getElementById('btnNext').disabled = true;
+    return;
+  }
+  const start    = (currentPage - 1) * PAGE_SIZE;
+  const end      = Math.min(start + PAGE_SIZE, filteredEntries.length);
+  const pageData = filteredEntries.slice(start, end);
+
+  document.getElementById('pageInfo').textContent = `${start+1} - ${end} of ${filteredEntries.length}`;
+  document.getElementById('btnPrev').disabled = currentPage === 1;
+  document.getElementById('btnNext').disabled = end >= filteredEntries.length;
+
+  body.innerHTML = pageData.map(e => {
+    const redeemed = parseInt(e.is_redeemed) === 1;
+
+    const statusCell = `
+      <label style="display:flex;align-items:center;justify-content:center;cursor:pointer;gap:6px;">
+        <input type="checkbox" ${redeemed ? 'checked' : ''}
+               onchange="quickToggle(${e.id}, this.checked)"
+               style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;"/>
+        <span style="font-size:11px;color:${redeemed ? 'var(--green)' : 'var(--amber)'};">
+          ${redeemed ? 'Yes' : 'Pending'}
+        </span>
+      </label>`;
+
+    const platformBadge = e.platform === 'Flipkart'
+      ? `<span class="badge-card" style="background:rgba(245,166,35,0.12);color:var(--amber);border:1px solid rgba(245,166,35,0.25);">Flipkart</span>`
+      : e.platform === 'Amazon'
+      ? `<span class="badge-card" style="background:rgba(59,157,221,0.12);color:var(--accent2);border:1px solid rgba(59,157,221,0.25);">Amazon</span>`
+      : `<span class="badge-card badge-default">${e.platform||'—'}</span>`;
+
+    const pinDisplay = e.voucher_pin
+      ? `<code style="color:var(--accent2);font-size:12px;background:var(--navy3);padding:2px 8px;border-radius:4px;">${e.voucher_pin}</code>`
+      : `<span style="color:var(--muted);font-size:11px;">—</span>`;
+
+    const monthLabel = e.month
+      ? new Date(e.month+'-02').toLocaleString('en-IN',{month:'short',year:'numeric'})
+      : '—';
+
+    const profitColor = redeemed ? 'var(--green)' : 'var(--muted)';
+    const dateStr = (e.created_at||'').split(' ')[0];
+
+    return `<tr style="${redeemed ? 'opacity:0.65;' : ''}">
+      <td style="text-align:center;">${statusCell}</td>
+      <td style="font-weight:500;color:var(--muted);">${monthLabel}</td>
+      <td>${platformBadge}</td>
+      <td>${pinDisplay}</td>
+      <td style="color:var(--text);font-weight:600;">${formatCost(e.amount)}</td>
+      <td>
+        <span style="background:var(--navy3);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;color:var(--muted);">
+          ${parseFloat(e.discount_pct||0).toFixed(2)}%
+        </span>
+      </td>
+      <td style="color:${profitColor};font-weight:700;">${formatCost(e.profit)}</td>
+      <td style="color:var(--muted);font-size:12px;">${dateStr}</td>
+      <td>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${e.id})">
+            <i class="bi bi-pencil"></i>
+          </button>
+          <button class="btn-danger-custom" style="padding:4px 9px;" onclick="deleteEntry(${e.id})">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function changePage(dir) { currentPage += dir; renderTable(); }
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function updateStats() {
+  const totalVal      = filteredEntries.reduce((s,e) => s+(parseFloat(e.amount)||0), 0);
+  const redeemedProfit= filteredEntries.filter(e=>parseInt(e.is_redeemed)===1)
+                                        .reduce((s,e) => s+(parseFloat(e.profit)||0), 0);
+  const pendingProfit = filteredEntries.filter(e=>parseInt(e.is_redeemed)!==1)
+                                        .reduce((s,e) => s+(parseFloat(e.profit)||0), 0);
+  document.getElementById('totalCount').textContent = filteredEntries.length;
+  document.getElementById('statProfit').textContent = formatCost(Math.round(redeemedProfit));
+  document.getElementById('statPending').textContent= formatCost(Math.round(pendingProfit));
+  document.getElementById('statTotal').textContent  = formatCost(totalVal);
+}
+
+// ── Quick toggle redeemed ─────────────────────────────────────────────────────
+async function quickToggle(id, checked) {
+  const e = allEntries.find(x => x.id === id); if (!e) return;
+  const payload = {
+    platform:    e.platform,    voucher_pin: e.voucher_pin,
+    month:       e.month,       amount:      e.amount,
+    discount_pct:e.discount_pct, is_redeemed: checked
+  };
+  const res = await api(`/api/voucher-tracker/${id}`, 'PUT', payload);
+  if (res.success) {
+    const idx = allEntries.findIndex(x => x.id === id);
+    if (idx !== -1) allEntries[idx] = { ...allEntries[idx], ...res };
+    filterTable();
+    showToast(checked ? '✓ Voucher marked as Redeemed' : 'Voucher marked as Pending');
+  } else {
+    showToast('Failed to update', 'error');
+    filterTable(); // revert checkbox visually
+  }
+}
+
+// ── Edit ──────────────────────────────────────────────────────────────────────
+function openEdit(id) {
+  const e = allEntries.find(x => x.id === id); if (!e) return;
+  document.getElementById('e_id').value          = e.id;
+  document.getElementById('e_platform').value    = e.platform || '';
+  document.getElementById('e_pin').value         = e.voucher_pin || '';
+  document.getElementById('e_month').value       = e.month || '';
+  document.getElementById('e_amount').value      = e.amount || '';
+  document.getElementById('e_disc').value        = e.discount_pct || '';
+  document.getElementById('e_profit').value      = e.profit || '';
+  document.getElementById('e_is_redeemed').checked = parseInt(e.is_redeemed) === 1;
+  editModal.show();
+}
+
+async function saveEdit() {
+  const id = parseInt(document.getElementById('e_id').value);
+  const payload = {
+    platform:     document.getElementById('e_platform').value,
+    voucher_pin:  document.getElementById('e_pin').value.trim(),
+    month:        document.getElementById('e_month').value,
+    amount:       document.getElementById('e_amount').value || 0,
+    discount_pct: document.getElementById('e_disc').value   || 0,
+    is_redeemed:  document.getElementById('e_is_redeemed').checked,
+  };
+  const res = await api(`/api/voucher-tracker/${id}`, 'PUT', payload);
+  if (!res.success) { showToast('Update failed', 'error'); return; }
+  const idx = allEntries.findIndex(e => e.id === id);
+  if (idx !== -1) allEntries[idx] = { ...allEntries[idx], ...res };
+  filterTable(); editModal.hide(); showToast('Voucher updated!');
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+async function deleteEntry(id) {
+  if (!confirm('Delete this voucher?')) return;
+  const res = await api(`/api/voucher-tracker/${id}`, 'DELETE');
+  if (res.success !== false) {
+    allEntries = allEntries.filter(e => e.id !== id);
+    filterTable(); showToast('Voucher deleted.');
+  } else { showToast('Failed to delete', 'error'); }
+}
+
+// ── Monthly Breakdown ─────────────────────────────────────────────────────────
+function renderBreakdown() {
+  const panel = document.getElementById('breakdownPanel');
+  if (!filteredEntries.length) { panel.style.display='none'; return; }
+  panel.style.display = 'block';
+
+  // Group by month + platform
+  const groups = {};
+  filteredEntries.forEach(e => {
+    const key = `${e.month||'Unknown'}__${e.platform||'Unknown'}`;
+    if (!groups[key]) groups[key] = {
+      month:e.month||'', platform:e.platform||'',
+      total:0, redeemed:0, pending:0, amount:0,
+      redeemedProfit:0, pendingProfit:0, discSum:0
+    };
+    const g = groups[key];
+    const isR = parseInt(e.is_redeemed) === 1;
+    g.total++;
+    g.amount += parseFloat(e.amount||0);
+    g.discSum += parseFloat(e.discount_pct||0);
+    if (isR) { g.redeemed++; g.redeemedProfit += parseFloat(e.profit||0); }
+    else      { g.pending++;  g.pendingProfit  += parseFloat(e.profit||0); }
+  });
+
+  // Month totals
+  const monthTotals = {};
+  Object.values(groups).forEach(g => {
+    if (!monthTotals[g.month]) monthTotals[g.month] = {total:0,redeemed:0,pending:0,amount:0,redeemedProfit:0,pendingProfit:0};
+    const mt = monthTotals[g.month];
+    mt.total+=g.total; mt.redeemed+=g.redeemed; mt.pending+=g.pending;
+    mt.amount+=g.amount; mt.redeemedProfit+=g.redeemedProfit; mt.pendingProfit+=g.pendingProfit;
+  });
+
+  const rows = Object.values(groups).sort((a,b) => {
+    if (b.month !== a.month) return b.month.localeCompare(a.month);
+    return a.platform.localeCompare(b.platform);
+  });
+
+  let html = '';
+  rows.forEach((r, i) => {
+    const monthLabel = r.month
+      ? new Date(r.month+'-02').toLocaleString('en-IN',{month:'long',year:'numeric'})
+      : 'Unknown';
+    const avgDisc = r.total ? (r.discSum/r.total).toFixed(2) : '0.00';
+    const pBadge  = r.platform==='Flipkart'
+      ? `<span style="color:var(--amber);font-weight:600;">Flipkart</span>`
+      : r.platform==='Amazon'
+      ? `<span style="color:var(--accent2);font-weight:600;">Amazon</span>`
+      : `<span style="color:var(--muted);">${r.platform}</span>`;
+
+    html += `<tr>
+      <td style="color:var(--muted);font-size:12px;">${monthLabel}</td>
+      <td>${pBadge}</td>
+      <td style="color:var(--muted);">${r.total}</td>
+      <td style="color:var(--green);">${r.redeemed}</td>
+      <td style="color:var(--amber);">${r.pending}</td>
+      <td style="color:var(--text);font-weight:600;">${formatCost(Math.round(r.amount))}</td>
+      <td style="color:var(--green);font-weight:700;">${formatCost(Math.round(r.redeemedProfit))}</td>
+      <td style="color:var(--amber);font-weight:600;">${formatCost(Math.round(r.pendingProfit))}</td>
+      <td><span style="background:var(--navy3);padding:3px 10px;border-radius:20px;font-size:12px;color:var(--muted);">${avgDisc}%</span></td>
+    </tr>`;
+
+    // Month subtotal if multiple platforms
+    const nextRow = rows[i+1];
+    const isLastOfMonth = !nextRow || nextRow.month !== r.month;
+    const mt = monthTotals[r.month];
+    if (isLastOfMonth && mt.total > r.total) {
+      html += `<tr style="background:rgba(59,157,221,0.05);border-top:1px dashed var(--border);">
+        <td style="color:var(--accent2);font-weight:600;font-size:12px;">${monthLabel} — Total</td>
+        <td style="color:var(--muted);font-size:11px;">All</td>
+        <td style="color:var(--muted);">${mt.total}</td>
+        <td style="color:var(--green);">${mt.redeemed}</td>
+        <td style="color:var(--amber);">${mt.pending}</td>
+        <td style="font-weight:700;">${formatCost(Math.round(mt.amount))}</td>
+        <td style="color:var(--green);font-weight:700;">${formatCost(Math.round(mt.redeemedProfit))}</td>
+        <td style="color:var(--amber);font-weight:700;">${formatCost(Math.round(mt.pendingProfit))}</td>
+        <td>—</td>
+      </tr>`;
+    }
+  });
+
+  // Grand total
+  const grand = filteredEntries.reduce((acc,e) => {
+    const isR = parseInt(e.is_redeemed)===1;
+    acc.total++; acc.amount+=parseFloat(e.amount||0);
+    if (isR) { acc.redeemed++; acc.rProfit+=parseFloat(e.profit||0); }
+    else      { acc.pending++;  acc.pProfit+=parseFloat(e.profit||0); }
+    return acc;
+  }, {total:0,redeemed:0,pending:0,amount:0,rProfit:0,pProfit:0});
+
+  html += `<tr style="border-top:2px solid var(--border);background:rgba(46,204,143,0.05);">
+    <td style="font-weight:700;color:var(--green);">GRAND TOTAL</td>
+    <td style="color:var(--muted);">All</td>
+    <td style="font-weight:700;">${grand.total}</td>
+    <td style="color:var(--green);font-weight:700;">${grand.redeemed}</td>
+    <td style="color:var(--amber);font-weight:700;">${grand.pending}</td>
+    <td style="font-weight:700;">${formatCost(Math.round(grand.amount))}</td>
+    <td style="color:var(--green);font-weight:700;">${formatCost(Math.round(grand.rProfit))}</td>
+    <td style="color:var(--amber);font-weight:700;">${formatCost(Math.round(grand.pProfit))}</td>
+    <td>—</td>
+  </tr>`;
+
+  document.getElementById('breakdownBody').innerHTML = html;
+}
+
+init();
+</script>
+{% endblock %}
