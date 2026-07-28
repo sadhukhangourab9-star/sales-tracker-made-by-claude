@@ -141,10 +141,12 @@
           <th>Month</th>
           <th>Platform</th>
           <th>Total Vouchers</th>
-          <th>Redeemed</th>
-          <th>Pending</th>
           <th>Total Amount (₹)</th>
+          <th>Redeemed Count</th>
+          <th>Redeemed Amount (₹)</th>
           <th>Redeemed Profit (₹)</th>
+          <th>Pending Count</th>
+          <th>Pending Amount (₹)</th>
           <th>Pending Profit (₹)</th>
           <th>Avg Discount %</th>
         </tr>
@@ -469,24 +471,32 @@ function renderBreakdown() {
     if (!groups[key]) groups[key] = {
       month:e.month||'', platform:e.platform||'',
       total:0, redeemed:0, pending:0, amount:0,
-      redeemedProfit:0, pendingProfit:0, discSum:0
+      redeemedAmount:0, redeemedProfit:0,
+      pendingAmount:0,  pendingProfit:0, discSum:0
     };
     const g = groups[key];
     const isR = parseInt(e.is_redeemed) === 1;
+    const amt = parseFloat(e.amount||0);
     g.total++;
-    g.amount += parseFloat(e.amount||0);
+    g.amount  += amt;
     g.discSum += parseFloat(e.discount_pct||0);
-    if (isR) { g.redeemed++; g.redeemedProfit += parseFloat(e.profit||0); }
-    else      { g.pending++;  g.pendingProfit  += parseFloat(e.profit||0); }
+    if (isR) { g.redeemed++; g.redeemedAmount += amt; g.redeemedProfit += parseFloat(e.profit||0); }
+    else      { g.pending++;  g.pendingAmount  += amt; g.pendingProfit  += parseFloat(e.profit||0); }
   });
 
   // Month totals
   const monthTotals = {};
   Object.values(groups).forEach(g => {
-    if (!monthTotals[g.month]) monthTotals[g.month] = {total:0,redeemed:0,pending:0,amount:0,redeemedProfit:0,pendingProfit:0};
+    if (!monthTotals[g.month]) monthTotals[g.month] = {
+      total:0, redeemed:0, pending:0, amount:0,
+      redeemedAmount:0, redeemedProfit:0,
+      pendingAmount:0,  pendingProfit:0
+    };
     const mt = monthTotals[g.month];
     mt.total+=g.total; mt.redeemed+=g.redeemed; mt.pending+=g.pending;
-    mt.amount+=g.amount; mt.redeemedProfit+=g.redeemedProfit; mt.pendingProfit+=g.pendingProfit;
+    mt.amount+=g.amount;
+    mt.redeemedAmount+=g.redeemedAmount; mt.redeemedProfit+=g.redeemedProfit;
+    mt.pendingAmount+=g.pendingAmount;   mt.pendingProfit+=g.pendingProfit;
   });
 
   const rows = Object.values(groups).sort((a,b) => {
@@ -509,12 +519,14 @@ function renderBreakdown() {
     html += `<tr>
       <td style="color:var(--muted);font-size:12px;">${monthLabel}</td>
       <td>${pBadge}</td>
-      <td style="color:var(--muted);">${r.total}</td>
-      <td style="color:var(--green);">${r.redeemed}</td>
-      <td style="color:var(--amber);">${r.pending}</td>
+      <td style="color:var(--muted);font-weight:600;">${r.total}</td>
       <td style="color:var(--text);font-weight:600;">${formatCost(Math.round(r.amount))}</td>
+      <td style="color:var(--green);">${r.redeemed}</td>
+      <td style="color:var(--green);font-weight:600;">${formatCost(Math.round(r.redeemedAmount))}</td>
       <td style="color:var(--green);font-weight:700;">${formatCost(Math.round(r.redeemedProfit))}</td>
-      <td style="color:var(--amber);font-weight:600;">${formatCost(Math.round(r.pendingProfit))}</td>
+      <td style="color:var(--amber);">${r.pending}</td>
+      <td style="color:var(--amber);font-weight:600;">${formatCost(Math.round(r.pendingAmount))}</td>
+      <td style="color:var(--amber);font-weight:700;">${formatCost(Math.round(r.pendingProfit))}</td>
       <td><span style="background:var(--navy3);padding:3px 10px;border-radius:20px;font-size:12px;color:var(--muted);">${avgDisc}%</span></td>
     </tr>`;
 
@@ -527,10 +539,12 @@ function renderBreakdown() {
         <td style="color:var(--accent2);font-weight:600;font-size:12px;">${monthLabel} — Total</td>
         <td style="color:var(--muted);font-size:11px;">All</td>
         <td style="color:var(--muted);">${mt.total}</td>
-        <td style="color:var(--green);">${mt.redeemed}</td>
-        <td style="color:var(--amber);">${mt.pending}</td>
         <td style="font-weight:700;">${formatCost(Math.round(mt.amount))}</td>
+        <td style="color:var(--green);">${mt.redeemed}</td>
+        <td style="color:var(--green);font-weight:700;">${formatCost(Math.round(mt.redeemedAmount))}</td>
         <td style="color:var(--green);font-weight:700;">${formatCost(Math.round(mt.redeemedProfit))}</td>
+        <td style="color:var(--amber);">${mt.pending}</td>
+        <td style="color:var(--amber);font-weight:700;">${formatCost(Math.round(mt.pendingAmount))}</td>
         <td style="color:var(--amber);font-weight:700;">${formatCost(Math.round(mt.pendingProfit))}</td>
         <td>—</td>
       </tr>`;
@@ -540,20 +554,23 @@ function renderBreakdown() {
   // Grand total
   const grand = filteredEntries.reduce((acc,e) => {
     const isR = parseInt(e.is_redeemed)===1;
-    acc.total++; acc.amount+=parseFloat(e.amount||0);
-    if (isR) { acc.redeemed++; acc.rProfit+=parseFloat(e.profit||0); }
-    else      { acc.pending++;  acc.pProfit+=parseFloat(e.profit||0); }
+    const amt = parseFloat(e.amount||0);
+    acc.total++; acc.amount+=amt;
+    if (isR) { acc.redeemed++; acc.rAmount+=amt; acc.rProfit+=parseFloat(e.profit||0); }
+    else      { acc.pending++;  acc.pAmount+=amt; acc.pProfit+=parseFloat(e.profit||0); }
     return acc;
-  }, {total:0,redeemed:0,pending:0,amount:0,rProfit:0,pProfit:0});
+  }, {total:0,redeemed:0,pending:0,amount:0,rAmount:0,rProfit:0,pAmount:0,pProfit:0});
 
   html += `<tr style="border-top:2px solid var(--border);background:rgba(46,204,143,0.05);">
     <td style="font-weight:700;color:var(--green);">GRAND TOTAL</td>
     <td style="color:var(--muted);">All</td>
     <td style="font-weight:700;">${grand.total}</td>
-    <td style="color:var(--green);font-weight:700;">${grand.redeemed}</td>
-    <td style="color:var(--amber);font-weight:700;">${grand.pending}</td>
     <td style="font-weight:700;">${formatCost(Math.round(grand.amount))}</td>
+    <td style="color:var(--green);font-weight:700;">${grand.redeemed}</td>
+    <td style="color:var(--green);font-weight:700;">${formatCost(Math.round(grand.rAmount))}</td>
     <td style="color:var(--green);font-weight:700;">${formatCost(Math.round(grand.rProfit))}</td>
+    <td style="color:var(--amber);font-weight:700;">${grand.pending}</td>
+    <td style="color:var(--amber);font-weight:700;">${formatCost(Math.round(grand.pAmount))}</td>
     <td style="color:var(--amber);font-weight:700;">${formatCost(Math.round(grand.pProfit))}</td>
     <td>—</td>
   </tr>`;
