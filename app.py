@@ -70,6 +70,8 @@ def offline_orders(): return render_template('offline_orders.html')
 def jiomart_orders(): return render_template('jiomart_orders.html')
 @app.route('/voucher-tracker')
 def voucher_tracker(): return render_template('voucher_tracker.html')
+@app.route('/exchange')
+def exchange_orders(): return render_template('exchange_orders.html')
 @app.route('/inventory')
 def inventory(): return render_template('inventory.html')
 @app.route('/dashboard')
@@ -715,6 +717,10 @@ SHEET_SCHEMA = {
     'jiomart_models':   ['id','model_name'],
     'jiomart_variants': ['id','model_id','variant_name','costing','selling_price'],
     'voucher_tracker':  ['id','platform','voucher_code','voucher_pin','amount','discount_pct','profit','month','is_redeemed','created_at'],
+    'exchange_orders':  ['id','card_type','last_digits','platform','account','order_name',
+                         'model','variant','costing','exchange_model','exchange_variant',
+                         'exchange_value','card_value','voucher','selling_price','profit',
+                         'delivery_date','sale_batch','created_at'],
 }
 
 
@@ -978,6 +984,197 @@ def modify_jiomart(id):
             'sale_batch': data.get('sale_batch','Current Sale')
         })
     except Exception as e: print("Jiomart Edit Error:", e); return jsonify({'success': False})
+
+
+# ── Exchange Orders API ──────────────────────────────────────────────────────
+# id(1) card_type(2) last_digits(3) platform(4) account(5) order_name(6)
+# model(7) variant(8) costing(9) exchange_model(10) exchange_variant(11)
+# exchange_value(12) card_value(13) voucher(14) selling_price(15) profit(16)
+# delivery_date(17) sale_batch(18) created_at(19)
+
+@app.route('/api/exchange-orders', methods=['GET', 'POST'])
+def api_exchange_orders():
+    if not SHEET: return jsonify([])
+    ws = SHEET.worksheet('exchange_orders')
+
+    if request.method == 'GET':
+        cached = cache_get('exchange_orders')
+        if cached: return jsonify(cached)
+        try:
+            records = ws.get_all_records()
+        except Exception as e:
+            print(f"Exchange Orders GET error: {e}")
+            try:
+                all_vals = ws.get_all_values()
+                if not all_vals or len(all_vals) < 2: return jsonify([])
+                headers = all_vals[0]
+                records = [dict(zip(headers, row + [''] * (len(headers) - len(row)))) for row in all_vals[1:]]
+            except Exception as e2:
+                print(f"Exchange Orders GET fallback error: {e2}"); records = []
+        for o in records:
+            if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
+        result = list(reversed(records))
+        cache_set('exchange_orders', result)
+        return jsonify(result)
+
+    try:
+        data          = request.json; next_id = get_next_id(ws)
+        costing       = safe_float(data.get('costing'))
+        selling       = safe_float(data.get('selling_price'))
+        exchange_value= safe_float(data.get('exchange_value'))
+        card_value    = costing - exchange_value  # what card actually gets charged
+        profit        = selling - costing
+        now           = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ld = str(data.get('last_digits', '')); sd = f"'{ld}" if ld else ""
+        ws.append_row([
+            next_id, data.get('card_type',''), sd, data.get('platform',''),
+            data.get('account',''), data.get('order_name',''), data.get('model',''),
+            data.get('variant',''), costing, data.get('exchange_model',''),
+            data.get('exchange_variant',''), exchange_value if exchange_value else '',
+            card_value if exchange_value else '', data.get('voucher',''),
+            selling, profit, data.get('delivery_date',''),
+            data.get('sale_batch','Current Sale'), now
+        ])
+        cache_clear('exchange_orders')
+        return jsonify({
+            'success':True,'id':next_id,'card_type':data.get('card_type',''),'last_digits':ld,
+            'platform':data.get('platform',''),'account':data.get('account',''),
+            'order_name':data.get('order_name',''),'model':data.get('model',''),
+            'variant':data.get('variant',''),'costing':costing,
+            'exchange_model':data.get('exchange_model',''),'exchange_variant':data.get('exchange_variant',''),
+            'exchange_value':exchange_value if exchange_value else '',
+            'card_value':card_value if exchange_value else '',
+            'voucher':data.get('voucher',''),'selling_price':selling,'profit':profit,
+            'delivery_date':data.get('delivery_date',''),
+            'sale_batch':data.get('sale_batch','Current Sale'),'created_at':now
+        })
+    except Exception as e:
+        print(f"Exchange Orders POST Error: {e}"); return jsonify({'success':False}), 500
+
+@app.route('/api/exchange-orders/bulk-delete', methods=['POST'])
+def bulk_del_exchange():
+    if not SHEET: return jsonify({'success':False})
+    ids = request.json.get('ids',[]); ws = SHEET.worksheet('exchange_orders')
+    try: records = ws.get_all_records()
+    except: records = []
+    rows_to_delete = [i+2 for i,r in enumerate(records) if r.get('id') in ids]
+    for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_row(r_idx)
+    cache_clear('exchange_orders')
+    return jsonify({'success':True,'deleted':len(rows_to_delete)})
+
+@app.route('/api/exchange-orders/bulk-update-sale', methods=['POST'])
+def bulk_sale_exchange():
+    if not SHEET: return jsonify({'success':False})
+    ids = request.json.get('ids',[]); new_batch = request.json.get('sale_batch','Current Sale')
+    ws = SHEET.worksheet('exchange_orders')
+    try:
+        records = ws.get_all_records()
+        for i,r in enumerate(records):
+            if r.get('id') in ids: ws.update_cell(i+2, 18, new_batch)  # sale_batch col 18
+        cache_clear('exchange_orders'); return jsonify({'success':True})
+    except Exception as e: print("Exchange Bulk Sale Error:",e); return jsonify({'success':False})
+
+@app.route('/api/exchange-orders/bulk-set-sell', methods=['POST'])
+def bulk_sell_exchange():
+    if not SHEET: return jsonify({'success':False})
+    ids = request.json.get('ids',[]); new_sell = request.json.get('selling_price')
+    if not ids or new_sell is None: return jsonify({'success':False})
+    try: new_sell_f = float(new_sell)
+    except: return jsonify({'success':False})
+    ws = SHEET.worksheet('exchange_orders')
+    try:
+        records = ws.get_all_records(); updated = 0
+        for i,r in enumerate(records):
+            if r.get('id') in ids:
+                cost   = safe_float(r.get('costing'))
+                profit = round(new_sell_f - cost, 2)
+                ws.update_cell(i+2, 15, new_sell_f)  # selling_price col 15
+                ws.update_cell(i+2, 16, profit)        # profit col 16
+                updated += 1
+        cache_clear('exchange_orders'); return jsonify({'success':True,'updated':updated})
+    except Exception as e: print("Exchange Bulk Sell Error:",e); return jsonify({'success':False})
+
+@app.route('/api/exchange-orders/bulk-set-delivery', methods=['POST'])
+def bulk_delivery_exchange():
+    if not SHEET: return jsonify({'success':False})
+    ids = request.json.get('ids',[]); new_date = request.json.get('delivery_date','')
+    if not ids or not new_date: return jsonify({'success':False})
+    ws = SHEET.worksheet('exchange_orders')
+    try:
+        records = ws.get_all_records(); updated = 0
+        for i,r in enumerate(records):
+            if r.get('id') in ids:
+                ws.update_cell(i+2, 17, new_date)  # delivery_date col 17
+                updated += 1
+        cache_clear('exchange_orders'); return jsonify({'success':True,'updated':updated})
+    except Exception as e: print("Exchange Bulk Delivery Error:",e); return jsonify({'success':False})
+
+@app.route('/api/exchange-orders/export')
+def export_exchange():
+    if not SHEET: return "No sheet connected", 500
+    fmt = request.args.get('format','csv'); sale_filter = request.args.get('sale','')
+    try: records = SHEET.worksheet('exchange_orders').get_all_records()
+    except: records = []
+    for o in records:
+        if str(o.get('last_digits','')).startswith("'"): o['last_digits']=str(o['last_digits'])[1:]
+    if sale_filter and sale_filter!='ALL':
+        records = [r for r in records if r.get('sale_batch','')==sale_filter]
+    headers = ['id','card_type','last_digits','platform','account','order_name','model','variant',
+               'costing','exchange_model','exchange_variant','exchange_value','card_value',
+               'voucher','selling_price','profit','delivery_date','sale_batch','created_at']
+    if fmt=='csv':
+        out=io.StringIO(); w=csv.DictWriter(out,fieldnames=headers,extrasaction='ignore')
+        w.writeheader(); w.writerows(records); out.seek(0)
+        return send_file(io.BytesIO(out.getvalue().encode('utf-8')),mimetype='text/csv',
+            as_attachment=True,download_name=f'exchange_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.csv')
+    wb=openpyxl.Workbook(); ws_xl=wb.active; ws_xl.title="Exchange Orders"
+    hf=PatternFill("solid",fgColor="1A2D45"); hfont=Font(bold=True,color="2ECC8F")
+    ws_xl.append(headers)
+    for c in ws_xl[1]: c.fill=hf; c.font=hfont
+    for r in records: ws_xl.append([r.get(h,'') for h in headers])
+    for col in ws_xl.columns:
+        ws_xl.column_dimensions[col[0].column_letter].width=min(max((len(str(c.value or '')) for c in col),default=10)+4,40)
+    out=io.BytesIO(); wb.save(out); out.seek(0)
+    return send_file(out,mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,download_name=f'exchange_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx')
+
+@app.route('/api/exchange-orders/<int:id>', methods=['DELETE','PUT'])
+def modify_exchange(id):
+    if request.method=='DELETE':
+        cache_clear('exchange_orders'); return delete_master_table('exchange_orders',id)
+    if not SHEET: return jsonify({'success':False})
+    data=request.json; ws=SHEET.worksheet('exchange_orders')
+    try:
+        cell          = ws.find(str(id),in_column=1)
+        costing       = safe_float(data.get('costing'))
+        selling       = safe_float(data.get('selling_price'))
+        exchange_value= safe_float(data.get('exchange_value'))
+        card_value    = costing - exchange_value if exchange_value else ''
+        profit        = selling - costing
+        ld=str(data.get('last_digits','')); sd=f"'{ld}" if ld else ""
+        # B(2) through S(19) = 18 values
+        ws.update(f'B{cell.row}:S{cell.row}',[[
+            data.get('card_type',''), sd, data.get('platform',''),
+            data.get('account',''), data.get('order_name',''),
+            data.get('model',''), data.get('variant',''), costing,
+            data.get('exchange_model',''), data.get('exchange_variant',''),
+            exchange_value if exchange_value else '', card_value,
+            data.get('voucher',''), selling, profit,
+            data.get('delivery_date',''), data.get('sale_batch','Current Sale'),
+            data.get('created_at','')
+        ]])
+        cache_clear('exchange_orders')
+        return jsonify({
+            'success':True,'id':id,'card_type':data.get('card_type',''),'last_digits':ld,
+            'platform':data.get('platform',''),'account':data.get('account',''),
+            'order_name':data.get('order_name',''),'model':data.get('model',''),
+            'variant':data.get('variant',''),'costing':costing,
+            'exchange_model':data.get('exchange_model',''),'exchange_variant':data.get('exchange_variant',''),
+            'exchange_value':exchange_value if exchange_value else '','card_value':card_value,
+            'voucher':data.get('voucher',''),'selling_price':selling,'profit':profit,
+            'delivery_date':data.get('delivery_date',''),'sale_batch':data.get('sale_batch','Current Sale')
+        })
+    except Exception as e: print("Exchange Edit Error:",e); return jsonify({'success':False})
 
 
 # ── Voucher Tracker API ──────────────────────────────────────────────────────
