@@ -20,8 +20,16 @@
 
 <div class="card-panel" id="addFormPanel" style="display:none;">
   <div class="card-panel-title" style="color:var(--accent2);"><i class="bi bi-arrow-left-right"></i> New Exchange Order</div>
-  <div class="row g-3">
 
+  <!-- Calculation hint -->
+  <div style="background:var(--navy);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--muted);border-left:3px solid var(--accent2);">
+    <strong style="color:var(--accent2);">Auto-calculation:</strong>
+    Card Deduction = Costing − Exchange Value − Voucher Value &nbsp;|&nbsp;
+    Voucher Deduction = Voucher Value &nbsp;|&nbsp;
+    Profit = Sale Price − Costing
+  </div>
+
+  <div class="row g-3">
     <div class="col-md-2">
       <label class="form-label">1. Sale Batch</label>
       <input type="text" id="f_sale_batch" class="form-control" value="Current Sale" placeholder="e.g. Sale 1"/>
@@ -64,45 +72,48 @@
       </select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">10. Delivery Date</label>
-      <input type="date" id="f_delivery_date" class="form-control"/>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">11. Mobile Costing (₹)</label>
+      <label class="form-label">10. Mobile Costing (₹)</label>
       <input type="number" id="f_costing" class="form-control" placeholder="MRP / cost"
-             step="0.01" oninput="recalcExchange('f')"/>
+             step="0.01" oninput="recalcAll('f')"/>
     </div>
-
-    <!-- Exchange fields -->
     <div class="col-md-2">
-      <label class="form-label">12. Exchange Model</label>
+      <label class="form-label">12. Exchanged Model</label>
       <input type="text" id="f_exchange_model" class="form-control" placeholder="e.g. iPhone 13"
              list="exchModelList"/>
       <datalist id="exchModelList"></datalist>
     </div>
     <div class="col-md-2">
-      <label class="form-label">13. Exchange Variant</label>
+      <label class="form-label">13. Exchanged Variant</label>
       <input type="text" id="f_exchange_variant" class="form-control" placeholder="e.g. 128GB"/>
     </div>
     <div class="col-md-2">
       <label class="form-label">14. Exchange Value (₹)</label>
-      <input type="number" id="f_exchange_value" class="form-control" placeholder="Device value"
-             step="0.01" oninput="recalcExchange('f')"/>
+      <input type="number" id="f_exchange_value" class="form-control" placeholder="Device trade-in value"
+             step="0.01" oninput="recalcAll('f')"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">15. Card Deduction (₹)</label>
-      <input type="number" id="f_card_value" class="form-control" readonly
-             style="color:var(--accent2)!important;" placeholder="Costing − Exchange"/>
+      <label class="form-label">15. Voucher Value (₹)</label>
+      <input type="number" id="f_voucher_value" class="form-control" placeholder="Optional"
+             step="0.01" oninput="recalcAll('f')"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">16. Voucher</label>
-      <input type="text" id="f_voucher" class="form-control" placeholder="Voucher name/code"/>
+      <label class="form-label">16. Card Deduction (₹)</label>
+      <input type="number" id="f_card_deduction" class="form-control" readonly
+             style="color:var(--accent2)!important;" placeholder="Auto-calculated"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">17. Sale Price (₹)</label>
+      <label class="form-label">17. Voucher Deduction (₹)</label>
+      <input type="number" id="f_voucher_deduction" class="form-control" readonly
+             style="color:var(--amber)!important;" placeholder="Auto-calculated"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">18. Sale Price (₹)</label>
       <input type="number" id="f_selling_price" class="form-control" placeholder="Optional" step="0.01"/>
     </div>
-
+    <div class="col-md-2">
+      <label class="form-label">19. Delivery Date</label>
+      <input type="date" id="f_delivery_date" class="form-control"/>
+    </div>
     <div class="col-12 d-flex gap-2 mt-2">
       <button class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Order</button>
       <button class="btn-outline-custom" onclick="clearForm()"><i class="bi bi-x-lg"></i> Clear</button>
@@ -155,20 +166,21 @@
           <th>Order Name</th>
           <th>Model</th>
           <th>Variant</th>
-          <th>Delivery</th>
           <th>Costing</th>
           <th>Exch. Model</th>
           <th>Exch. Variant</th>
           <th>Exch. Value</th>
+          <th>Voucher Value</th>
           <th>Card Deduction</th>
-          <th>Voucher</th>
+          <th>Voucher Deduction</th>
           <th>Sale Price</th>
+          <th>Delivery</th>
           <th>Profit</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody id="exchTableBody">
-        <tr><td colspan="20"><div class="empty-state"><i class="bi bi-arrow-left-right"></i><p>Loading orders...</p></div></td></tr>
+        <tr><td colspan="21"><div class="empty-state"><i class="bi bi-arrow-left-right"></i><p>Loading orders...</p></div></td></tr>
       </tbody>
     </table>
   </div>
@@ -224,37 +236,41 @@
             </select>
           </div>
           <div class="col-md-2">
-            <label class="form-label">Delivery Date</label>
-            <input type="date" id="e_delivery_date" class="form-control"/>
-          </div>
-          <div class="col-md-2">
             <label class="form-label">Mobile Costing (₹)</label>
-            <input type="number" id="e_costing" class="form-control" step="0.01" oninput="recalcExchange('e')"/>
+            <input type="number" id="e_costing" class="form-control" step="0.01" oninput="recalcAll('e')"/>
           </div>
           <div class="col-md-2">
-            <label class="form-label">Exchange Model</label>
+            <label class="form-label">Exchanged Model</label>
             <input type="text" id="e_exchange_model" class="form-control" list="eExchModelList"/>
             <datalist id="eExchModelList"></datalist>
           </div>
           <div class="col-md-2">
-            <label class="form-label">Exchange Variant</label>
+            <label class="form-label">Exchanged Variant</label>
             <input type="text" id="e_exchange_variant" class="form-control"/>
           </div>
           <div class="col-md-2">
             <label class="form-label">Exchange Value (₹)</label>
-            <input type="number" id="e_exchange_value" class="form-control" step="0.01" oninput="recalcExchange('e')"/>
+            <input type="number" id="e_exchange_value" class="form-control" step="0.01" oninput="recalcAll('e')"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Voucher Value (₹)</label>
+            <input type="number" id="e_voucher_value" class="form-control" step="0.01" oninput="recalcAll('e')"/>
           </div>
           <div class="col-md-2">
             <label class="form-label">Card Deduction (₹)</label>
-            <input type="number" id="e_card_value" class="form-control" readonly style="color:var(--accent2)!important;"/>
+            <input type="number" id="e_card_deduction" class="form-control" readonly style="color:var(--accent2)!important;"/>
           </div>
           <div class="col-md-2">
-            <label class="form-label">Voucher</label>
-            <input type="text" id="e_voucher" class="form-control"/>
+            <label class="form-label">Voucher Deduction (₹)</label>
+            <input type="number" id="e_voucher_deduction" class="form-control" readonly style="color:var(--amber)!important;"/>
           </div>
           <div class="col-md-2">
             <label class="form-label">Sale Price (₹)</label>
             <input type="number" id="e_selling_price" class="form-control" step="0.01"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Delivery Date</label>
+            <input type="date" id="e_delivery_date" class="form-control"/>
           </div>
           <div class="col-md-2">
             <label class="form-label">Sale Batch</label>
@@ -328,12 +344,25 @@ const editModal      = new bootstrap.Modal(document.getElementById('editModal'))
 const bulkSellModal  = new bootstrap.Modal(document.getElementById('bulkSellModal'));
 const bulkDelivModal = new bootstrap.Modal(document.getElementById('bulkDeliveryModal'));
 
-// ── Card deduction auto-calc ──────────────────────────────────────────────────
-function recalcExchange(prefix) {
-  const costing  = parseFloat(document.getElementById(`${prefix}_costing`).value) || 0;
-  const exchVal  = parseFloat(document.getElementById(`${prefix}_exchange_value`).value) || 0;
-  const cardEl   = document.getElementById(`${prefix}_card_value`);
-  cardEl.value   = exchVal > 0 ? (costing - exchVal).toFixed(2) : '';
+// ── Auto-calculation ──────────────────────────────────────────────────────────
+// Card Deduction   = Costing - Exchange Value - Voucher Value
+// Voucher Deduction = Voucher Value
+// Profit           = Sale Price - Costing
+function recalcAll(prefix) {
+  const costing      = parseFloat(document.getElementById(`${prefix}_costing`).value)      || 0;
+  const exchVal      = parseFloat(document.getElementById(`${prefix}_exchange_value`).value) || 0;
+  const voucherVal   = parseFloat(document.getElementById(`${prefix}_voucher_value`).value)  || 0;
+
+  const cardDeduction    = costing - exchVal - voucherVal;
+  const voucherDeduction = voucherVal;
+
+  const cardEl    = document.getElementById(`${prefix}_card_deduction`);
+  const voucherEl = document.getElementById(`${prefix}_voucher_deduction`);
+
+  // Only show card deduction if there's something to deduct
+  cardEl.value    = (exchVal > 0 || voucherVal > 0) ? cardDeduction.toFixed(2) : '';
+  // Only show voucher deduction if voucher is used
+  voucherEl.value = voucherVal > 0 ? voucherDeduction.toFixed(2) : '';
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -344,14 +373,12 @@ async function init() {
     api('/api/platform-names'), api('/api/models')
   ]);
 
-  // Populate platform dropdowns
   ['f_platform','e_platform'].forEach(id => {
     const sel = document.getElementById(id);
     sel.innerHTML = '<option value="">Select Platform</option>';
     platforms.forEach(p => { const opt = document.createElement('option'); opt.value = opt.textContent = p; sel.appendChild(opt); });
   });
 
-  // Populate model datalists (for both new model and exchange model)
   ['modelList','eModelList','exchModelList','eExchModelList'].forEach(id => {
     const dl = document.getElementById(id); dl.innerHTML = '';
     models.forEach(m => { const opt = document.createElement('option'); opt.value = m.model_name; dl.appendChild(opt); });
@@ -369,14 +396,14 @@ async function loadOrders() {
 function renderTable() {
   const body = document.getElementById('exchTableBody');
   if (!filteredOrders.length) {
-    body.innerHTML = '<tr><td colspan="20"><div class="empty-state"><i class="bi bi-arrow-left-right"></i><p>No exchange orders found.</p></div></td></tr>';
+    body.innerHTML = '<tr><td colspan="21"><div class="empty-state"><i class="bi bi-arrow-left-right"></i><p>No exchange orders found.</p></div></td></tr>';
     document.getElementById('pageInfo').textContent = '0 - 0 of 0';
     document.getElementById('btnPrev').disabled = true;
     document.getElementById('btnNext').disabled = true;
     return;
   }
-  const start = (currentPage-1)*PAGE_SIZE;
-  const end   = Math.min(start+PAGE_SIZE, filteredOrders.length);
+  const start    = (currentPage-1)*PAGE_SIZE;
+  const end      = Math.min(start+PAGE_SIZE, filteredOrders.length);
   const pageData = filteredOrders.slice(start, end);
 
   document.getElementById('pageInfo').textContent = `${start+1} - ${end} of ${filteredOrders.length}`;
@@ -384,17 +411,26 @@ function renderTable() {
   document.getElementById('btnNext').disabled = end >= filteredOrders.length;
 
   body.innerHTML = pageData.map(o => {
-    const pColor  = (parseFloat(o.profit)||0) >= 0 ? 'var(--green)' : 'var(--red)';
-    const dateStr = (o.created_at||'—').split(' ')[0];
-    const hasSell = o.selling_price && parseFloat(o.selling_price) > 0;
-    const hasExch = o.exchange_value && parseFloat(o.exchange_value) > 0;
+    const pColor     = (parseFloat(o.profit)||0) >= 0 ? 'var(--green)' : 'var(--red)';
+    const dateStr    = (o.created_at||'—').split(' ')[0];
+    const hasSell    = o.selling_price && parseFloat(o.selling_price) > 0;
+    const hasExch    = o.exchange_value && parseFloat(o.exchange_value) > 0;
+    const hasVoucher = o.voucher_value && parseFloat(o.voucher_value) > 0;
 
-    const exchBadge = hasExch
-      ? `<span style="color:var(--amber);font-size:11px;font-weight:600;">${formatCost(o.exchange_value)}</span>`
+    const exchCell = hasExch
+      ? `<span style="color:var(--amber);font-weight:600;">${formatCost(o.exchange_value)}</span>`
       : `<span style="color:var(--muted);font-size:11px;">—</span>`;
 
-    const cardValCell = hasExch
-      ? `<span style="color:var(--accent2);font-weight:600;">${formatCost(o.card_value)}</span>`
+    const voucherCell = hasVoucher
+      ? `<span style="color:var(--amber);font-size:11px;font-weight:600;">${formatCost(o.voucher_value)}</span>`
+      : `<span style="color:var(--muted);font-size:11px;">—</span>`;
+
+    const cardDedCell = (hasExch || hasVoucher)
+      ? `<span style="color:var(--accent2);font-weight:600;">${formatCost(o.card_deduction)}</span>`
+      : `<span style="color:var(--muted);font-size:11px;">—</span>`;
+
+    const voucherDedCell = hasVoucher
+      ? `<span style="color:var(--amber);font-weight:600;">${formatCost(o.voucher_deduction)}</span>`
       : `<span style="color:var(--muted);font-size:11px;">—</span>`;
 
     return `<tr data-id="${o.id}">
@@ -408,16 +444,17 @@ function renderTable() {
       <td style="font-weight:500;">${o.order_name||'—'}</td>
       <td>${o.model||'—'}</td>
       <td style="color:var(--muted);">${o.variant||'—'}</td>
-      <td style="color:var(--muted);">${o.delivery_date||'—'}</td>
       <td style="color:var(--muted);">${formatCost(o.costing)}</td>
       <td style="color:var(--amber);font-size:12px;">${o.exchange_model||'—'}</td>
       <td style="color:var(--muted);font-size:12px;">${o.exchange_variant||'—'}</td>
-      <td>${exchBadge}</td>
-      <td>${cardValCell}</td>
-      <td style="color:var(--muted);font-size:12px;">${o.voucher||'—'}</td>
+      <td>${exchCell}</td>
+      <td>${voucherCell}</td>
+      <td>${cardDedCell}</td>
+      <td>${voucherDedCell}</td>
       <td style="color:${hasSell?'var(--text)':'var(--amber)'};font-weight:600;">
         ${hasSell ? formatCost(o.selling_price) : '<span style="font-size:11px;font-style:italic;">pending</span>'}
       </td>
+      <td style="color:var(--muted);">${o.delivery_date||'—'}</td>
       <td style="color:${pColor};font-weight:600;">${hasSell ? formatCost(o.profit) : '—'}</td>
       <td>
         <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})">
@@ -435,14 +472,16 @@ function updateStats() {
   const totalCost   = filteredOrders.reduce((s,o) => s+(parseFloat(o.costing)||0), 0);
   const totalProfit = filteredOrders.reduce((s,o) => s+(parseFloat(o.profit)||0), 0);
   document.getElementById('totalCost').innerHTML =
-    `<span style="color:var(--muted)">Spend:</span> ${formatCost(totalCost)} <span style="color:var(--muted);margin-left:8px;">Profit:</span> <span style="color:var(--green)">${formatCost(totalProfit)}</span>`;
+    `<span style="color:var(--muted)">Spend:</span> ${formatCost(totalCost)}
+     <span style="color:var(--muted);margin-left:8px;">Profit:</span>
+     <span style="color:var(--green)">${formatCost(totalProfit)}</span>`;
 }
 
 function populateSaleFilter() {
   const sales = [...new Set(allOrders.map(o => o.sale_batch||'Current Sale'))].sort();
   const sel = document.getElementById('filterSale'); const cv = sel.value;
   sel.innerHTML = '<option value="ALL">All Sales</option>';
-  sales.forEach(s => { const opt = document.createElement('option'); opt.value=s; opt.textContent=s; sel.appendChild(opt); });
+  sales.forEach(s => { const opt=document.createElement('option'); opt.value=s; opt.textContent=s; sel.appendChild(opt); });
   if ([...sel.options].some(o => o.value===cv)) sel.value=cv;
 }
 
@@ -467,9 +506,11 @@ function toggleForm() {
 }
 
 function clearForm() {
-  ['f_digits','f_bank','f_account','f_order_name','f_model','f_costing',
-   'f_exchange_model','f_exchange_variant','f_exchange_value','f_card_value',
-   'f_voucher','f_selling_price'].forEach(id => document.getElementById(id).value='');
+  ['f_digits','f_bank','f_account','f_order_name','f_model',
+   'f_costing','f_exchange_model','f_exchange_variant',
+   'f_exchange_value','f_voucher_value','f_card_deduction',
+   'f_voucher_deduction','f_selling_price']
+    .forEach(id => document.getElementById(id).value='');
   document.getElementById('f_platform').value='';
   document.getElementById('f_variant').innerHTML='<option value="">Select Variant</option>';
   document.getElementById('f_sale_batch').value='Current Sale';
@@ -499,17 +540,17 @@ async function submitOrder() {
     order_name:       document.getElementById('f_order_name').value.trim(),
     model:            document.getElementById('f_model').value.trim(),
     variant:          document.getElementById('f_variant').value,
-    delivery_date:    document.getElementById('f_delivery_date').value,
     costing:          document.getElementById('f_costing').value || null,
     exchange_model:   document.getElementById('f_exchange_model').value.trim(),
     exchange_variant: document.getElementById('f_exchange_variant').value.trim(),
     exchange_value:   document.getElementById('f_exchange_value').value || null,
-    voucher:          document.getElementById('f_voucher').value.trim(),
+    voucher_value:    document.getElementById('f_voucher_value').value || null,
     selling_price:    document.getElementById('f_selling_price').value || null,
+    delivery_date:    document.getElementById('f_delivery_date').value,
     sale_batch:       document.getElementById('f_sale_batch').value.trim() || 'Current Sale',
   };
   const res = await api('/api/exchange-orders','POST',payload);
-  if (res.error||!res.id) { showToast('Failed to save','error'); return; }
+  if (!res.id) { showToast('Failed to save','error'); return; }
   allOrders.unshift(res); populateSaleFilter(); filterTable(); clearForm();
   showToast('Exchange order saved!');
 }
@@ -517,21 +558,22 @@ async function submitOrder() {
 // ── Edit ──────────────────────────────────────────────────────────────────────
 async function openEdit(id) {
   const o = allOrders.find(x=>x.id===id); if (!o) return;
-  document.getElementById('e_id').value               = o.id;
-  document.getElementById('e_digits').value            = o.last_digits||'';
-  document.getElementById('e_bank').value              = o.card_type||'';
-  document.getElementById('e_account').value           = o.account||'';
-  document.getElementById('e_order_name').value        = o.order_name||'';
-  document.getElementById('e_model').value             = o.model||'';
-  document.getElementById('e_delivery_date').value     = o.delivery_date||'';
-  document.getElementById('e_costing').value           = o.costing||'';
-  document.getElementById('e_exchange_model').value    = o.exchange_model||'';
-  document.getElementById('e_exchange_variant').value  = o.exchange_variant||'';
-  document.getElementById('e_exchange_value').value    = o.exchange_value||'';
-  document.getElementById('e_card_value').value        = o.card_value||'';
-  document.getElementById('e_voucher').value           = o.voucher||'';
-  document.getElementById('e_selling_price').value     = o.selling_price||'';
-  document.getElementById('e_sale_batch').value        = o.sale_batch||'Current Sale';
+  document.getElementById('e_id').value                = o.id;
+  document.getElementById('e_digits').value             = o.last_digits||'';
+  document.getElementById('e_bank').value               = o.card_type||'';
+  document.getElementById('e_account').value            = o.account||'';
+  document.getElementById('e_order_name').value         = o.order_name||'';
+  document.getElementById('e_model').value              = o.model||'';
+  document.getElementById('e_costing').value            = o.costing||'';
+  document.getElementById('e_exchange_model').value     = o.exchange_model||'';
+  document.getElementById('e_exchange_variant').value   = o.exchange_variant||'';
+  document.getElementById('e_exchange_value').value     = o.exchange_value||'';
+  document.getElementById('e_voucher_value').value      = o.voucher_value||'';
+  document.getElementById('e_card_deduction').value     = o.card_deduction||'';
+  document.getElementById('e_voucher_deduction').value  = o.voucher_deduction||'';
+  document.getElementById('e_selling_price').value      = o.selling_price||'';
+  document.getElementById('e_delivery_date').value      = o.delivery_date||'';
+  document.getElementById('e_sale_batch').value         = o.sale_batch||'Current Sale';
 
   const platforms = await api('/api/platform-names');
   const ePlat = document.getElementById('e_platform');
@@ -546,10 +588,9 @@ async function openEdit(id) {
       const opt=document.createElement('option');
       const vName=typeof v==='object'?v.variant_name:v;
       const vCost=typeof v==='object'?(v.costing||''):'';
-      const vSell=typeof v==='object'?(v.selling_price||''):'';
       opt.value=vName; opt.textContent=vName;
-      opt.setAttribute('data-costing',vCost); opt.setAttribute('data-selling',vSell);
-      if (vName===o.variant) opt.selected=true;
+      opt.setAttribute('data-costing',vCost);
+      if(vName===o.variant) opt.selected=true;
       eVar.appendChild(opt);
     });
   }
@@ -566,26 +607,26 @@ async function saveEdit() {
     order_name:       document.getElementById('e_order_name').value.trim(),
     model:            document.getElementById('e_model').value.trim(),
     variant:          document.getElementById('e_variant').value,
-    delivery_date:    document.getElementById('e_delivery_date').value,
     costing:          document.getElementById('e_costing').value||null,
     exchange_model:   document.getElementById('e_exchange_model').value.trim(),
     exchange_variant: document.getElementById('e_exchange_variant').value.trim(),
     exchange_value:   document.getElementById('e_exchange_value').value||null,
-    voucher:          document.getElementById('e_voucher').value.trim(),
+    voucher_value:    document.getElementById('e_voucher_value').value||null,
     selling_price:    document.getElementById('e_selling_price').value||null,
+    delivery_date:    document.getElementById('e_delivery_date').value,
     sale_batch:       document.getElementById('e_sale_batch').value.trim()||'Current Sale',
     created_at:       allOrders.find(x=>x.id===id)?.created_at||''
   };
   const res=await api(`/api/exchange-orders/${id}`,'PUT',payload);
-  if (!res.success) { showToast('Update failed','error'); return; }
+  if(!res.success){showToast('Update failed','error');return;}
   const idx=allOrders.findIndex(x=>x.id===id);
-  if (idx!==-1) allOrders[idx]={...allOrders[idx],...res};
-  populateSaleFilter(); filterTable(); editModal.hide(); showToast('Order updated!');
+  if(idx!==-1) allOrders[idx]={...allOrders[idx],...res};
+  populateSaleFilter();filterTable();editModal.hide();showToast('Order updated!');
 }
 
 // ── Bulk actions ──────────────────────────────────────────────────────────────
-function getSelectedIds() { return [...document.querySelectorAll('.row-check:checked')].map(c=>parseInt(c.value)); }
-function onCheckChange() {
+function getSelectedIds(){return [...document.querySelectorAll('.row-check:checked')].map(c=>parseInt(c.value));}
+function onCheckChange(){
   const count=getSelectedIds().length; document.getElementById('selCount').textContent=count;
   const show=count>0;
   ['bulkSellBtn','bulkDeliveryBtn','bulkSaleBtn','bulkDeleteBtn'].forEach(id=>{
@@ -609,7 +650,7 @@ async function applyBulkSell(){
     const res=await api('/api/exchange-orders/bulk-set-sell','POST',{ids,selling_price:parseFloat(sell)});
     if(res.success){
       const sellF=parseFloat(sell);
-      ids.forEach(id=>{const o=allOrders.find(x=>x.id===id);if(o){o.selling_price=sellF;o.profit=sellF-(parseFloat(o.costing)||0);}});
+      ids.forEach(id=>{const o=allOrders.find(x=>x.id===id); if(o){o.selling_price=sellF; o.profit=sellF-(parseFloat(o.costing)||0);}});
       populateSaleFilter();filterTable();bulkSellModal.hide();
       document.getElementById('selectAll').checked=false;onCheckChange();
       showToast(`Sell price set for ${res.updated} order(s)`);
@@ -631,7 +672,7 @@ async function applyBulkDelivery(){
   try{
     const res=await api('/api/exchange-orders/bulk-set-delivery','POST',{ids,delivery_date:date});
     if(res.success){
-      ids.forEach(id=>{const o=allOrders.find(x=>x.id===id);if(o) o.delivery_date=date;});
+      ids.forEach(id=>{const o=allOrders.find(x=>x.id===id); if(o) o.delivery_date=date;});
       filterTable();bulkDelivModal.hide();
       document.getElementById('selectAll').checked=false;onCheckChange();
       showToast(`Delivery date set for ${res.updated} order(s)`);
@@ -641,7 +682,7 @@ async function applyBulkDelivery(){
 
 async function bulkDelete(){
   const ids=getSelectedIds();
-  if(!ids.length||!confirm(`Delete ${ids.length} selected orders?`))return;
+  if(!ids.length||!confirm(`Delete ${ids.length} selected orders?`)) return;
   const res=await api('/api/exchange-orders/bulk-delete','POST',{ids});
   if(res.success){
     allOrders=allOrders.filter(o=>!ids.includes(o.id));
@@ -656,7 +697,7 @@ async function promptBulkSale(){
   const newBatch=prompt(`Enter Sale Batch for ${ids.length} orders:`,'Sale 1');
   if(!newBatch) return;
   const res=await api('/api/exchange-orders/bulk-update-sale','POST',{ids,sale_batch:newBatch});
-  if(res.success){showToast(`Assigned to ${newBatch}`);await loadOrders();document.getElementById('selectAll').checked=false;onCheckChange();}
+  if(res.success){showToast(`Assigned to ${newBatch}`);await loadOrders(); document.getElementById('selectAll').checked=false;onCheckChange();}
 }
 
 function exportOrders(fmt){
