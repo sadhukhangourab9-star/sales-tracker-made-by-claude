@@ -719,8 +719,8 @@ SHEET_SCHEMA = {
     'voucher_tracker':  ['id','platform','voucher_code','voucher_pin','amount','discount_pct','profit','month','is_redeemed','created_at'],
     'exchange_orders':  ['id','card_type','last_digits','platform','account','order_name',
                          'model','variant','costing','exchange_model','exchange_variant',
-                         'exchange_value','card_value','voucher','selling_price','profit',
-                         'delivery_date','sale_batch','created_at'],
+                         'exchange_value','voucher_value','card_deduction','voucher_deduction',
+                         'selling_price','profit','delivery_date','sale_batch','created_at'],
 }
 
 
@@ -1019,19 +1019,26 @@ def api_exchange_orders():
 
     try:
         data          = request.json; next_id = get_next_id(ws)
-        costing       = safe_float(data.get('costing'))
-        selling       = safe_float(data.get('selling_price'))
-        exchange_value= safe_float(data.get('exchange_value'))
-        card_value    = costing - exchange_value  # what card actually gets charged
-        profit        = selling - costing
-        now           = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        costing          = safe_float(data.get('costing'))
+        selling          = safe_float(data.get('selling_price'))
+        exchange_value   = safe_float(data.get('exchange_value'))
+        voucher_value    = safe_float(data.get('voucher_value'))
+        # Card deduction = costing - exchange_value - voucher_value
+        # Voucher deduction = voucher_value (what the voucher covers)
+        card_deduction   = round(costing - exchange_value - voucher_value, 2)
+        voucher_deduction = voucher_value  # same as voucher_value, displayed separately
+        profit           = round(selling - costing, 2)
+        now              = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         ld = str(data.get('last_digits', '')); sd = f"'{ld}" if ld else ""
         ws.append_row([
             next_id, data.get('card_type',''), sd, data.get('platform',''),
             data.get('account',''), data.get('order_name',''), data.get('model',''),
             data.get('variant',''), costing, data.get('exchange_model',''),
-            data.get('exchange_variant',''), exchange_value if exchange_value else '',
-            card_value if exchange_value else '', data.get('voucher',''),
+            data.get('exchange_variant',''),
+            exchange_value if exchange_value else '',
+            voucher_value if voucher_value else '',
+            card_deduction if (exchange_value or voucher_value) else '',
+            voucher_deduction if voucher_value else '',
             selling, profit, data.get('delivery_date',''),
             data.get('sale_batch','Current Sale'), now
         ])
@@ -1043,8 +1050,10 @@ def api_exchange_orders():
             'variant':data.get('variant',''),'costing':costing,
             'exchange_model':data.get('exchange_model',''),'exchange_variant':data.get('exchange_variant',''),
             'exchange_value':exchange_value if exchange_value else '',
-            'card_value':card_value if exchange_value else '',
-            'voucher':data.get('voucher',''),'selling_price':selling,'profit':profit,
+            'voucher_value':voucher_value if voucher_value else '',
+            'card_deduction':card_deduction if (exchange_value or voucher_value) else '',
+            'voucher_deduction':voucher_deduction if voucher_value else '',
+            'selling_price':selling,'profit':profit,
             'delivery_date':data.get('delivery_date',''),
             'sale_batch':data.get('sale_batch','Current Sale'),'created_at':now
         })
@@ -1070,7 +1079,7 @@ def bulk_sale_exchange():
     try:
         records = ws.get_all_records()
         for i,r in enumerate(records):
-            if r.get('id') in ids: ws.update_cell(i+2, 18, new_batch)  # sale_batch col 18
+            if r.get('id') in ids: ws.update_cell(i+2, 19, new_batch)  # sale_batch col 19
         cache_clear('exchange_orders'); return jsonify({'success':True})
     except Exception as e: print("Exchange Bulk Sale Error:",e); return jsonify({'success':False})
 
@@ -1088,8 +1097,8 @@ def bulk_sell_exchange():
             if r.get('id') in ids:
                 cost   = safe_float(r.get('costing'))
                 profit = round(new_sell_f - cost, 2)
-                ws.update_cell(i+2, 15, new_sell_f)  # selling_price col 15
-                ws.update_cell(i+2, 16, profit)        # profit col 16
+                ws.update_cell(i+2, 16, new_sell_f)  # selling_price col 16
+                ws.update_cell(i+2, 17, profit)        # profit col 17
                 updated += 1
         cache_clear('exchange_orders'); return jsonify({'success':True,'updated':updated})
     except Exception as e: print("Exchange Bulk Sell Error:",e); return jsonify({'success':False})
@@ -1104,7 +1113,7 @@ def bulk_delivery_exchange():
         records = ws.get_all_records(); updated = 0
         for i,r in enumerate(records):
             if r.get('id') in ids:
-                ws.update_cell(i+2, 17, new_date)  # delivery_date col 17
+                ws.update_cell(i+2, 18, new_date)  # delivery_date col 18
                 updated += 1
         cache_clear('exchange_orders'); return jsonify({'success':True,'updated':updated})
     except Exception as e: print("Exchange Bulk Delivery Error:",e); return jsonify({'success':False})
@@ -1120,8 +1129,9 @@ def export_exchange():
     if sale_filter and sale_filter!='ALL':
         records = [r for r in records if r.get('sale_batch','')==sale_filter]
     headers = ['id','card_type','last_digits','platform','account','order_name','model','variant',
-               'costing','exchange_model','exchange_variant','exchange_value','card_value',
-               'voucher','selling_price','profit','delivery_date','sale_batch','created_at']
+               'costing','exchange_model','exchange_variant','exchange_value','voucher_value',
+               'card_deduction','voucher_deduction','selling_price','profit',
+               'delivery_date','sale_batch','created_at']
     if fmt=='csv':
         out=io.StringIO(); w=csv.DictWriter(out,fieldnames=headers,extrasaction='ignore')
         w.writeheader(); w.writerows(records); out.seek(0)
@@ -1146,20 +1156,25 @@ def modify_exchange(id):
     data=request.json; ws=SHEET.worksheet('exchange_orders')
     try:
         cell          = ws.find(str(id),in_column=1)
-        costing       = safe_float(data.get('costing'))
-        selling       = safe_float(data.get('selling_price'))
-        exchange_value= safe_float(data.get('exchange_value'))
-        card_value    = costing - exchange_value if exchange_value else ''
-        profit        = selling - costing
+        costing          = safe_float(data.get('costing'))
+        selling          = safe_float(data.get('selling_price'))
+        exchange_value   = safe_float(data.get('exchange_value'))
+        voucher_value    = safe_float(data.get('voucher_value'))
+        card_deduction   = round(costing - exchange_value - voucher_value, 2)
+        voucher_deduction = voucher_value
+        profit           = round(selling - costing, 2)
         ld=str(data.get('last_digits','')); sd=f"'{ld}" if ld else ""
-        # B(2) through S(19) = 18 values
-        ws.update(f'B{cell.row}:S{cell.row}',[[
+        # B(2) through T(20) = 19 values
+        ws.update(f'B{cell.row}:T{cell.row}',[[
             data.get('card_type',''), sd, data.get('platform',''),
             data.get('account',''), data.get('order_name',''),
             data.get('model',''), data.get('variant',''), costing,
             data.get('exchange_model',''), data.get('exchange_variant',''),
-            exchange_value if exchange_value else '', card_value,
-            data.get('voucher',''), selling, profit,
+            exchange_value if exchange_value else '',
+            voucher_value if voucher_value else '',
+            card_deduction if (exchange_value or voucher_value) else '',
+            voucher_deduction if voucher_value else '',
+            selling, profit,
             data.get('delivery_date',''), data.get('sale_batch','Current Sale'),
             data.get('created_at','')
         ]])
@@ -1170,8 +1185,11 @@ def modify_exchange(id):
             'order_name':data.get('order_name',''),'model':data.get('model',''),
             'variant':data.get('variant',''),'costing':costing,
             'exchange_model':data.get('exchange_model',''),'exchange_variant':data.get('exchange_variant',''),
-            'exchange_value':exchange_value if exchange_value else '','card_value':card_value,
-            'voucher':data.get('voucher',''),'selling_price':selling,'profit':profit,
+            'exchange_value':exchange_value if exchange_value else '',
+            'voucher_value':voucher_value if voucher_value else '',
+            'card_deduction':card_deduction if (exchange_value or voucher_value) else '',
+            'voucher_deduction':voucher_deduction if voucher_value else '',
+            'selling_price':selling,'profit':profit,
             'delivery_date':data.get('delivery_date',''),'sale_batch':data.get('sale_batch','Current Sale')
         })
     except Exception as e: print("Exchange Edit Error:",e); return jsonify({'success':False})
