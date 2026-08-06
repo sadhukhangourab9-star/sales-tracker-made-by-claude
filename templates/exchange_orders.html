@@ -24,9 +24,9 @@
   <!-- Calculation hint -->
   <div style="background:var(--navy);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--muted);border-left:3px solid var(--accent2);">
     <strong style="color:var(--accent2);">Auto-calculation:</strong>
-    Card Deduction = Costing − Exchange Value − Voucher Value &nbsp;|&nbsp;
+    Card Deduction = Original Mobile Costing + Service Charge − Exchange Value − Voucher Value &nbsp;|&nbsp;
     Voucher Deduction = Voucher Value &nbsp;|&nbsp;
-    Profit = Sale Price − Costing
+    Profit = Sale Price − Mobile Costing
   </div>
 
   <div class="row g-3">
@@ -97,21 +97,31 @@
              step="0.01" oninput="recalcAll('f')"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">16. Card Deduction (₹)</label>
+      <label class="form-label">16. Original Mobile Costing (₹)</label>
+      <input type="number" id="f_original_costing" class="form-control" placeholder="MRP / original price"
+             step="0.01" oninput="recalcAll('f')"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">17. Service Charge (₹)</label>
+      <input type="number" id="f_service_charge" class="form-control" placeholder="Optional"
+             step="0.01" oninput="recalcAll('f')"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">18. Card Deduction (₹)</label>
       <input type="number" id="f_card_deduction" class="form-control" readonly
              style="color:var(--accent2)!important;" placeholder="Auto-calculated"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">17. Voucher Deduction (₹)</label>
+      <label class="form-label">19. Voucher Deduction (₹)</label>
       <input type="number" id="f_voucher_deduction" class="form-control" readonly
              style="color:var(--amber)!important;" placeholder="Auto-calculated"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">18. Sale Price (₹)</label>
+      <label class="form-label">20. Sale Price (₹)</label>
       <input type="number" id="f_selling_price" class="form-control" placeholder="Optional" step="0.01"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">19. Delivery Date</label>
+      <label class="form-label">21. Delivery Date</label>
       <input type="date" id="f_delivery_date" class="form-control"/>
     </div>
     <div class="col-12 d-flex gap-2 mt-2">
@@ -171,6 +181,8 @@
           <th>Exch. Variant</th>
           <th>Exch. Value</th>
           <th>Voucher Value</th>
+          <th>Orig. Costing</th>
+          <th>Service Charge</th>
           <th>Card Deduction</th>
           <th>Voucher Deduction</th>
           <th>Sale Price</th>
@@ -255,6 +267,14 @@
           <div class="col-md-2">
             <label class="form-label">Voucher Value (₹)</label>
             <input type="number" id="e_voucher_value" class="form-control" step="0.01" oninput="recalcAll('e')"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Original Mobile Costing (₹)</label>
+            <input type="number" id="e_original_costing" class="form-control" step="0.01" oninput="recalcAll('e')"/>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Service Charge (₹)</label>
+            <input type="number" id="e_service_charge" class="form-control" step="0.01" oninput="recalcAll('e')"/>
           </div>
           <div class="col-md-2">
             <label class="form-label">Card Deduction (₹)</label>
@@ -345,23 +365,24 @@ const bulkSellModal  = new bootstrap.Modal(document.getElementById('bulkSellModa
 const bulkDelivModal = new bootstrap.Modal(document.getElementById('bulkDeliveryModal'));
 
 // ── Auto-calculation ──────────────────────────────────────────────────────────
-// Card Deduction   = Costing - Exchange Value - Voucher Value
+// Card Deduction    = Original Mobile Costing + Service Charge - Exchange Value - Voucher Value
 // Voucher Deduction = Voucher Value
-// Profit           = Sale Price - Costing
+// Profit            = Sale Price - Mobile Costing (field 10)
 function recalcAll(prefix) {
-  const costing      = parseFloat(document.getElementById(`${prefix}_costing`).value)      || 0;
-  const exchVal      = parseFloat(document.getElementById(`${prefix}_exchange_value`).value) || 0;
-  const voucherVal   = parseFloat(document.getElementById(`${prefix}_voucher_value`).value)  || 0;
+  const exchVal        = parseFloat(document.getElementById(`${prefix}_exchange_value`).value)    || 0;
+  const voucherVal     = parseFloat(document.getElementById(`${prefix}_voucher_value`).value)     || 0;
+  const origCosting    = parseFloat(document.getElementById(`${prefix}_original_costing`).value)  || 0;
+  const serviceCharge  = parseFloat(document.getElementById(`${prefix}_service_charge`).value)    || 0;
 
-  const cardDeduction    = costing - exchVal - voucherVal;
+  // Card Deduction = Original Costing + Service Charge - Exchange Value - Voucher Value
+  const cardDeduction    = origCosting + serviceCharge - exchVal - voucherVal;
   const voucherDeduction = voucherVal;
 
   const cardEl    = document.getElementById(`${prefix}_card_deduction`);
   const voucherEl = document.getElementById(`${prefix}_voucher_deduction`);
+  const hasAny    = origCosting > 0 || serviceCharge > 0 || exchVal > 0 || voucherVal > 0;
 
-  // Only show card deduction if there's something to deduct
-  cardEl.value    = (exchVal > 0 || voucherVal > 0) ? cardDeduction.toFixed(2) : '';
-  // Only show voucher deduction if voucher is used
+  cardEl.value    = hasAny    ? cardDeduction.toFixed(2)    : '';
   voucherEl.value = voucherVal > 0 ? voucherDeduction.toFixed(2) : '';
 }
 
@@ -396,7 +417,7 @@ async function loadOrders() {
 function renderTable() {
   const body = document.getElementById('exchTableBody');
   if (!filteredOrders.length) {
-    body.innerHTML = '<tr><td colspan="21"><div class="empty-state"><i class="bi bi-arrow-left-right"></i><p>No exchange orders found.</p></div></td></tr>';
+    body.innerHTML = '<tr><td colspan="23"><div class="empty-state"><i class="bi bi-arrow-left-right"></i><p>No exchange orders found.</p></div></td></tr>';
     document.getElementById('pageInfo').textContent = '0 - 0 of 0';
     document.getElementById('btnPrev').disabled = true;
     document.getElementById('btnNext').disabled = true;
@@ -449,6 +470,8 @@ function renderTable() {
       <td style="color:var(--muted);font-size:12px;">${o.exchange_variant||'—'}</td>
       <td>${exchCell}</td>
       <td>${voucherCell}</td>
+      <td style="color:var(--muted);">${o.original_costing ? formatCost(o.original_costing) : '<span style="font-size:11px;">—</span>'}</td>
+      <td style="color:var(--muted);">${o.service_charge && parseFloat(o.service_charge) > 0 ? formatCost(o.service_charge) : '<span style="font-size:11px;">—</span>'}</td>
       <td>${cardDedCell}</td>
       <td>${voucherDedCell}</td>
       <td style="color:${hasSell?'var(--text)':'var(--amber)'};font-weight:600;">
@@ -508,8 +531,8 @@ function toggleForm() {
 function clearForm() {
   ['f_digits','f_bank','f_account','f_order_name','f_model',
    'f_costing','f_exchange_model','f_exchange_variant',
-   'f_exchange_value','f_voucher_value','f_card_deduction',
-   'f_voucher_deduction','f_selling_price']
+   'f_exchange_value','f_voucher_value','f_original_costing',
+   'f_service_charge','f_card_deduction','f_voucher_deduction','f_selling_price']
     .forEach(id => document.getElementById(id).value='');
   document.getElementById('f_platform').value='';
   document.getElementById('f_variant').innerHTML='<option value="">Select Variant</option>';
@@ -543,10 +566,12 @@ async function submitOrder() {
     costing:          document.getElementById('f_costing').value || null,
     exchange_model:   document.getElementById('f_exchange_model').value.trim(),
     exchange_variant: document.getElementById('f_exchange_variant').value.trim(),
-    exchange_value:   document.getElementById('f_exchange_value').value || null,
-    voucher_value:    document.getElementById('f_voucher_value').value || null,
-    selling_price:    document.getElementById('f_selling_price').value || null,
-    delivery_date:    document.getElementById('f_delivery_date').value,
+    exchange_value:    document.getElementById('f_exchange_value').value || null,
+    voucher_value:     document.getElementById('f_voucher_value').value || null,
+    original_costing:  document.getElementById('f_original_costing').value || null,
+    service_charge:    document.getElementById('f_service_charge').value || null,
+    selling_price:     document.getElementById('f_selling_price').value || null,
+    delivery_date:     document.getElementById('f_delivery_date').value,
     sale_batch:       document.getElementById('f_sale_batch').value.trim() || 'Current Sale',
   };
   const res = await api('/api/exchange-orders','POST',payload);
@@ -569,6 +594,8 @@ async function openEdit(id) {
   document.getElementById('e_exchange_variant').value   = o.exchange_variant||'';
   document.getElementById('e_exchange_value').value     = o.exchange_value||'';
   document.getElementById('e_voucher_value').value      = o.voucher_value||'';
+  document.getElementById('e_original_costing').value   = o.original_costing||'';
+  document.getElementById('e_service_charge').value     = o.service_charge||'';
   document.getElementById('e_card_deduction').value     = o.card_deduction||'';
   document.getElementById('e_voucher_deduction').value  = o.voucher_deduction||'';
   document.getElementById('e_selling_price').value      = o.selling_price||'';
@@ -610,9 +637,11 @@ async function saveEdit() {
     costing:          document.getElementById('e_costing').value||null,
     exchange_model:   document.getElementById('e_exchange_model').value.trim(),
     exchange_variant: document.getElementById('e_exchange_variant').value.trim(),
-    exchange_value:   document.getElementById('e_exchange_value').value||null,
-    voucher_value:    document.getElementById('e_voucher_value').value||null,
-    selling_price:    document.getElementById('e_selling_price').value||null,
+    exchange_value:    document.getElementById('e_exchange_value').value||null,
+    voucher_value:     document.getElementById('e_voucher_value').value||null,
+    original_costing:  document.getElementById('e_original_costing').value||null,
+    service_charge:    document.getElementById('e_service_charge').value||null,
+    selling_price:     document.getElementById('e_selling_price').value||null,
     delivery_date:    document.getElementById('e_delivery_date').value,
     sale_batch:       document.getElementById('e_sale_batch').value.trim()||'Current Sale',
     created_at:       allOrders.find(x=>x.id===id)?.created_at||''
