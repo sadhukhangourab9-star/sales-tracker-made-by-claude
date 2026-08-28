@@ -1,144 +1,280 @@
 {% extends 'base.html' %}
 {% set active = 'inventory' %}
-{% block title %}Offline Inventory — OrderTrack{% endblock %}
+{% block title %}Card Inventory — OrderTrack{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <div>
     <div class="page-title">Offline Card Inventory</div>
-    <div class="page-subtitle">Track monthly card availability against specific offline brands</div>
+    <div class="page-subtitle">Track monthly card availability against specific offline brands and machines</div>
   </div>
 </div>
 
-<div class="card-panel">
+<!-- ── Filters ── -->
+<div class="card-panel" style="padding:16px 20px;margin-bottom:20px;">
   <div class="row g-3 align-items-end">
     <div class="col-md-2">
-      <label class="form-label">Inventory Month</label>
-      <input type="month" id="f_month" class="form-control" onchange="runLogic()">
+      <label class="form-label" style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">Inventory Month</label>
+      <input type="month" id="f_month" class="form-control" onchange="runLogic()"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Filter Bank</label>
+      <label class="form-label" style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">Filter Bank</label>
       <select id="f_type" class="form-select" onchange="runLogic()">
         <option value="">All Banks</option>
       </select>
     </div>
     <div class="col-md-3">
-      <label class="form-label">Check specific Brand</label>
+      <label class="form-label" style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">Check Specific Brand</label>
       <select id="f_model" class="form-select" onchange="runLogic()">
         <option value="">All Brands</option>
       </select>
     </div>
-    <div class="col-md-5 pb-2">
-      <div class="form-check form-switch" style="font-size:15px;">
-        <input class="form-check-input" type="checkbox" id="f_remaining" onchange="runLogic()">
-        <label class="form-check-label" style="color:var(--accent2);font-weight:600;">🎯 Show Cards NEVER swiped for this Brand (This Month)</label>
+    <div class="col-md-3">
+      <label class="form-label" style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">Filter by Machine</label>
+      <select id="f_machine" class="form-select" onchange="runLogic()">
+        <option value="">All Machines</option>
+      </select>
+    </div>
+    <div class="col-md-2 d-flex align-items-end gap-2">
+      <div class="form-check form-switch mb-1">
+        <input class="form-check-input" type="checkbox" id="f_remaining" onchange="runLogic()"/>
+        <label class="form-check-label" style="font-size:12px;color:var(--muted);white-space:nowrap;">
+          🎯 Show Cards NEVER swiped
+        </label>
       </div>
     </div>
   </div>
+
+  <!-- Active filter summary -->
+  <div id="filterSummary" style="display:none;margin-top:12px;padding:8px 12px;background:var(--navy);border-radius:8px;font-size:12px;color:var(--muted);"></div>
 </div>
 
-<div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr><th>Card Number</th><th>Bank</th><th>Monthly Status</th><th>Usage Info (Selected Month)</th></tr>
-    </thead>
-    <tbody id="invBody"><tr><td colspan="4">Loading...</td></tr></tbody>
-  </table>
+<!-- ── Stats row ── -->
+<div class="row g-3 mb-4" id="statsRow" style="display:none!important;"></div>
+
+<!-- ── Table ── -->
+<div class="card-panel" style="padding:0;overflow:hidden;">
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Card Number</th>
+          <th>Bank</th>
+          <th>Monthly Status</th>
+          <th>Machine Used</th>
+          <th>Usage Info (Selected Month)</th>
+        </tr>
+      </thead>
+      <tbody id="invBody">
+        <tr><td colspan="5"><div class="empty-state"><i class="bi bi-credit-card-2-front"></i><p>Loading...</p></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="padding:10px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);">
+    Showing <strong id="shownCount" style="color:var(--text);">0</strong> cards
+    <span id="totalLabel"></span>
+  </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-let mCards = [], offlineSales = [], offlineBrands = [];
+let mCards = [], offlineSales = [], offlineBrands = [], offlineMachines = [];
 
 async function init() {
   try {
     document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
 
-    const [cards, offSales, brands] = await Promise.all([
-      api('/api/cards'), 
+    const [cards, offSales, brands, machines] = await Promise.all([
+      api('/api/cards'),
       api('/api/offline-orders'),
-      api('/api/brands')
+      api('/api/brands'),
+      api('/api/machines')
     ]);
-    
-    mCards = cards;
-    offlineSales = offSales;
+
+    mCards        = cards;
+    offlineSales  = offSales;
     offlineBrands = brands;
-    
+    offlineMachines = machines;
+
     // Populate Bank Dropdown
     const types = [...new Set(mCards.map(c => c.card_type))].filter(Boolean).sort();
-    types.forEach(t => document.getElementById('f_type').innerHTML += `<option value="${t}">${t}</option>`);
-    
-    // Populate Brand Dropdown from Settings Master Data
-    offlineBrands.forEach(b => {
-      let bName = b.name || b.brand_name;
-      if(bName) {
-        document.getElementById('f_model').innerHTML += `<option value="${bName.toLowerCase()}">${bName}</option>`;
-      }
+    const typesSel = document.getElementById('f_type');
+    types.forEach(t => {
+      const opt = document.createElement('option'); opt.value = t; opt.textContent = t; typesSel.appendChild(opt);
     });
-    
+
+    // Populate Brand Dropdown
+    const brandsSel = document.getElementById('f_model');
+    offlineBrands.forEach(b => {
+      const bName = b.name || b.brand_name; if (!bName) return;
+      const opt = document.createElement('option'); opt.value = bName.toLowerCase(); opt.textContent = bName; brandsSel.appendChild(opt);
+    });
+
+    // Populate Machine Dropdown
+    const machineSel = document.getElementById('f_machine');
+    offlineMachines.forEach(m => {
+      if (!m.name) return;
+      const opt = document.createElement('option'); opt.value = m.name; opt.textContent = m.name; machineSel.appendChild(opt);
+    });
+
     runLogic();
-    
   } catch (err) {
-    document.getElementById('invBody').innerHTML = `<tr><td colspan="4" style="color:var(--red); font-weight:bold;">⚠️ Error loading data.</td></tr>`;
-    console.error("Fetch Error:", err);
+    document.getElementById('invBody').innerHTML =
+      `<tr><td colspan="5" style="color:var(--red);font-weight:bold;padding:20px;">⚠️ Error loading data: ${err.message}</td></tr>`;
   }
 }
 
 function runLogic() {
-  const sMonth  = document.getElementById('f_month').value;
-  const sType   = document.getElementById('f_type').value;
-  const sBrand  = document.getElementById('f_model').value;   // already lowercased from option value
-  const sRem    = document.getElementById('f_remaining').checked;
-  
-  // Sales strictly for the selected month
+  const sMonth   = document.getElementById('f_month').value;
+  const sType    = document.getElementById('f_type').value;
+  const sBrand   = document.getElementById('f_model').value;   // lowercase from option value
+  const sMachine = document.getElementById('f_machine').value;
+  const sRem     = document.getElementById('f_remaining').checked;
+
+  // All sales for this month
   const currentMonthSales = offlineSales.filter(s => s.sale_month === sMonth);
 
-  // Sales for selected month AND selected brand (if a brand is chosen)
+  // Sales filtered by brand (if selected)
   const brandSales = sBrand
     ? currentMonthSales.filter(s => (s.brand || '').toLowerCase() === sBrand)
     : currentMonthSales;
 
+  // Sales filtered by machine (if selected) — used for machine filter logic
+  const machineSales = sMachine
+    ? currentMonthSales.filter(s => (s.machine || '') === sMachine)
+    : currentMonthSales;
+
+  // Combined: brand + machine filter on sales
+  const filteredSales = currentMonthSales.filter(s => {
+    const matchBrand   = !sBrand   || (s.brand   || '').toLowerCase() === sBrand;
+    const matchMachine = !sMachine || (s.machine || '') === sMachine;
+    return matchBrand && matchMachine;
+  });
+
   let result = [...mCards];
-  
+
   // Filter by Bank
   if (sType) result = result.filter(c => c.card_type === sType);
-  
-  // "Show Cards NEVER swiped for this Brand" toggle
-  if (sRem && sBrand) {
+
+  // Machine filter: only show cards that were used on the selected machine
+  // (or never used on any machine in this month, if toggle is on)
+  if (sMachine) {
+    if (sRem) {
+      // Show cards NEVER used on this machine this month
+      const usedOnMachine = new Set(machineSales.map(s => String(s.last_digits)));
+      result = result.filter(c => !usedOnMachine.has(String(c.last_digits)));
+    } else {
+      // Show cards that HAVE been used on this machine, OR were never used anywhere
+      // (so we can see which ones are available for this machine)
+      // → Show all cards but highlight usage on this specific machine
+    }
+  } else if (sRem && sBrand) {
+    // No machine selected — toggle filters by brand only
     const usedCardDigits = brandSales.map(s => String(s.last_digits));
     result = result.filter(c => !usedCardDigits.includes(String(c.last_digits)));
+  } else if (sRem && !sBrand && !sMachine) {
+    // Toggle with no brand/machine — show cards never swiped at all this month
+    const usedAny = new Set(currentMonthSales.map(s => String(s.last_digits)));
+    result = result.filter(c => !usedAny.has(String(c.last_digits)));
   }
-  
+
+  // Build filter summary
+  updateFilterSummary(sMonth, sType, sBrand, sMachine, sRem);
+
   // Render
   let html = '';
-  if (result.length === 0) {
-    html = '<tr><td colspan="4" class="text-center" style="color:var(--muted); padding: 20px;">No cards found matching criteria.</td></tr>';
+  let pristineCount = 0, usedCount = 0;
+
+  if (!result.length) {
+    html = '<tr><td colspan="5" class="text-center" style="color:var(--muted);padding:30px;">No cards match the current filters.</td></tr>';
   } else {
     result.forEach(c => {
-      // KEY FIX: usages now scoped to brandSales (month + brand), not all month sales
-      const usages = brandSales.filter(s => String(s.last_digits) === String(c.last_digits));
-      const isUsed = usages.length > 0;
-      
-      let usageText = sBrand
-        ? `Never swiped at <strong>${document.getElementById('f_model').options[document.getElementById('f_model').selectedIndex].text}</strong> this month`
-        : 'Never Swiped This Month';
+      // Get ALL sales for this card this month (for usage column)
+      const allCardSales = currentMonthSales.filter(s => String(s.last_digits) === String(c.last_digits));
 
-      if (isUsed) {
-        usageText = `Swiped ${usages.length} time(s) this month at <strong>${usages[0].brand || 'Unknown'}</strong>`;
+      // Get sales matching the current brand+machine filter
+      const filteredCardSales = filteredSales.filter(s => String(s.last_digits) === String(c.last_digits));
+
+      const isUsedInFilter = filteredCardSales.length > 0;
+      const isUsedAtAll    = allCardSales.length > 0;
+
+      if (isUsedAtAll) usedCount++; else pristineCount++;
+
+      // Machine info for this card this month
+      const machinesUsed = [...new Set(allCardSales.map(s => s.machine).filter(Boolean))];
+      const machineCell  = machinesUsed.length > 0
+        ? machinesUsed.map(m => `<span style="background:var(--navy3);padding:2px 8px;border-radius:4px;font-size:11px;margin-right:4px;color:var(--accent2);">${m}</span>`).join('')
+        : `<span style="color:var(--muted);font-size:11px;">—</span>`;
+
+      // Usage info text
+      let usageText = '';
+      if (filteredCardSales.length > 0) {
+        const details = filteredCardSales.map(s => {
+          const parts = [];
+          if (s.brand)   parts.push(`<span style="color:var(--amber);">${s.brand}</span>`);
+          if (s.machine) parts.push(`<span style="color:var(--accent2);">${s.machine}</span>`);
+          return parts.join(' @ ');
+        }).join(', ');
+        usageText = `Swiped ${filteredCardSales.length}×  ${details}`;
+      } else if (isUsedAtAll && (sBrand || sMachine)) {
+        // Used in this month but not matching the current brand/machine filter
+        const otherDetails = allCardSales.map(s => {
+          const parts = [];
+          if (s.brand)   parts.push(s.brand);
+          if (s.machine) parts.push(s.machine);
+          return parts.join('@');
+        }).join(', ');
+        usageText = `<span style="color:var(--muted);font-size:11px;">Not used for selected filter — used elsewhere: ${otherDetails}</span>`;
+      } else {
+        const brandLabel   = sBrand   ? document.getElementById('f_model').options[document.getElementById('f_model').selectedIndex].text : '';
+        const machineLabel = sMachine || '';
+        if (sBrand && sMachine) usageText = `Never swiped at <strong>${brandLabel}</strong> on <strong>${machineLabel}</strong> this month`;
+        else if (sBrand)        usageText = `Never swiped at <strong>${brandLabel}</strong> this month`;
+        else if (sMachine)      usageText = `Never swiped on <strong>${machineLabel}</strong> this month`;
+        else                    usageText = 'Never Swiped This Month';
       }
 
+      // Status badge
+      const statusBadge = isUsedInFilter
+        ? `<span class="badge-card" style="background:rgba(255,255,255,0.08);color:var(--muted);border:1px solid var(--border);">Used</span>`
+        : isUsedAtAll && (sBrand || sMachine)
+        ? `<span class="badge-card" style="background:rgba(59,157,221,0.1);color:var(--accent2);border:1px solid rgba(59,157,221,0.2);">Other</span>`
+        : `<span class="badge-card badge-visa">Pristine</span>`;
+
       html += `<tr>
-        <td><code style="color:var(--text); font-size:14px;">•••• ${c.last_digits || '????'}</code></td>
+        <td><code style="color:var(--text);font-size:14px;">•••• ${c.last_digits||'????'}</code></td>
         <td>${cardBadge(c.card_type)}</td>
-        <td>${isUsed 
-          ? '<span class="badge-card" style="background:rgba(255,255,255,0.1); color:var(--muted); border-color:var(--border);">Used</span>' 
-          : '<span class="badge-card badge-visa">Pristine</span>'}</td>
+        <td>${statusBadge}</td>
+        <td>${machineCell}</td>
         <td style="color:var(--muted);font-size:12px;">${usageText}</td>
       </tr>`;
     });
   }
+
   document.getElementById('invBody').innerHTML = html;
+  document.getElementById('shownCount').textContent = result.length;
+  document.getElementById('totalLabel').innerHTML = result.length > 0
+    ? ` &nbsp;·&nbsp; <span style="color:var(--green);">${pristineCount} pristine</span> &nbsp;·&nbsp; <span style="color:var(--muted);">${usedCount} used</span>`
+    : '';
+}
+
+function updateFilterSummary(month, type, brand, machine, toggle) {
+  const el = document.getElementById('filterSummary');
+  const parts = [];
+  if (month)   parts.push(`Month: <strong style="color:var(--text);">${new Date(month+'-02').toLocaleString('en-IN',{month:'long',year:'numeric'})}</strong>`);
+  if (type)    parts.push(`Bank: <strong style="color:var(--accent2);">${type}</strong>`);
+  if (brand)   parts.push(`Brand: <strong style="color:var(--amber);">${document.getElementById('f_model').options[document.getElementById('f_model').selectedIndex]?.text||brand}</strong>`);
+  if (machine) parts.push(`Machine: <strong style="color:var(--green);">${machine}</strong>`);
+  if (toggle)  parts.push(`<strong style="color:var(--red);">Showing NEVER swiped only</strong>`);
+
+  if (parts.length > 1 || machine || brand) {
+    el.style.display = 'block';
+    el.innerHTML = '<i class="bi bi-funnel"></i> Active filters: ' + parts.join(' &nbsp;·&nbsp; ');
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 init();
