@@ -83,8 +83,8 @@
     </div>
     <!-- ── End voucher fields ── -->
     <div class="col-md-2">
-      <label class="form-label">15. Sale Batch</label>
-      <input type="text" id="f_sale_batch" class="form-control" value="Current Sale" placeholder="e.g. Sale 1"/>
+      <label class="form-label">15. Sale Month</label>
+      <input type="month" id="f_sale_month" class="form-control"/>
     </div>
     <div class="col-12 d-flex gap-2 mt-2">
       <button class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Order</button>
@@ -99,8 +99,8 @@
       <i class="bi bi-search"></i>
       <input type="text" class="search-input" id="searchInput" placeholder="Search orders…" oninput="filterTable()"/>
     </div>
-    <select id="filterSale" class="form-select" style="width:160px;" onchange="filterTable()">
-      <option value="ALL">All Sales</option>
+    <select id="filterMonth" class="form-select" style="width:160px;" onchange="filterTable()">
+      <option value="ALL">All Months</option>
     </select>
   </div>
   <div class="toolbar-right">
@@ -110,11 +110,14 @@
     <button class="btn-outline-custom" id="bulkDeliveryBtn" onclick="openBulkDelivery()" style="display:none;">
       <i class="bi bi-calendar-check"></i> Set Delivery
     </button>
-    <button class="btn-success-custom" id="bulkSaleBtn" onclick="promptBulkSale()" style="display:none;">
-      <i class="bi bi-tags"></i> Assign Sale
+    <button class="btn-success-custom" id="bulkMonthBtn" onclick="promptBulkMonth()" style="display:none;">
+      <i class="bi bi-tags"></i> Assign Month
     </button>
     <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">
       <i class="bi bi-trash3"></i> Delete (<span id="selCount">0</span>)
+    </button>
+    <button class="btn-outline-custom" id="bulkJiomartBtn" onclick="openMigrateModal()" style="display:none;color:var(--amber);border-color:var(--amber);">
+      <i class="bi bi-bag-heart"></i> Move to Jiomart
     </button>
     <button class="btn-outline-custom" onclick="exportOrders('csv')"><i class="bi bi-filetype-csv"></i> CSV</button>
     <button class="btn-outline-custom" onclick="exportOrders('excel')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
@@ -226,8 +229,8 @@
             <input type="number" id="e_card_value" class="form-control" readonly style="color:var(--accent2)!important;"/>
           </div>
           <div class="col-md-2">
-            <label class="form-label">Sale Batch</label>
-            <input type="text" id="e_sale_batch" class="form-control"/>
+            <label class="form-label">Sale Month</label>
+            <input type="month" id="e_sale_month" class="form-control"/>
           </div>
         </div>
       </div>
@@ -285,6 +288,58 @@
   </div>
 </div>
 
+<!-- ── Move to Jiomart Migration Modal ── -->
+<div class="modal fade" id="jiomartMigrateModal" tabindex="-1">
+  <div class="modal-dialog modal-md">
+    <div class="modal-content">
+      <div class="modal-header" style="border-bottom:1px solid var(--amber)!important;">
+        <h5 class="modal-title" style="color:var(--amber);">
+          <i class="bi bi-bag-heart me-2"></i>Move to Jiomart Orders
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+          You are about to move <strong id="migrateCount" style="color:var(--amber);">0</strong> selected order(s)
+          from <strong style="color:var(--text);">Main Orders</strong> into <strong style="color:var(--amber);">Jiomart Orders</strong>.
+        </p>
+
+        <div style="background:var(--navy);border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;">
+          <div style="color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Field Mapping</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;color:var(--text);">
+            <div><span style="color:var(--muted);">Card, Bank</span> → Card, Bank</div>
+            <div><span style="color:var(--muted);">Account No.</span> → Account</div>
+            <div><span style="color:var(--muted);">Order Name</span> → Order Name</div>
+            <div><span style="color:var(--muted);">Model, Variant</span> → Model, Variant</div>
+            <div><span style="color:var(--muted);">Costing, Selling, Profit</span> → ✓ Carried over</div>
+            <div><span style="color:var(--muted);">Delivery Date, Batch</span> → ✓ Carried over</div>
+            <div><span style="color:var(--muted);">Order ID</span> → <em style="color:var(--muted);">left blank</em></div>
+            <div><span style="color:var(--muted);">Platform, Voucher</span> → <em style="color:var(--muted);">not in Jiomart</em></div>
+          </div>
+        </div>
+
+        <div class="form-check" style="margin-bottom:8px;">
+          <input class="form-check-input" type="checkbox" id="deleteAfterMigrate" checked>
+          <label class="form-check-label" style="font-size:13px;color:var(--text);">
+            Delete from Main Orders after moving
+          </label>
+        </div>
+        <p style="font-size:11px;color:var(--muted);">
+          <i class="bi bi-info-circle"></i> Uncheck to keep a copy in Main Orders (not recommended — creates duplicates).
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-primary-custom" id="migrateConfirmBtn"
+          style="background:linear-gradient(135deg,var(--amber),#e8941a);"
+          onclick="confirmMigrate()">
+          <i class="bi bi-bag-heart"></i> Move to Jiomart
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -295,9 +350,10 @@ let allVouchers = [];
 let currentPage = 1;
 const PAGE_SIZE = 50;
 let modelTimer = null;
-const editModal       = new bootstrap.Modal(document.getElementById('editModal'));
-const bulkSellModal   = new bootstrap.Modal(document.getElementById('bulkSellModal'));
-const bulkDelivModal  = new bootstrap.Modal(document.getElementById('bulkDeliveryModal'));
+const editModal            = new bootstrap.Modal(document.getElementById('editModal'));
+const bulkSellModal        = new bootstrap.Modal(document.getElementById('bulkSellModal'));
+const bulkDelivModal       = new bootstrap.Modal(document.getElementById('bulkDeliveryModal'));
+const jiomartMigrateModal  = new bootstrap.Modal(document.getElementById('jiomartMigrateModal'));
 
 // ── Voucher helpers ───────────────────────────────────────────────────────────
 function populateVoucherDropdown(selectId, selectedName = '') {
@@ -334,6 +390,7 @@ function recalcCardValue(prefix) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
+  document.getElementById('f_sale_month').value = new Date().toISOString().slice(0,7);
   document.getElementById('f_delivery_date').value = '';
   document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
 
@@ -405,7 +462,7 @@ function renderTable() {
 
     return `<tr data-id="${o.id}">
       <td><input type="checkbox" class="row-check" value="${o.id}" onchange="onCheckChange()"/></td>
-      <td><span class="badge-card" style="background:var(--navy);border:1px solid var(--border)">${o.sale_batch||'Current Sale'}</span></td>
+      <td><span class="badge-card" style="background:var(--navy);border:1px solid var(--border)">${o.sale_month||''}</span></td>
       <td style="color:var(--muted);font-size:12px;">${dateStr}</td>
       <td><code style="color:var(--accent2);font-size:12px;">•••• ${o.last_digits||'—'}</code></td>
       <td>${cardBadge(o.card_type)}</td>
@@ -440,20 +497,20 @@ function updateStats() {
 
 // ── Search & Filters ──────────────────────────────────────────────────────────
 function populateSaleFilter() {
-  const sales = [...new Set(allOrders.map(o => o.sale_batch || 'Current Sale'))].sort();
-  const sel = document.getElementById('filterSale');
+  const sales = [...new Set(allOrders.map(o => o.sale_month || ''))].sort();
+  const sel = document.getElementById('filterMonth');
   const currentVal = sel.value;
-  sel.innerHTML = '<option value="ALL">All Sales</option>';
+  sel.innerHTML = '<option value="ALL">All Months</option>';
   sales.forEach(s => { const opt = document.createElement('option'); opt.value = s; opt.textContent = s; sel.appendChild(opt); });
   if ([...sel.options].some(o => o.value === currentVal)) sel.value = currentVal;
 }
 
 function filterTable() {
   const q = document.getElementById('searchInput').value.toLowerCase();
-  const saleFilter = document.getElementById('filterSale').value;
+  const saleFilter = document.getElementById('filterMonth').value;
   filteredOrders = allOrders.filter(o => {
     const matchesSearch = Object.values(o).some(v => String(v||'').toLowerCase().includes(q));
-    const matchesSale   = (saleFilter === 'ALL') || ((o.sale_batch || 'Current Sale') === saleFilter);
+    const matchesSale   = (saleFilter === 'ALL') || ((o.sale_month || '') === saleFilter);
     return matchesSearch && matchesSale;
   });
   currentPage = 1;
@@ -475,7 +532,7 @@ function clearForm() {
   document.getElementById('f_platform').value = '';
   document.getElementById('f_variant').innerHTML = '<option value="">Select Variant</option>';
   document.getElementById('f_voucher_name').value = '';
-  document.getElementById('f_sale_batch').value = 'Current Sale';
+  document.getElementById('f_sale_month').value = '';
   document.getElementById('f_delivery_date').value = '';
   document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
 }
@@ -506,7 +563,7 @@ async function submitOrder() {
     selling_price: document.getElementById('f_selling_price').value || null,
     voucher_name:  document.getElementById('f_voucher_name').value || '',
     voucher_value: document.getElementById('f_voucher_value').value || '',
-    sale_batch:    document.getElementById('f_sale_batch').value.trim() || 'Current Sale'
+    sale_month:    document.getElementById('f_sale_month').value.trim() || ''
   };
   if (!payload.last_digits || !payload.platform || !payload.order_name || !payload.model) {
     showToast('Please fill required fields: Last Digits, Platform, Order Name, Model', 'error'); return;
@@ -533,7 +590,7 @@ async function openEdit(id) {
   document.getElementById('e_selling_price').value  = o.selling_price || '';
   document.getElementById('e_voucher_value').value  = o.voucher_value || '';
   document.getElementById('e_card_value').value     = o.card_value || '';
-  document.getElementById('e_sale_batch').value     = o.sale_batch || 'Current Sale';
+  document.getElementById('e_sale_month').value     = o.sale_month || '';
 
   const platforms = await api('/api/platform-names');
   const ePlat = document.getElementById('e_platform');
@@ -576,7 +633,7 @@ async function saveEdit() {
     selling_price: document.getElementById('e_selling_price').value || null,
     voucher_name:  document.getElementById('e_voucher_name').value || '',
     voucher_value: document.getElementById('e_voucher_value').value || '',
-    sale_batch:    document.getElementById('e_sale_batch').value.trim() || 'Current Sale'
+    sale_month:    document.getElementById('e_sale_month').value.trim() || ''
   };
   const res = await api(`/api/main-orders/${id}`, 'PUT', payload);
   if (!res.success) { showToast('Update failed. Please try again.', 'error'); return; }
@@ -596,7 +653,7 @@ function onCheckChange() {
   const count = ids.length;
   document.getElementById('selCount').textContent = count;
   const show = count > 0;
-  ['bulkSellBtn','bulkDeliveryBtn','bulkSaleBtn','bulkDeleteBtn'].forEach(id => {
+  ['bulkSellBtn','bulkDeliveryBtn','bulkMonthBtn','bulkDeleteBtn','bulkJiomartBtn'].forEach(id => {
     document.getElementById(id).style.display = show ? 'inline-flex' : 'none';
   });
 }
@@ -695,12 +752,12 @@ async function bulkDelete() {
   }
 }
 
-async function promptBulkSale() {
+async function promptBulkMonth() {
   const ids = getSelectedIds();
   if (!ids.length) return;
-  const newBatch = prompt(`Enter Sale Batch name for ${ids.length} orders:`, 'Sale 1');
+  const newBatch = prompt(`Enter Sale Month name for ${ids.length} orders:`, 'Sale 1');
   if (!newBatch) return;
-  const res = await api('/api/main-orders/bulk-update-sale', 'POST', {ids, sale_batch: newBatch});
+  const res = await api('/api/main-orders/bulk-update-month', 'POST', {ids, sale_month: newBatch});
   if (res.success) {
     showToast(`Assigned ${ids.length} orders to ${newBatch}`);
     await loadOrders();
@@ -709,8 +766,62 @@ async function promptBulkSale() {
 }
 
 function exportOrders(fmt) {
-  const sale = document.getElementById('filterSale').value;
+  const sale = document.getElementById('filterMonth').value;
   window.location.href = `/api/main-orders/export?format=${fmt}&sale=${encodeURIComponent(sale)}`;
+}
+
+// ── Move to Jiomart ───────────────────────────────────────────────────────────
+function openMigrateModal() {
+  const ids = getSelectedIds();
+  if (!ids.length) return;
+  document.getElementById('migrateCount').textContent = ids.length;
+  document.getElementById('deleteAfterMigrate').checked = true;
+  jiomartMigrateModal.show();
+}
+
+async function confirmMigrate() {
+  const ids         = getSelectedIds();
+  const deleteAfter = document.getElementById('deleteAfterMigrate').checked;
+
+  if (!ids.length) { showToast('No orders selected', 'error'); return; }
+
+  const btn  = document.getElementById('migrateConfirmBtn');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Moving...';
+
+  try {
+    const res = await api('/api/main-orders/migrate-to-jiomart', 'POST', {
+      ids, delete_after: deleteAfter
+    });
+
+    if (res.success) {
+      // Remove migrated orders from local array if they were deleted
+      if (deleteAfter) {
+        allOrders = allOrders.filter(o => !ids.includes(o.id));
+      }
+      populateSaleFilter();
+      filterTable();
+      jiomartMigrateModal.hide();
+      document.getElementById('selectAll').checked = false;
+      onCheckChange();
+
+      let msg = `${res.migrated} order(s) moved to Jiomart`;
+      if (deleteAfter) msg += ` and removed from Main Orders`;
+      if (res.errors && res.errors.length) msg += ` (${res.errors.length} error(s) — check console)`;
+      showToast(msg);
+
+      if (res.errors && res.errors.length) console.warn('Migration errors:', res.errors);
+    } else {
+      showToast(res.error || 'Migration failed', 'error');
+    }
+  } catch (e) {
+    showToast('Migration failed — check console', 'error');
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
 }
 
 init();
