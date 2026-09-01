@@ -6,47 +6,49 @@
 <div class="page-header">
   <div>
     <div class="page-title">Dashboard</div>
-    <div class="page-subtitle">Full ERP overview — online, offline, exchange and vouchers</div>
+    <div class="page-subtitle" id="fyLabel">Loading financial year data...</div>
   </div>
   <div style="display:flex;gap:10px;align-items:center;">
+    <select id="fySelect" class="form-select" style="width:160px;" onchange="loadDashboard()">
+      <option value="">Loading...</option>
+    </select>
     <button class="btn-outline-custom" onclick="loadDashboard()" id="refreshBtn">
       <i class="bi bi-arrow-clockwise"></i> Refresh
     </button>
   </div>
 </div>
 
-<!-- ── Loading state ── -->
 <div id="loadingState" style="text-align:center;padding:60px 20px;">
   <div class="spinner-border" style="color:var(--accent2);width:40px;height:40px;" role="status"></div>
-  <p style="color:var(--muted);margin-top:16px;">Loading dashboard data...</p>
+  <p style="color:var(--muted);margin-top:16px;">Loading dashboard...</p>
 </div>
 
 <div id="dashContent" style="display:none;">
 
-  <!-- ── Grand KPI Row ── -->
+  <!-- ── KPI Row ── -->
   <div class="row g-3 mb-4" id="kpiRow"></div>
 
   <!-- ── Channel Cards ── -->
   <div class="row g-3 mb-4" id="channelRow"></div>
 
-  <!-- ── Monthly Profit Chart + Platform Breakdown ── -->
+  <!-- ── Monthly chart + Channel donut ── -->
   <div class="row g-3 mb-4">
     <div class="col-lg-8">
       <div class="card-panel" style="height:100%;">
-        <div class="card-panel-title"><i class="bi bi-bar-chart-fill"></i> Monthly Profit Trend (Last 6 Months)</div>
+        <div class="card-panel-title"><i class="bi bi-bar-chart-fill"></i> Monthly Profit — Full Financial Year (Apr → Mar)</div>
         <canvas id="monthlyChart" height="120"></canvas>
       </div>
     </div>
     <div class="col-lg-4">
       <div class="card-panel" style="height:100%;">
         <div class="card-panel-title"><i class="bi bi-pie-chart-fill"></i> Profit by Channel</div>
-        <canvas id="channelChart" height="200"></canvas>
+        <canvas id="channelChart" height="190"></canvas>
         <div id="channelLegend" style="margin-top:12px;"></div>
       </div>
     </div>
   </div>
 
-  <!-- ── Top Models + Platform Table ── -->
+  <!-- ── Top Models + Platform ── -->
   <div class="row g-3 mb-4">
     <div class="col-lg-6">
       <div class="card-panel">
@@ -56,18 +58,18 @@
     </div>
     <div class="col-lg-6">
       <div class="card-panel">
-        <div class="card-panel-title"><i class="bi bi-shop"></i> Platform Performance</div>
+        <div class="card-panel-title"><i class="bi bi-shop"></i> Platform Performance (Online)</div>
         <div id="platformTable"></div>
       </div>
     </div>
   </div>
 
-  <!-- ── Sale Batch + Offline Brands ── -->
+  <!-- ── Sale Month + Offline Brands ── -->
   <div class="row g-3 mb-4">
     <div class="col-lg-7">
       <div class="card-panel">
-        <div class="card-panel-title"><i class="bi bi-tags-fill"></i> Sale Batch Summary (Online)</div>
-        <div id="batchTable"></div>
+        <div class="card-panel-title"><i class="bi bi-calendar3"></i> Online Orders by Sale Month</div>
+        <div id="monthTable"></div>
       </div>
     </div>
     <div class="col-lg-5">
@@ -78,11 +80,11 @@
     </div>
   </div>
 
-  <!-- ── Voucher Tracker Summary ── -->
+  <!-- ── Voucher Summary ── -->
   <div class="row g-3 mb-4">
     <div class="col-12">
       <div class="card-panel" style="border-top:3px solid var(--green);">
-        <div class="card-panel-title" style="color:var(--green);"><i class="bi bi-ticket-perforated-fill"></i> Voucher Tracker Summary</div>
+        <div class="card-panel-title" style="color:var(--green);"><i class="bi bi-ticket-perforated-fill"></i> Voucher Tracker</div>
         <div id="voucherSummary"></div>
       </div>
     </div>
@@ -95,32 +97,20 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 let monthlyChartInst = null, channelChartInst = null;
-
-const COLORS = {
-  green:   '#2ECC8F',
-  blue:    '#3B9DDD',
-  amber:   '#F5A623',
-  red:     '#E74C3C',
-  purple:  '#9B59B6',
-  teal:    '#1ABC9C',
-  muted:   '#6B7A99',
-  navy:    '#1A2D45',
-  text:    '#E8EDF5',
-};
-
-const CHANNEL_COLORS = [COLORS.blue, COLORS.amber, COLORS.purple, COLORS.green, COLORS.teal];
+const C = { green:'#2ECC8F', blue:'#3B9DDD', amber:'#F5A623', red:'#E74C3C', purple:'#9B59B6', teal:'#1ABC9C', muted:'#6B7A99', text:'#E8EDF5' };
+const CH_COLORS = [C.blue, C.amber, C.purple, C.green, C.teal];
 
 function fmt(n) {
   n = parseFloat(n)||0;
-  if (Math.abs(n) >= 100000) return '₹' + (n/100000).toFixed(1) + 'L';
-  if (Math.abs(n) >= 1000)   return '₹' + (n/1000).toFixed(1) + 'K';
-  return '₹' + n.toLocaleString('en-IN');
+  if (Math.abs(n)>=100000) return '₹'+(n/100000).toFixed(1)+'L';
+  if (Math.abs(n)>=1000)   return '₹'+(n/1000).toFixed(1)+'K';
+  return '₹'+n.toLocaleString('en-IN');
 }
-function fmtFull(n) { return '₹' + (parseFloat(n)||0).toLocaleString('en-IN'); }
-function pct(a, b) { return b > 0 ? ((a/b)*100).toFixed(1)+'%' : '—'; }
-function monthLabel(m) {
-  if (!m) return '—';
-  return new Date(m+'-02').toLocaleString('en-IN', {month:'short', year:'2-digit'});
+function fmtFull(n) { return '₹'+(parseFloat(n)||0).toLocaleString('en-IN'); }
+function mLabel(m) {
+  if (!m || m==='Unknown') return m||'—';
+  try { return new Date(m+'-02').toLocaleString('en-IN',{month:'short',year:'2-digit'}); }
+  catch { return m; }
 }
 
 async function loadDashboard() {
@@ -128,289 +118,232 @@ async function loadDashboard() {
   document.getElementById('dashContent').style.display  = 'none';
   document.getElementById('refreshBtn').innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
+  const fy = document.getElementById('fySelect').value;
   try {
-    const d = await api('/api/dashboard-data');
+    const d = await api('/api/dashboard-data' + (fy ? `?fy=${fy}` : ''));
     if (d.error) throw new Error(d.error);
 
+    // Populate FY selector
+    const sel = document.getElementById('fySelect');
+    const cur  = sel.value || String(d.fy);
+    sel.innerHTML = '';
+    (d.available_fys.length ? d.available_fys : [d.fy]).forEach(y => {
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = `FY ${y}-${String(y+1).slice(2)}`;
+      if (String(y) === String(d.fy)) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    document.getElementById('fyLabel').textContent =
+      `${d.fy_label} — Apr ${d.fy} to Mar ${d.fy+1}`;
+
     renderKPIs(d.summary);
-    renderChannels(d.channels, d.summary);
+    renderChannels(d.channels);
     renderMonthlyChart(d.monthly);
     renderChannelChart(d.channels);
     renderTopModels(d.top_models);
     renderPlatforms(d.platforms);
-    renderBatches(d.batches);
+    renderMonthTable(d.months);
     renderBrands(d.brands);
     renderVouchers(d.summary);
 
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('dashContent').style.display  = 'block';
   } catch(e) {
-    document.getElementById('loadingState').innerHTML =
-      `<p style="color:var(--red);">⚠️ Failed to load dashboard: ${e.message}</p>`;
+    document.getElementById('loadingState').innerHTML = `<p style="color:var(--red);">⚠️ ${e.message}</p>`;
   }
   document.getElementById('refreshBtn').innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh';
 }
 
-// ── KPI Row ───────────────────────────────────────────────────────────────────
 function renderKPIs(s) {
   const margin = s.grand_revenue > 0 ? ((s.grand_profit/s.grand_revenue)*100).toFixed(1) : 0;
   const kpis = [
-    { label:'Total Revenue',   value: fmt(s.grand_revenue),  sub: `${fmtFull(s.grand_revenue)} overall`, icon:'bi-currency-rupee', color: COLORS.blue },
-    { label:'Total Profit',    value: fmt(s.grand_profit),   sub: `${margin}% margin`, icon:'bi-graph-up-arrow', color: COLORS.green },
-    { label:'Online Orders',   value: s.online_orders,       sub: `${s.online_sold} sold · ${s.online_pending} pending`, icon:'bi-bag-check-fill', color: COLORS.blue },
-    { label:'Offline Sales',   value: s.offline_sold,        sub: `of ${s.offline_orders} offline entries`, icon:'bi-shop-window', color: COLORS.amber },
-    { label:'Exchange Orders', value: s.exchange_count,      sub: `${fmt(s.exch_total_exch)} trade-in value`, icon:'bi-arrow-left-right', color: COLORS.purple },
-    { label:'Voucher Profit',  value: fmt(s.voucher_redeemed_profit), sub: `${fmt(s.voucher_pending_profit)} pending`, icon:'bi-ticket-perforated-fill', color: COLORS.green },
+    { label:'Total Revenue',    value:fmt(s.grand_revenue),  sub:fmtFull(s.grand_revenue)+' overall',                 icon:'bi-currency-rupee',        color:C.blue   },
+    { label:'Total Profit',     value:fmt(s.grand_profit),   sub:margin+'% net margin',                               icon:'bi-graph-up-arrow',         color:C.green  },
+    { label:'Online Orders',    value:s.online_orders,       sub:s.online_sold+' sold · '+s.online_pending+' pending', icon:'bi-bag-check-fill',         color:C.blue   },
+    { label:'Offline Sales',    value:s.offline_sold,        sub:'of '+s.offline_orders+' entries',                   icon:'bi-shop-window',            color:C.amber  },
+    { label:'Exchange Orders',  value:s.exchange_count,      sub:fmt(s.exch_total_exch)+' trade-in',                  icon:'bi-arrow-left-right',       color:C.purple },
+    { label:'Voucher Profit',   value:fmt(s.voucher_redeemed_profit), sub:fmt(s.voucher_pending_profit)+' pending',   icon:'bi-ticket-perforated-fill', color:C.green  },
   ];
-  document.getElementById('kpiRow').innerHTML = kpis.map(k => `
+  document.getElementById('kpiRow').innerHTML = kpis.map(k=>`
     <div class="col-md-2 col-sm-4 col-6">
       <div class="card-panel" style="padding:16px;border-top:3px solid ${k.color};">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">${k.label}</div>
-          <i class="bi ${k.icon}" style="color:${k.color};font-size:16px;opacity:0.7;"></i>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">${k.label}</div>
+          <i class="bi ${k.icon}" style="color:${k.color};font-size:15px;opacity:0.7;"></i>
         </div>
-        <div style="font-size:26px;font-weight:800;color:${k.color};margin:8px 0 4px;">${k.value}</div>
+        <div style="font-size:24px;font-weight:800;color:${k.color};margin:8px 0 4px;">${k.value}</div>
         <div style="font-size:11px;color:var(--muted);">${k.sub}</div>
       </div>
     </div>`).join('');
 }
 
-// ── Channel Cards ─────────────────────────────────────────────────────────────
-function renderChannels(channels, s) {
-  const rows = channels.map((c, i) => {
-    const col = CHANNEL_COLORS[i % CHANNEL_COLORS.length];
-    const sellRate = c.count > 0 ? ((c.sold/c.count)*100).toFixed(0) : 0;
-    return `
-      <div class="col-md col-sm-6">
-        <div class="card-panel" style="padding:14px;border-left:4px solid ${col};">
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">${c.channel}</div>
-          <div style="font-size:22px;font-weight:800;color:${col};margin:6px 0 2px;">${c.count}</div>
-          <div style="font-size:12px;color:var(--muted);">${c.sold} sold · ${sellRate}%</div>
-          <div style="font-size:13px;color:var(--green);font-weight:600;margin-top:4px;">${c.profit > 0 ? fmt(c.profit)+' profit' : '—'}</div>
-        </div>
-      </div>`;
-  });
-  document.getElementById('channelRow').innerHTML = rows.join('');
+function renderChannels(channels) {
+  document.getElementById('channelRow').innerHTML = channels.map((c,i)=>{
+    const col = CH_COLORS[i%CH_COLORS.length];
+    const rate = c.count > 0 ? ((c.sold/c.count)*100).toFixed(0) : 0;
+    return `<div class="col">
+      <div class="card-panel" style="padding:14px;border-left:4px solid ${col};">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">${c.channel}</div>
+        <div style="font-size:22px;font-weight:800;color:${col};margin:6px 0 2px;">${c.count}</div>
+        <div style="font-size:12px;color:var(--muted);">${c.sold} sold · ${rate}%</div>
+        <div style="font-size:13px;color:var(--green);font-weight:600;margin-top:4px;">${c.profit>0?fmt(c.profit)+' profit':'—'}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
-// ── Monthly Chart ─────────────────────────────────────────────────────────────
 function renderMonthlyChart(monthly) {
-  if (monthlyChartInst) { monthlyChartInst.destroy(); monthlyChartInst = null; }
-  const ctx   = document.getElementById('monthlyChart').getContext('2d');
-  const labels = monthly.map(m => monthLabel(m.month));
-
+  if (monthlyChartInst) { monthlyChartInst.destroy(); monthlyChartInst=null; }
+  const ctx = document.getElementById('monthlyChart').getContext('2d');
+  const labels = monthly.map(m=>mLabel(m.month));
   monthlyChartInst = new Chart(ctx, {
-    type: 'bar',
-    data: {
+    type:'bar',
+    data:{
       labels,
-      datasets: [
-        {
-          label: 'Online Profit',
-          data: monthly.map(m => m.online_profit),
-          backgroundColor: COLORS.blue + 'CC',
-          borderRadius: 4,
-        },
-        {
-          label: 'Offline Profit',
-          data: monthly.map(m => m.offline_profit),
-          backgroundColor: COLORS.amber + 'CC',
-          borderRadius: 4,
-        },
-        {
-          label: 'Voucher Profit',
-          data: monthly.map(m => m.voucher_profit),
-          backgroundColor: COLORS.green + 'CC',
-          borderRadius: 4,
-        },
-        {
-          label: 'Total Profit',
-          data: monthly.map(m => m.total_profit),
-          type: 'line',
-          borderColor: COLORS.text,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          pointBackgroundColor: COLORS.text,
-          pointRadius: 4,
-          tension: 0.3,
-        }
+      datasets:[
+        { label:'Online Profit',  data:monthly.map(m=>m.online_profit),  backgroundColor:C.blue+'CC',   borderRadius:3 },
+        { label:'Offline Profit', data:monthly.map(m=>m.offline_profit), backgroundColor:C.amber+'CC',  borderRadius:3 },
+        { label:'Voucher Profit', data:monthly.map(m=>m.voucher_profit), backgroundColor:C.green+'CC',  borderRadius:3 },
+        { label:'Total',          data:monthly.map(m=>m.total_profit),   type:'line',
+          borderColor:C.text, backgroundColor:'transparent', borderWidth:2,
+          pointBackgroundColor:C.text, pointRadius:3, tension:0.3 }
       ]
     },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { labels: { color: COLORS.muted, font: { size: 11 } } },
-        tooltip: {
-          callbacks: {
-            label: ctx => ` ${ctx.dataset.label}: ₹${(ctx.raw||0).toLocaleString('en-IN')}`
-          }
-        }
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{labels:{color:C.muted,font:{size:11}}},
+        tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ₹${(c.raw||0).toLocaleString('en-IN')}`}}
       },
-      scales: {
-        x: { ticks: { color: COLORS.muted }, grid: { color: 'rgba(255,255,255,0.04)' } },
-        y: {
-          ticks: { color: COLORS.muted, callback: v => fmt(v) },
-          grid: { color: 'rgba(255,255,255,0.06)' }
-        }
+      scales:{
+        x:{ticks:{color:C.muted},grid:{color:'rgba(255,255,255,0.03)'}},
+        y:{ticks:{color:C.muted,callback:v=>fmt(v)},grid:{color:'rgba(255,255,255,0.05)'}}
       }
     }
   });
 }
 
-// ── Channel Donut ─────────────────────────────────────────────────────────────
 function renderChannelChart(channels) {
-  if (channelChartInst) { channelChartInst.destroy(); channelChartInst = null; }
-  const withProfit = channels.filter(c => c.profit > 0);
-  if (!withProfit.length) return;
+  if (channelChartInst) { channelChartInst.destroy(); channelChartInst=null; }
+  const wp = channels.filter(c=>c.profit>0);
+  if (!wp.length) return;
   const ctx = document.getElementById('channelChart').getContext('2d');
-
   channelChartInst = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: withProfit.map(c => c.channel),
-      datasets: [{
-        data: withProfit.map(c => c.profit),
-        backgroundColor: CHANNEL_COLORS.slice(0, withProfit.length),
-        borderWidth: 2,
-        borderColor: '#0F1E30',
-      }]
+    type:'doughnut',
+    data:{ labels:wp.map(c=>c.channel),
+      datasets:[{ data:wp.map(c=>c.profit), backgroundColor:CH_COLORS.slice(0,wp.length), borderWidth:2, borderColor:'#0F1E30' }]
     },
-    options: {
-      responsive: true,
-      cutout: '65%',
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: ctx => ` ${ctx.label}: ₹${(ctx.raw||0).toLocaleString('en-IN')}`
-          }
-        }
-      }
+    options:{ responsive:true, cutout:'65%',
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.label}: ₹${(c.raw||0).toLocaleString('en-IN')}`}} }
     }
   });
-
-  // Custom legend
-  document.getElementById('channelLegend').innerHTML = withProfit.map((c,i) => `
+  document.getElementById('channelLegend').innerHTML = wp.map((c,i)=>`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px;">
       <span style="display:flex;align-items:center;gap:6px;">
-        <span style="width:10px;height:10px;border-radius:50%;background:${CHANNEL_COLORS[i]};display:inline-block;"></span>
+        <span style="width:9px;height:9px;border-radius:50%;background:${CH_COLORS[i]};display:inline-block;"></span>
         <span style="color:var(--muted);">${c.channel}</span>
       </span>
       <span style="color:var(--text);font-weight:600;">${fmt(c.profit)}</span>
     </div>`).join('');
 }
 
-// ── Top Models ────────────────────────────────────────────────────────────────
 function renderTopModels(models) {
-  if (!models.length) { document.getElementById('topModelsTable').innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
-  const maxCount = Math.max(...models.map(m => m.count));
-  document.getElementById('topModelsTable').innerHTML = `
-    <div class="data-table-wrap"><table class="data-table">
-      <thead><tr><th>Model</th><th>Units</th><th>Revenue</th><th>Profit</th></tr></thead>
-      <tbody>
-        ${models.map(m => `<tr>
-          <td>
-            <div style="font-weight:500;font-size:13px;">${m.model}</div>
-            <div style="height:4px;background:var(--navy3);border-radius:2px;margin-top:4px;">
-              <div style="height:4px;background:var(--accent2);border-radius:2px;width:${(m.count/maxCount*100).toFixed(0)}%;"></div>
-            </div>
-          </td>
-          <td style="color:var(--accent2);font-weight:700;">${m.count}</td>
-          <td style="color:var(--muted);">${fmt(m.revenue)}</td>
-          <td style="color:var(--green);font-weight:600;">${fmt(m.profit)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table></div>`;
+  const el = document.getElementById('topModelsTable');
+  if (!models.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
+  const max = Math.max(...models.map(m=>m.count));
+  el.innerHTML=`<div class="data-table-wrap"><table class="data-table">
+    <thead><tr><th>Model</th><th>Units</th><th>Revenue</th><th>Profit</th></tr></thead>
+    <tbody>${models.map(m=>`<tr>
+      <td>
+        <div style="font-weight:500;font-size:13px;">${m.model}</div>
+        <div style="height:3px;background:var(--navy3);border-radius:2px;margin-top:4px;">
+          <div style="height:3px;background:var(--accent2);border-radius:2px;width:${(m.count/max*100).toFixed(0)}%;"></div>
+        </div>
+      </td>
+      <td style="color:var(--accent2);font-weight:700;">${m.count}</td>
+      <td style="color:var(--muted);">${fmt(m.revenue)}</td>
+      <td style="color:var(--green);font-weight:600;">${fmt(m.profit)}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
 }
 
-// ── Platform Table ────────────────────────────────────────────────────────────
 function renderPlatforms(platforms) {
-  if (!platforms.length) { document.getElementById('platformTable').innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
-  document.getElementById('platformTable').innerHTML = `
-    <div class="data-table-wrap"><table class="data-table">
-      <thead><tr><th>Platform</th><th>Orders</th><th>Revenue</th><th>Profit</th></tr></thead>
-      <tbody>
-        ${platforms.map(p => `<tr>
-          <td style="font-weight:500;">${p.platform}</td>
-          <td style="color:var(--muted);">${p.count}</td>
-          <td style="color:var(--muted);">${fmt(p.revenue)}</td>
-          <td style="color:var(--green);font-weight:600;">${fmt(p.profit)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table></div>`;
+  const el = document.getElementById('platformTable');
+  if (!platforms.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
+  el.innerHTML=`<div class="data-table-wrap"><table class="data-table">
+    <thead><tr><th>Platform</th><th>Orders</th><th>Revenue</th><th>Profit</th></tr></thead>
+    <tbody>${platforms.map(p=>`<tr>
+      <td style="font-weight:500;">${p.platform}</td>
+      <td style="color:var(--muted);">${p.count}</td>
+      <td style="color:var(--muted);">${fmt(p.revenue)}</td>
+      <td style="color:var(--green);font-weight:600;">${fmt(p.profit)}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
 }
 
-// ── Batch Table ───────────────────────────────────────────────────────────────
-function renderBatches(batches) {
-  if (!batches.length) { document.getElementById('batchTable').innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
-  document.getElementById('batchTable').innerHTML = `
-    <div class="data-table-wrap"><table class="data-table">
-      <thead><tr><th>Sale Batch</th><th>Total</th><th>Sold</th><th>Pending</th><th>Profit</th></tr></thead>
-      <tbody>
-        ${batches.map(b => {
-          const pendingColor = b.pending > 0 ? 'var(--amber)' : 'var(--muted)';
-          return `<tr>
-            <td style="font-weight:500;">${b.batch}</td>
-            <td style="color:var(--muted);">${b.count}</td>
-            <td style="color:var(--green);">${b.sold}</td>
-            <td style="color:${pendingColor};font-weight:${b.pending>0?'700':'400'};">${b.pending}</td>
-            <td style="color:var(--green);font-weight:600;">${b.profit > 0 ? fmt(b.profit) : '—'}</td>
-          </tr>`;
-        }).join('')}
-      </tbody>
-    </table></div>`;
+function renderMonthTable(months) {
+  const el = document.getElementById('monthTable');
+  if (!months.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
+  el.innerHTML=`<div class="data-table-wrap"><table class="data-table">
+    <thead><tr><th>Sale Month</th><th>Total</th><th>Sold</th><th>Pending</th><th>Profit</th></tr></thead>
+    <tbody>${months.map(m=>{
+      const pendCol = m.pending>0 ? 'var(--amber)' : 'var(--muted)';
+      return `<tr>
+        <td style="font-weight:500;">${mLabel(m.month)}</td>
+        <td style="color:var(--muted);">${m.count}</td>
+        <td style="color:var(--green);">${m.sold}</td>
+        <td style="color:${pendCol};font-weight:${m.pending>0?'700':'400'};">${m.pending}</td>
+        <td style="color:var(--green);font-weight:600;">${m.profit>0?fmt(m.profit):'—'}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
 }
 
-// ── Brand Table ───────────────────────────────────────────────────────────────
 function renderBrands(brands) {
-  if (!brands.length) { document.getElementById('brandTable').innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">No offline data</p>'; return; }
-  document.getElementById('brandTable').innerHTML = `
-    <div class="data-table-wrap"><table class="data-table">
-      <thead><tr><th>Brand</th><th>Units</th><th>Revenue</th><th>Profit</th></tr></thead>
-      <tbody>
-        ${brands.map(b => `<tr>
-          <td style="font-weight:500;color:var(--amber);">${b.brand}</td>
-          <td style="color:var(--muted);">${b.count}</td>
-          <td style="color:var(--muted);">${fmt(b.revenue)}</td>
-          <td style="color:var(--green);font-weight:600;">${fmt(b.profit)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table></div>`;
+  const el = document.getElementById('brandTable');
+  if (!brands.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No offline data</p>'; return; }
+  el.innerHTML=`<div class="data-table-wrap"><table class="data-table">
+    <thead><tr><th>Brand</th><th>Units</th><th>Revenue</th><th>Profit</th></tr></thead>
+    <tbody>${brands.map(b=>`<tr>
+      <td style="font-weight:500;color:var(--amber);">${b.brand}</td>
+      <td style="color:var(--muted);">${b.count}</td>
+      <td style="color:var(--muted);">${fmt(b.revenue)}</td>
+      <td style="color:var(--green);font-weight:600;">${fmt(b.profit)}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
 }
 
-// ── Voucher Summary ───────────────────────────────────────────────────────────
 function renderVouchers(s) {
-  document.getElementById('voucherSummary').innerHTML = `
+  const redRate = s.voucher_count>0 ? ((s.vouchers_redeemed/s.voucher_count)*100).toFixed(0) : 0;
+  document.getElementById('voucherSummary').innerHTML=`
     <div class="row g-3">
       <div class="col-md-3 col-6">
         <div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Total Vouchers</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Total Vouchers</div>
           <div style="font-size:28px;font-weight:800;color:var(--text);">${s.voucher_count}</div>
           <div style="font-size:11px;color:var(--muted);">Face value: ${fmt(s.voucher_total_face)}</div>
         </div>
       </div>
       <div class="col-md-3 col-6">
         <div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Redeemed</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Redeemed</div>
           <div style="font-size:28px;font-weight:800;color:var(--green);">${s.vouchers_redeemed}</div>
           <div style="font-size:11px;color:var(--green);">Profit: ${fmt(s.voucher_redeemed_profit)}</div>
         </div>
       </div>
       <div class="col-md-3 col-6">
         <div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Pending</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Pending</div>
           <div style="font-size:28px;font-weight:800;color:var(--amber);">${s.vouchers_pending}</div>
           <div style="font-size:11px;color:var(--amber);">Potential: ${fmt(s.voucher_pending_profit)}</div>
         </div>
       </div>
       <div class="col-md-3 col-6">
         <div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Redemption Rate</div>
-          <div style="font-size:28px;font-weight:800;color:var(--text);">
-            ${s.voucher_count > 0 ? ((s.vouchers_redeemed/s.voucher_count)*100).toFixed(0) : 0}%
-          </div>
-          <div style="height:6px;background:var(--navy3);border-radius:3px;margin-top:8px;">
-            <div style="height:6px;background:linear-gradient(90deg,var(--green),var(--accent2));border-radius:3px;
-              width:${s.voucher_count > 0 ? ((s.vouchers_redeemed/s.voucher_count)*100).toFixed(0) : 0}%;"></div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Redemption Rate</div>
+          <div style="font-size:28px;font-weight:800;color:var(--text);">${redRate}%</div>
+          <div style="height:5px;background:var(--navy3);border-radius:3px;margin-top:8px;">
+            <div style="height:5px;background:linear-gradient(90deg,var(--green),var(--accent2));border-radius:3px;width:${redRate}%;"></div>
           </div>
         </div>
       </div>
