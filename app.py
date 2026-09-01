@@ -291,7 +291,7 @@ def sync_variant_sell_price(var_id):
 # ── Main Orders ───────────────────────────────────────────────────────────────
 # id(1) card_type(2) last_digits(3) platform(4) account(5) order_name(6)
 # model(7) variant(8) costing(9) selling_price(10) profit(11) delivery_date(12)
-# voucher_name(13) voucher_value(14) card_value(15) sale_batch(16) created_at(17)
+# voucher_name(13) voucher_value(14) card_value(15) sale_month(16) created_at(17)
 
 @app.route('/api/main-orders', methods=['GET', 'POST'])
 def api_main_orders():
@@ -315,7 +315,7 @@ def api_main_orders():
             data.get('account',''), data.get('order_name',''), data.get('model',''),
             data.get('variant',''), costing, selling, selling-costing, data.get('delivery_date',''),
             data.get('voucher_name',''), vv if vv else '', cv if vv else '',
-            data.get('sale_batch','Current Sale'), now])
+            data.get('sale_month',''), now])
         cache_clear('main_orders')
         return jsonify({'success':True,'id':next_id,'card_type':data.get('card_type',''),'last_digits':ld,
             'platform':data.get('platform',''),'account':data.get('account',''),
@@ -323,7 +323,7 @@ def api_main_orders():
             'variant':data.get('variant',''),'costing':costing,'selling_price':selling,
             'profit':selling-costing,'delivery_date':data.get('delivery_date',''),
             'voucher_name':data.get('voucher_name',''),'voucher_value':vv if vv else '',
-            'card_value':cv if vv else '','sale_batch':data.get('sale_batch','Current Sale'),'created_at':now})
+            'card_value':cv if vv else '','sale_month':data.get('sale_month',''),'created_at':now})
     except Exception as e:
         print(f"Main Orders POST Error: {e}"); return jsonify({'success': False}), 500
 
@@ -340,12 +340,12 @@ def bulk_del_main():
 @app.route('/api/main-orders/bulk-update-sale', methods=['POST'])
 def bulk_sale_main():
     if not SHEET: return jsonify({'success': False})
-    ids = request.json.get('ids',[]); new_batch = request.json.get('sale_batch','Current Sale')
+    ids = request.json.get('ids',[]); new_month = request.json.get('sale_month','')
     ws = SHEET.worksheet('main_orders')
     try:
         records = ws.get_all_records()
         for i,r in enumerate(records):
-            if r.get('id') in ids: ws.update_cell(i+2, 16, new_batch)
+            if r.get('id') in ids: ws.update_cell(i+2, 16, new_month)
         cache_clear('main_orders'); return jsonify({'success': True})
     except Exception as e: print("Bulk Sale Error:", e); return jsonify({'success': False})
 
@@ -387,10 +387,10 @@ def export_main():
     except: records = []
     for o in records:
         if str(o.get('last_digits','')).startswith("'"): o['last_digits']=str(o['last_digits'])[1:]
-    if sale_filter and sale_filter!='ALL': records=[r for r in records if r.get('sale_batch','')==sale_filter]
+    if sale_filter and sale_filter!='ALL': records=[r for r in records if r.get('sale_month','')==sale_filter]
     headers=['id','card_type','last_digits','platform','account','order_name','model','variant',
              'costing','selling_price','profit','delivery_date','voucher_name','voucher_value',
-             'card_value','sale_batch','created_at']
+             'card_value','sale_month','created_at']
     if fmt=='csv':
         out=io.StringIO(); w=csv.DictWriter(out,fieldnames=headers,extrasaction='ignore')
         w.writeheader(); w.writerows(records); out.seek(0)
@@ -419,21 +419,21 @@ def modify_main(id):
         ws.update(f'B{cell.row}:P{cell.row}',[[data.get('card_type',''),sd,data.get('platform',''),
             data.get('account',''),data.get('order_name',''),data.get('model',''),data.get('variant',''),
             cost,sell,sell-cost,data.get('delivery_date',''),
-            data.get('voucher_name',''),vv if vv else '',cv,data.get('sale_batch','Current Sale')]])
+            data.get('voucher_name',''),vv if vv else '',cv,data.get('sale_month','')]])
         cache_clear('main_orders')
         return jsonify({'success':True,'id':id,'card_type':data.get('card_type',''),'last_digits':ld,
             'platform':data.get('platform',''),'account':data.get('account',''),
             'order_name':data.get('order_name',''),'model':data.get('model',''),
             'variant':data.get('variant',''),'costing':cost,'selling_price':sell,'profit':sell-cost,
             'delivery_date':data.get('delivery_date',''),'voucher_name':data.get('voucher_name',''),
-            'voucher_value':vv if vv else '','card_value':cv,'sale_batch':data.get('sale_batch','Current Sale')})
+            'voucher_value':vv if vv else '','card_value':cv,'sale_month':data.get('sale_month','')})
     except Exception as e: print("Edit Error:",e); return jsonify({'success': False})
 
 
 # ── Secondary Orders ──────────────────────────────────────────────────────────
 # id(1) card_type(2) last_digits(3) platform(4) ordered_by(5) order_name(6)
 # model(7) variant(8) costing(9) selling_price(10) profit(11) delivery_date(12)
-# voucher_name(13) voucher_value(14) card_value(15) sale_batch(16) created_at(17)
+# voucher_name(13) voucher_value(14) card_value(15) sale_month(16) created_at(17)
 
 @app.route('/api/secondary-orders', methods=['GET', 'POST'])
 def api_secondary_orders():
@@ -458,7 +458,7 @@ def api_secondary_orders():
             data.get('model',''),data.get('variant',''),
             costing,selling,selling-costing,data.get('delivery_date',''),
             data.get('voucher_name',''),vv if vv else '',cv if vv else '',
-            data.get('sale_batch','Current Sale'),now])
+            data.get('sale_month',''),now])
         cache_clear('secondary_orders')
         return jsonify({'success':True,'id':next_id,'card_type':data.get('card_type',''),'last_digits':ld,
             'platform':data.get('platform',''),'ordered_by':data.get('ordered_by',''),
@@ -466,7 +466,7 @@ def api_secondary_orders():
             'variant':data.get('variant',''),'costing':costing,'selling_price':selling,
             'profit':selling-costing,'delivery_date':data.get('delivery_date',''),
             'voucher_name':data.get('voucher_name',''),'voucher_value':vv if vv else '',
-            'card_value':cv if vv else '','sale_batch':data.get('sale_batch','Current Sale'),'created_at':now})
+            'card_value':cv if vv else '','sale_month':data.get('sale_month',''),'created_at':now})
     except Exception as e: print(f"Secondary Orders POST Error: {e}"); return jsonify({'success': False}), 500
 
 @app.route('/api/secondary-orders/bulk-delete', methods=['POST'])
@@ -482,12 +482,12 @@ def bulk_del_sec():
 @app.route('/api/secondary-orders/bulk-update-sale', methods=['POST'])
 def bulk_sale_sec():
     if not SHEET: return jsonify({'success': False})
-    ids=request.json.get('ids',[]); new_batch=request.json.get('sale_batch','Current Sale')
+    ids=request.json.get('ids',[]); new_month=request.json.get('sale_month','Current Sale')
     ws=SHEET.worksheet('secondary_orders')
     try:
         records=ws.get_all_records()
         for i,r in enumerate(records):
-            if r.get('id') in ids: ws.update_cell(i+2,16,new_batch)
+            if r.get('id') in ids: ws.update_cell(i+2,16,new_month)
         cache_clear('secondary_orders'); return jsonify({'success': True})
     except Exception as e: print("Bulk Sale Error:",e); return jsonify({'success': False})
 
@@ -529,10 +529,10 @@ def export_secondary():
     except: records=[]
     for o in records:
         if str(o.get('last_digits','')).startswith("'"): o['last_digits']=str(o['last_digits'])[1:]
-    if sale_filter and sale_filter!='ALL': records=[r for r in records if r.get('sale_batch','')==sale_filter]
+    if sale_filter and sale_filter!='ALL': records=[r for r in records if r.get('sale_month','')==sale_filter]
     headers=['id','card_type','last_digits','platform','ordered_by','order_name','model','variant',
              'costing','selling_price','profit','delivery_date','voucher_name','voucher_value',
-             'card_value','sale_batch','created_at']
+             'card_value','sale_month','created_at']
     if fmt=='csv':
         out=io.StringIO(); w=csv.DictWriter(out,fieldnames=headers,extrasaction='ignore')
         w.writeheader(); w.writerows(records); out.seek(0)
@@ -563,14 +563,14 @@ def modify_sec(id):
             data.get('ordered_by',''),data.get('order_name',''),
             data.get('model',''),data.get('variant',''),
             cost,sell,sell-cost,data.get('delivery_date',''),
-            data.get('voucher_name',''),vv if vv else '',cv,data.get('sale_batch','Current Sale')]])
+            data.get('voucher_name',''),vv if vv else '',cv,data.get('sale_month','')]])
         cache_clear('secondary_orders')
         return jsonify({'success':True,'id':id,'card_type':data.get('card_type',''),'last_digits':ld,
             'platform':data.get('platform',''),'ordered_by':data.get('ordered_by',''),
             'order_name':data.get('order_name',''),'model':data.get('model',''),
             'variant':data.get('variant',''),'costing':cost,'selling_price':sell,'profit':sell-cost,
             'delivery_date':data.get('delivery_date',''),'voucher_name':data.get('voucher_name',''),
-            'voucher_value':vv if vv else '','card_value':cv,'sale_batch':data.get('sale_batch','Current Sale')})
+            'voucher_value':vv if vv else '','card_value':cv,'sale_month':data.get('sale_month','')})
     except Exception as e: print("Edit Error:",e); return jsonify({'success': False})
 
 
@@ -695,10 +695,10 @@ def modify_offline(id):
 SHEET_SCHEMA = {
     'main_orders': ['id','card_type','last_digits','platform','account','order_name',
         'model','variant','costing','selling_price','profit','delivery_date',
-        'voucher_name','voucher_value','card_value','sale_batch','created_at'],
+        'voucher_name','voucher_value','card_value','sale_month','created_at'],
     'secondary_orders': ['id','card_type','last_digits','platform','ordered_by','order_name',
         'model','variant','costing','selling_price','profit','delivery_date',
-        'voucher_name','voucher_value','card_value','sale_batch','created_at'],
+        'voucher_name','voucher_value','card_value','sale_month','created_at'],
     'offline_orders': ['id','card_type','last_digits','machine','vendor','brand',
         'sale_type','costing','selling_price','profit','sale_month','created_at'],
     'cards':           ['id','card_type','last_digits'],
@@ -712,7 +712,7 @@ SHEET_SCHEMA = {
     'brands':           ['id','name'],
     'jiomart_orders':   ['id','card_type','last_digits','account','order_name','order_id',
                          'model','variant','costing','selling_price','profit',
-                         'delivery_date','sale_batch','created_at'],
+                         'delivery_date','sale_month','created_at'],
     'jiomart_accounts': ['id','name'],
     'jiomart_models':   ['id','model_name'],
     'jiomart_variants': ['id','model_id','variant_name','costing','selling_price'],
@@ -827,7 +827,7 @@ def sync_jiomart_variant_sell_price(var_id):
 # ── Jiomart Orders API ────────────────────────────────────────────────────────
 # id(1) card_type(2) last_digits(3) account(4) order_name(5) order_id(6)
 # model(7) variant(8) costing(9) selling_price(10) profit(11)
-# delivery_date(12) sale_batch(13) created_at(14)
+# delivery_date(12) sale_month(13) created_at(14)
 
 @app.route('/api/jiomart-orders', methods=['GET', 'POST'])
 def api_jiomart_orders():
@@ -853,7 +853,7 @@ def api_jiomart_orders():
             data.get('order_name',''), data.get('order_id',''),
             data.get('model',''), data.get('variant',''),
             costing, selling, selling - costing,
-            data.get('delivery_date',''), data.get('sale_batch','Current Sale'), now
+            data.get('delivery_date',''), data.get('sale_month',''), now
         ])
         cache_clear('jiomart_orders')
         return jsonify({
@@ -864,7 +864,7 @@ def api_jiomart_orders():
             'model': data.get('model',''), 'variant': data.get('variant',''),
             'costing': costing, 'selling_price': selling, 'profit': selling - costing,
             'delivery_date': data.get('delivery_date',''),
-            'sale_batch': data.get('sale_batch','Current Sale'), 'created_at': now
+            'sale_month': data.get('sale_month',''), 'created_at': now
         })
     except Exception as e:
         print(f"Jiomart POST Error: {e}"); return jsonify({'success': False}), 500
@@ -882,12 +882,12 @@ def bulk_del_jiomart():
 @app.route('/api/jiomart-orders/bulk-update-sale', methods=['POST'])
 def bulk_sale_jiomart():
     if not SHEET: return jsonify({'success': False})
-    ids = request.json.get('ids', []); new_batch = request.json.get('sale_batch', 'Current Sale')
+    ids = request.json.get('ids', []); new_month = request.json.get('sale_month', 'Current Sale')
     ws = SHEET.worksheet('jiomart_orders')
     try:
         records = ws.get_all_records()
         for i, r in enumerate(records):
-            if r.get('id') in ids: ws.update_cell(i+2, 13, new_batch)  # col 13 = sale_batch
+            if r.get('id') in ids: ws.update_cell(i+2, 13, new_month)  # col 13 = sale_month
         cache_clear('jiomart_orders'); return jsonify({'success': True})
     except Exception as e: print("Jiomart Bulk Sale Error:", e); return jsonify({'success': False})
 
@@ -934,10 +934,10 @@ def export_jiomart():
     for o in records:
         if str(o.get('last_digits','')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
     if sale_filter and sale_filter != 'ALL':
-        records = [r for r in records if r.get('sale_batch','') == sale_filter]
+        records = [r for r in records if r.get('sale_month','') == sale_filter]
     headers = ['id','card_type','last_digits','account','order_name','order_id',
                'model','variant','costing','selling_price','profit',
-               'delivery_date','sale_batch','created_at']
+               'delivery_date','sale_month','created_at']
     if fmt == 'csv':
         out = io.StringIO(); w = csv.DictWriter(out, fieldnames=headers, extrasaction='ignore')
         w.writeheader(); w.writerows(records); out.seek(0)
@@ -970,7 +970,7 @@ def modify_jiomart(id):
             data.get('order_name',''), data.get('order_id',''),
             data.get('model',''), data.get('variant',''),
             cost, sell, sell - cost,
-            data.get('delivery_date',''), data.get('sale_batch','Current Sale')
+            data.get('delivery_date',''), data.get('sale_month','')
         ]])
         cache_clear('jiomart_orders')
         return jsonify({
@@ -981,7 +981,7 @@ def modify_jiomart(id):
             'model': data.get('model',''), 'variant': data.get('variant',''),
             'costing': cost, 'selling_price': sell, 'profit': sell - cost,
             'delivery_date': data.get('delivery_date',''),
-            'sale_batch': data.get('sale_batch','Current Sale')
+            'sale_month': data.get('sale_month','')
         })
     except Exception as e: print("Jiomart Edit Error:", e); return jsonify({'success': False})
 
@@ -1235,9 +1235,9 @@ def modify_voucher_tracker(id):
 # Move selected main_orders rows into jiomart_orders, then delete from main_orders.
 # Field mapping:
 #   main: card_type last_digits account order_name model variant costing
-#         selling_price profit delivery_date sale_batch created_at
+#         selling_price profit delivery_date sale_month created_at
 #   jiomart: card_type last_digits account order_name order_id(blank) model
-#            variant costing selling_price profit delivery_date sale_batch created_at
+#            variant costing selling_price profit delivery_date sale_month created_at
 
 @app.route('/api/main-orders/migrate-to-jiomart', methods=['POST'])
 def migrate_to_jiomart():
@@ -1291,7 +1291,7 @@ def migrate_to_jiomart():
                 selling,
                 profit,
                 r.get('delivery_date', ''),
-                r.get('sale_batch', 'Current Sale'),
+                r.get('sale_month', 'Current Sale'),
                 r.get('created_at', '')
             ])
             next_id += 1
@@ -1331,16 +1331,29 @@ def api_dashboard_data():
     if not SHEET: return jsonify({'error': 'No sheet connected'})
     try:
         def safe_records(tab):
-            try:
-                rows = SHEET.worksheet(tab).get_all_records()
-                return rows
-            except Exception as e2:
+            try: return SHEET.worksheet(tab).get_all_records()
+            except:
                 try:
                     all_vals = SHEET.worksheet(tab).get_all_values()
                     if not all_vals or len(all_vals) < 2: return []
                     headers = all_vals[0]
                     return [dict(zip(headers, row + [''] * (len(headers) - len(row)))) for row in all_vals[1:]]
                 except: return []
+
+        # Accept optional fy param e.g. ?fy=2024 means Apr 2024 – Mar 2025
+        # Default: current financial year
+        from datetime import date
+        today   = date.today()
+        cur_fy  = today.year if today.month >= 4 else today.year - 1
+        try:    fy = int(request.args.get('fy', cur_fy))
+        except: fy = cur_fy
+        fy_start = f"{fy}-04"       # April of fy year
+        fy_end   = f"{fy+1}-03"     # March of fy+1
+
+        def in_fy(month_str):
+            if not month_str: return False
+            m = str(month_str)[:7]
+            return fy_start <= m <= fy_end
 
         main_orders     = safe_records('main_orders')
         sec_orders      = safe_records('secondary_orders')
@@ -1351,146 +1364,150 @@ def api_dashboard_data():
 
         def sf(v): return safe_float(v)
         def is_sold(o): return sf(o.get('selling_price')) > 0
-        def off_done(o): return sf(o.get('selling_price')) > 0
 
-        # ── Online order totals (main + secondary + jiomart) ──
-        online_all = main_orders + sec_orders + jiomart_orders
-        online_sold = [o for o in online_all if is_sold(o)]
-        online_total_revenue  = sum(sf(o.get('selling_price')) for o in online_sold)
-        online_total_profit   = sum(sf(o.get('profit'))        for o in online_sold)
-        online_total_costing  = sum(sf(o.get('costing'))       for o in online_sold)
-        online_pending        = len([o for o in online_all if not is_sold(o)])
+        # Filter everything to current FY
+        # Online orders use sale_month field
+        def fy_online(orders):
+            return [o for o in orders if in_fy(o.get('sale_month',''))]
+        def fy_offline(orders):
+            return [o for o in orders if in_fy(o.get('sale_month',''))]
+        def fy_voucher(vouchers):
+            return [v for v in vouchers if in_fy(v.get('month',''))]
+        def fy_exchange(orders):
+            # exchange uses created_at
+            return [o for o in orders if in_fy(str(o.get('created_at',''))[:7])]
 
-        # ── Offline totals ──
-        off_sold = [o for o in offline_orders if off_done(o)]
-        off_revenue = sum(sf(o.get('selling_price')) for o in off_sold)
-        off_profit  = sum(sf(o.get('profit'))        for o in off_sold)
-        off_costing = sum(sf(o.get('costing'))       for o in off_sold)
+        main_fy   = fy_online(main_orders)
+        sec_fy    = fy_online(sec_orders)
+        jio_fy    = fy_online(jiomart_orders)
+        off_fy    = fy_offline(offline_orders)
+        exch_fy   = fy_exchange(exchange_orders)
+        vouch_fy  = fy_voucher(voucher_tracker)
 
-        # ── Exchange totals ──
-        exch_count       = len(exchange_orders)
-        exch_total_exch  = sum(sf(o.get('exchange_value')) for o in exchange_orders)
-        exch_total_orig  = sum(sf(o.get('original_costing')) for o in exchange_orders)
+        online_all  = main_fy + sec_fy + jio_fy
+        online_sold = [o for o in online_all  if is_sold(o)]
+        off_sold    = [o for o in off_fy      if is_sold(o)]
 
-        # ── Voucher tracker ──
-        redeemed_vouchers   = [v for v in voucher_tracker if str(v.get('is_redeemed','0')) == '1']
-        pending_vouchers    = [v for v in voucher_tracker if str(v.get('is_redeemed','0')) != '1']
-        voucher_redeemed_profit = sum(sf(v.get('profit')) for v in redeemed_vouchers)
-        voucher_pending_profit  = sum(sf(v.get('profit')) for v in pending_vouchers)
-        voucher_total_face      = sum(sf(v.get('amount')) for v in voucher_tracker)
+        online_revenue = sum(sf(o.get('selling_price')) for o in online_sold)
+        online_profit  = sum(sf(o.get('profit'))        for o in online_sold)
+        online_costing = sum(sf(o.get('costing'))       for o in online_sold)
+        off_revenue    = sum(sf(o.get('selling_price')) for o in off_sold)
+        off_profit     = sum(sf(o.get('profit'))        for o in off_sold)
+        off_costing    = sum(sf(o.get('costing'))       for o in off_sold)
 
-        # ── Grand totals ──
-        grand_revenue = online_total_revenue + off_revenue
-        grand_profit  = online_total_profit  + off_profit + voucher_redeemed_profit
-        grand_costing = online_total_costing + off_costing
+        redeemed   = [v for v in vouch_fy if str(v.get('is_redeemed','0')) == '1']
+        pending_v  = [v for v in vouch_fy if str(v.get('is_redeemed','0')) != '1']
+        v_red_profit = sum(sf(v.get('profit')) for v in redeemed)
+        v_pend_profit= sum(sf(v.get('profit')) for v in pending_v)
+        v_face       = sum(sf(v.get('amount')) for v in vouch_fy)
 
-        # ── Monthly breakdown (last 6 months) ──
-        from collections import defaultdict
-        monthly = defaultdict(lambda: {'revenue':0,'profit':0,'costing':0,'offline_revenue':0,'offline_profit':0,'voucher_profit':0})
+        grand_revenue = online_revenue + off_revenue
+        grand_profit  = online_profit  + off_profit  + v_red_profit
+        grand_costing = online_costing + off_costing
+
+        # ── FY months list Apr→Mar ──
+        from collections import defaultdict, OrderedDict
+        fy_months = [f"{fy}-{m:02d}" for m in range(4,13)] + [f"{fy+1}-{m:02d}" for m in range(1,4)]
+        monthly = {m: {'online_revenue':0,'online_profit':0,'offline_revenue':0,'offline_profit':0,'voucher_profit':0} for m in fy_months}
 
         for o in online_sold:
-            m = str(o.get('created_at',''))[:7]
-            if m:
-                monthly[m]['revenue']  += sf(o.get('selling_price'))
-                monthly[m]['profit']   += sf(o.get('profit'))
-                monthly[m]['costing']  += sf(o.get('costing'))
+            m = str(o.get('sale_month',''))[:7]
+            if m in monthly:
+                monthly[m]['online_revenue'] += sf(o.get('selling_price'))
+                monthly[m]['online_profit']  += sf(o.get('profit'))
 
         for o in off_sold:
             m = str(o.get('sale_month',''))[:7]
-            if m:
+            if m in monthly:
                 monthly[m]['offline_revenue'] += sf(o.get('selling_price'))
                 monthly[m]['offline_profit']  += sf(o.get('profit'))
 
-        for v in redeemed_vouchers:
+        for v in redeemed:
             m = str(v.get('month',''))[:7]
-            if m:
+            if m in monthly:
                 monthly[m]['voucher_profit'] += sf(v.get('profit'))
 
-        sorted_months = sorted(monthly.keys())[-6:]
-        monthly_data = [{
-            'month': m,
-            'online_revenue':  round(monthly[m]['revenue'], 2),
-            'online_profit':   round(monthly[m]['profit'], 2),
-            'offline_revenue': round(monthly[m]['offline_revenue'], 2),
-            'offline_profit':  round(monthly[m]['offline_profit'], 2),
-            'voucher_profit':  round(monthly[m]['voucher_profit'], 2),
-            'total_profit':    round(monthly[m]['profit'] + monthly[m]['offline_profit'] + monthly[m]['voucher_profit'], 2),
-        } for m in sorted_months]
+        monthly_data = [{'month': m,
+            'online_revenue':  round(monthly[m]['online_revenue'],2),
+            'online_profit':   round(monthly[m]['online_profit'],2),
+            'offline_revenue': round(monthly[m]['offline_revenue'],2),
+            'offline_profit':  round(monthly[m]['offline_profit'],2),
+            'voucher_profit':  round(monthly[m]['voucher_profit'],2),
+            'total_profit':    round(monthly[m]['online_profit']+monthly[m]['offline_profit']+monthly[m]['voucher_profit'],2),
+        } for m in fy_months]
 
-        # ── Platform breakdown (online only) ──
+        # ── Platform breakdown ──
         plat = defaultdict(lambda: {'count':0,'revenue':0,'profit':0})
         for o in online_sold:
             p = o.get('platform','Unknown') or 'Unknown'
-            plat[p]['count']   += 1
-            plat[p]['revenue'] += sf(o.get('selling_price'))
-            plat[p]['profit']  += sf(o.get('profit'))
-        platform_data = sorted([{'platform':k,'count':v['count'],'revenue':round(v['revenue'],2),'profit':round(v['profit'],2)} for k,v in plat.items()], key=lambda x: -x['profit'])[:8]
+            plat[p]['count']+=1; plat[p]['revenue']+=sf(o.get('selling_price')); plat[p]['profit']+=sf(o.get('profit'))
+        platform_data = sorted([{'platform':k,'count':v['count'],'revenue':round(v['revenue'],2),'profit':round(v['profit'],2)} for k,v in plat.items()],key=lambda x:-x['profit'])[:8]
 
         # ── Top models ──
         model_map = defaultdict(lambda: {'count':0,'profit':0,'revenue':0})
         for o in online_sold + off_sold:
             mn = o.get('model','') or ''
-            if mn:
-                model_map[mn]['count']   += 1
-                model_map[mn]['profit']  += sf(o.get('profit'))
-                model_map[mn]['revenue'] += sf(o.get('selling_price'))
-        top_models = sorted([{'model':k,'count':v['count'],'profit':round(v['profit'],2),'revenue':round(v['revenue'],2)} for k,v in model_map.items()], key=lambda x: -x['count'])[:8]
+            if mn: model_map[mn]['count']+=1; model_map[mn]['profit']+=sf(o.get('profit')); model_map[mn]['revenue']+=sf(o.get('selling_price'))
+        top_models = sorted([{'model':k,'count':v['count'],'profit':round(v['profit'],2),'revenue':round(v['revenue'],2)} for k,v in model_map.items()],key=lambda x:-x['count'])[:8]
 
-        # ── Sale batch summary (online) ──
-        batch_map = defaultdict(lambda: {'count':0,'sold':0,'profit':0,'pending':0})
+        # ── Sale Month summary (online, grouped by month) ──
+        month_map = defaultdict(lambda: {'count':0,'sold':0,'profit':0,'pending':0})
         for o in online_all:
-            b = o.get('sale_batch','Current Sale') or 'Current Sale'
-            batch_map[b]['count'] += 1
-            if is_sold(o):
-                batch_map[b]['sold']   += 1
-                batch_map[b]['profit'] += sf(o.get('profit'))
-            else:
-                batch_map[b]['pending'] += 1
-        batch_data = sorted([{'batch':k,'count':v['count'],'sold':v['sold'],'pending':v['pending'],'profit':round(v['profit'],2)} for k,v in batch_map.items()], key=lambda x: -x['count'])[:10]
+            m = str(o.get('sale_month',''))[:7] or 'Unknown'
+            month_map[m]['count']+=1
+            if is_sold(o): month_map[m]['sold']+=1; month_map[m]['profit']+=sf(o.get('profit'))
+            else: month_map[m]['pending']+=1
+        month_data = sorted([{'month':k,'count':v['count'],'sold':v['sold'],'pending':v['pending'],'profit':round(v['profit'],2)} for k,v in month_map.items()],key=lambda x:-x.get('month',''))[:12]
 
         # ── Offline brand breakdown ──
         brand_map = defaultdict(lambda: {'count':0,'profit':0,'revenue':0})
         for o in off_sold:
             b = o.get('brand','') or 'Unknown'
-            brand_map[b]['count']   += 1
-            brand_map[b]['profit']  += sf(o.get('profit'))
-            brand_map[b]['revenue'] += sf(o.get('selling_price'))
-        brand_data = sorted([{'brand':k,'count':v['count'],'profit':round(v['profit'],2),'revenue':round(v['revenue'],2)} for k,v in brand_map.items()], key=lambda x: -x['count'])[:6]
+            brand_map[b]['count']+=1; brand_map[b]['profit']+=sf(o.get('profit')); brand_map[b]['revenue']+=sf(o.get('selling_price'))
+        brand_data = sorted([{'brand':k,'count':v['count'],'profit':round(v['profit'],2),'revenue':round(v['revenue'],2)} for k,v in brand_map.items()],key=lambda x:-x['count'])[:6]
 
         # ── Channel split ──
         channel_data = [
-            {'channel':'Main Orders',      'count':len(main_orders),    'sold':len([o for o in main_orders    if is_sold(o)]),  'profit': round(sum(sf(o.get('profit')) for o in main_orders    if is_sold(o)),2)},
-            {'channel':'Secondary Orders', 'count':len(sec_orders),     'sold':len([o for o in sec_orders     if is_sold(o)]),  'profit': round(sum(sf(o.get('profit')) for o in sec_orders     if is_sold(o)),2)},
-            {'channel':'Jiomart',          'count':len(jiomart_orders), 'sold':len([o for o in jiomart_orders if is_sold(o)]),  'profit': round(sum(sf(o.get('profit')) for o in jiomart_orders if is_sold(o)),2)},
-            {'channel':'Offline',          'count':len(offline_orders), 'sold':len(off_sold),                                   'profit': round(off_profit,2)},
-            {'channel':'Exchange',         'count':exch_count,          'sold':exch_count,                                      'profit': 0},
+            {'channel':'Main Orders',      'count':len(main_fy),  'sold':len([o for o in main_fy  if is_sold(o)]), 'profit':round(sum(sf(o.get('profit')) for o in main_fy  if is_sold(o)),2)},
+            {'channel':'Secondary Orders', 'count':len(sec_fy),   'sold':len([o for o in sec_fy   if is_sold(o)]), 'profit':round(sum(sf(o.get('profit')) for o in sec_fy   if is_sold(o)),2)},
+            {'channel':'Jiomart',          'count':len(jio_fy),   'sold':len([o for o in jio_fy   if is_sold(o)]), 'profit':round(sum(sf(o.get('profit')) for o in jio_fy   if is_sold(o)),2)},
+            {'channel':'Offline',          'count':len(off_fy),   'sold':len(off_sold),                             'profit':round(off_profit,2)},
+            {'channel':'Exchange',         'count':len(exch_fy),  'sold':len(exch_fy),                              'profit':0},
         ]
 
+        # ── Available FYs ──
+        all_months = set()
+        for o in main_orders+sec_orders+jiomart_orders:
+            m = str(o.get('sale_month',''))[:7]
+            if m: all_months.add(m)
+        for o in offline_orders:
+            m = str(o.get('sale_month',''))[:7]
+            if m: all_months.add(m)
+        fy_set = set()
+        for m in all_months:
+            try:
+                yr,mo = int(m[:4]),int(m[5:7])
+                fy_set.add(yr if mo >= 4 else yr-1)
+            except: pass
+        available_fys = sorted(fy_set)
+
         return jsonify({
+            'fy': fy, 'fy_label': f"FY {fy}-{str(fy+1)[2:]}",
+            'available_fys': available_fys,
             'summary': {
-                'grand_revenue':  round(grand_revenue,2),
-                'grand_profit':   round(grand_profit,2),
-                'grand_costing':  round(grand_costing,2),
-                'online_orders':  len(online_all),
-                'online_sold':    len(online_sold),
-                'online_pending': online_pending,
-                'offline_orders': len(offline_orders),
-                'offline_sold':   len(off_sold),
-                'exchange_count': exch_count,
-                'exch_total_exch': round(exch_total_exch,2),
-                'voucher_count':   len(voucher_tracker),
-                'voucher_redeemed_profit': round(voucher_redeemed_profit,2),
-                'voucher_pending_profit':  round(voucher_pending_profit,2),
-                'voucher_total_face':      round(voucher_total_face,2),
-                'vouchers_redeemed': len(redeemed_vouchers),
-                'vouchers_pending':  len(pending_vouchers),
+                'grand_revenue': round(grand_revenue,2), 'grand_profit': round(grand_profit,2),
+                'grand_costing': round(grand_costing,2),
+                'online_orders': len(online_all),   'online_sold': len(online_sold),
+                'online_pending': len(online_all)-len(online_sold),
+                'offline_orders': len(off_fy),      'offline_sold': len(off_sold),
+                'exchange_count': len(exch_fy),     'exch_total_exch': round(sum(sf(o.get('exchange_value')) for o in exch_fy),2),
+                'voucher_count':  len(vouch_fy),    'voucher_redeemed_profit': round(v_red_profit,2),
+                'voucher_pending_profit': round(v_pend_profit,2), 'voucher_total_face': round(v_face,2),
+                'vouchers_redeemed': len(redeemed), 'vouchers_pending': len(pending_v),
             },
-            'monthly':   monthly_data,
-            'platforms': platform_data,
-            'top_models': top_models,
-            'batches':   batch_data,
-            'brands':    brand_data,
-            'channels':  channel_data,
+            'monthly': monthly_data, 'platforms': platform_data,
+            'top_models': top_models, 'months': month_data,
+            'brands': brand_data, 'channels': channel_data,
         })
     except Exception as e:
         import traceback; traceback.print_exc()
