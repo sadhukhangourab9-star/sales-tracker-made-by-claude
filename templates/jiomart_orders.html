@@ -69,8 +69,8 @@
       <input type="number" id="f_selling_price" class="form-control" placeholder="Optional" step="0.01"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">12. Sale Batch</label>
-      <input type="text" id="f_sale_batch" class="form-control" value="Current Sale" placeholder="e.g. Sale 1"/>
+      <label class="form-label">12. Sale Month</label>
+      <input type="month" id="f_sale_month" class="form-control"/>
     </div>
     <div class="col-12 d-flex gap-2 mt-2">
       <button class="btn-primary-custom" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Save Order</button>
@@ -85,8 +85,8 @@
       <i class="bi bi-search"></i>
       <input type="text" class="search-input" id="searchInput" placeholder="Search orders…" oninput="filterTable()"/>
     </div>
-    <select id="filterSale" class="form-select" style="width:160px;" onchange="filterTable()">
-      <option value="ALL">All Sales</option>
+    <select id="filterMonth" class="form-select" style="width:160px;" onchange="filterTable()">
+      <option value="ALL">All Months</option>
     </select>
   </div>
   <div class="toolbar-right">
@@ -96,8 +96,8 @@
     <button class="btn-outline-custom" id="bulkDeliveryBtn" onclick="openBulkDelivery()" style="display:none;">
       <i class="bi bi-calendar-check"></i> Set Delivery
     </button>
-    <button class="btn-success-custom" id="bulkSaleBtn" onclick="promptBulkSale()" style="display:none;">
-      <i class="bi bi-tags"></i> Assign Sale
+    <button class="btn-success-custom" id="bulkMonthBtn" onclick="promptBulkMonth()" style="display:none;">
+      <i class="bi bi-tags"></i> Assign Month
     </button>
     <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">
       <i class="bi bi-trash3"></i> Delete (<span id="selCount">0</span>)
@@ -198,8 +198,8 @@
             <input type="number" id="e_selling_price" class="form-control" step="0.01"/>
           </div>
           <div class="col-md-2">
-            <label class="form-label">Sale Batch</label>
-            <input type="text" id="e_sale_batch" class="form-control"/>
+            <label class="form-label">Sale Month</label>
+            <input type="month" id="e_sale_month" class="form-control"/>
           </div>
         </div>
       </div>
@@ -332,6 +332,7 @@ function populateAccountDropdown(selectId, selectedVal='') {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
+  document.getElementById('f_sale_month').value = new Date().toISOString().slice(0,7);
   document.getElementById('f_created_at').value = new Date().toLocaleString('en-IN');
 
   const [accounts, models] = await Promise.all([
@@ -391,7 +392,7 @@ function renderTable() {
     const hasSell = o.selling_price && parseFloat(o.selling_price) > 0;
     return `<tr data-id="${o.id}">
       <td><input type="checkbox" class="row-check" value="${o.id}" onchange="onCheckChange()"/></td>
-      <td><span class="badge-card" style="background:var(--navy);border:1px solid var(--border)">${o.sale_batch||'Current Sale'}</span></td>
+      <td><span class="badge-card" style="background:var(--navy);border:1px solid var(--border)">${o.sale_month||''}</span></td>
       <td style="color:var(--muted);font-size:12px;">${dateStr}</td>
       <td><code style="color:var(--accent2);font-size:12px;">•••• ${o.last_digits||'—'}</code></td>
       <td>${cardBadge(o.card_type)}</td>
@@ -424,19 +425,19 @@ function updateStats() {
 }
 
 function populateSaleFilter() {
-  const sales = [...new Set(allOrders.map(o => o.sale_batch||'Current Sale'))].sort();
-  const sel = document.getElementById('filterSale'); const cv = sel.value;
-  sel.innerHTML = '<option value="ALL">All Sales</option>';
+  const sales = [...new Set(allOrders.map(o => o.sale_month||''))].sort();
+  const sel = document.getElementById('filterMonth'); const cv = sel.value;
+  sel.innerHTML = '<option value="ALL">All Months</option>';
   sales.forEach(s => { const opt = document.createElement('option'); opt.value=s; opt.textContent=s; sel.appendChild(opt); });
   if ([...sel.options].some(o => o.value===cv)) sel.value=cv;
 }
 
 function filterTable() {
   const q  = document.getElementById('searchInput').value.toLowerCase();
-  const sf = document.getElementById('filterSale').value;
+  const sf = document.getElementById('filterMonth').value;
   filteredOrders = allOrders.filter(o => {
     const ms = Object.values(o).some(v => String(v||'').toLowerCase().includes(q));
-    const mb = sf==='ALL' || (o.sale_batch||'Current Sale')===sf;
+    const mb = sf==='ALL' || (o.sale_month||'')===sf;
     return ms && mb;
   });
   currentPage=1; renderTable(); updateStats();
@@ -456,7 +457,7 @@ function clearForm() {
     .forEach(id => document.getElementById(id).value='');
   document.getElementById('f_account').value='';
   document.getElementById('f_variant').innerHTML='<option value="">Select Variant</option>';
-  document.getElementById('f_sale_batch').value='Current Sale';
+  document.getElementById('f_sale_month').value='';
   document.getElementById('f_delivery_date').value='';
   document.getElementById('f_created_at').value=new Date().toLocaleString('en-IN');
 }
@@ -480,7 +481,7 @@ async function submitOrder() {
     delivery_date: document.getElementById('f_delivery_date').value,
     costing:       document.getElementById('f_costing').value || null,
     selling_price: document.getElementById('f_selling_price').value || null,
-    sale_batch:    document.getElementById('f_sale_batch').value.trim() || 'Current Sale'
+    sale_month:    document.getElementById('f_sale_month').value.trim() || ''
   };
   const res = await api('/api/jiomart-orders','POST',payload);
   if (res.error) { showToast(res.error,'error'); return; }
@@ -500,7 +501,7 @@ async function openEdit(id) {
   document.getElementById('e_delivery_date').value = o.delivery_date||'';
   document.getElementById('e_costing').value       = o.costing||'';
   document.getElementById('e_selling_price').value = o.selling_price||'';
-  document.getElementById('e_sale_batch').value    = o.sale_batch||'Current Sale';
+  document.getElementById('e_sale_month').value    = o.sale_month||'';
 
   populateAccountDropdown('e_account', o.account||'');
 
@@ -526,7 +527,7 @@ async function saveEdit() {
     delivery_date: document.getElementById('e_delivery_date').value,
     costing:       document.getElementById('e_costing').value||null,
     selling_price: document.getElementById('e_selling_price').value||null,
-    sale_batch:    document.getElementById('e_sale_batch').value.trim()||'Current Sale'
+    sale_month:    document.getElementById('e_sale_month').value.trim()||''
   };
   const res = await api(`/api/jiomart-orders/${id}`,'PUT',payload);
   if (!res.success) { showToast('Update failed.','error'); return; }
@@ -540,7 +541,7 @@ function getSelectedIds() { return [...document.querySelectorAll('.row-check:che
 function onCheckChange() {
   const count=getSelectedIds().length; document.getElementById('selCount').textContent=count;
   const show=count>0;
-  ['bulkSellBtn','bulkDeliveryBtn','bulkSaleBtn','bulkDeleteBtn'].forEach(id=>{document.getElementById(id).style.display=show?'inline-flex':'none';});
+  ['bulkSellBtn','bulkDeliveryBtn','bulkMonthBtn','bulkDeleteBtn'].forEach(id=>{document.getElementById(id).style.display=show?'inline-flex':'none';});
 }
 function toggleSelectAll(cb){document.querySelectorAll('.row-check').forEach(c=>{c.checked=cb.checked;}); onCheckChange();}
 
@@ -581,15 +582,15 @@ async function bulkDelete(){
   if(res.success){allOrders=allOrders.filter(o=>!ids.includes(o.id));populateSaleFilter();filterTable();document.getElementById('selectAll').checked=false;onCheckChange();showToast(`${res.deleted} orders deleted.`);}
 }
 
-async function promptBulkSale(){
+async function promptBulkMonth(){
   const ids=getSelectedIds();if(!ids.length)return;
-  const newBatch=prompt(`Enter Sale Batch name for ${ids.length} orders:`,'Sale 1');if(!newBatch)return;
-  const res=await api('/api/jiomart-orders/bulk-update-sale','POST',{ids,sale_batch:newBatch});
+  const newBatch=prompt(`Enter Sale Month name for ${ids.length} orders:`,'Sale 1');if(!newBatch)return;
+  const res=await api('/api/jiomart-orders/bulk-update-month','POST',{ids,sale_month:newBatch});
   if(res.success){showToast(`Assigned ${ids.length} orders to ${newBatch}`);await loadOrders();document.getElementById('selectAll').checked=false;onCheckChange();}
 }
 
 function exportOrders(fmt){
-  const sale=document.getElementById('filterSale').value;
+  const sale=document.getElementById('filterMonth').value;
   window.location.href=`/api/jiomart-orders/export?format=${fmt}&sale=${encodeURIComponent(sale)}`;
 }
 
