@@ -1385,14 +1385,47 @@ def api_dashboard_data():
     if not SHEET: return jsonify({'error': 'No sheet connected'})
     try:
         def safe_records(tab):
-            try: return SHEET.worksheet(tab).get_all_records()
-            except:
-                try:
-                    all_vals = SHEET.worksheet(tab).get_all_values()
-                    if not all_vals or len(all_vals) < 2: return []
-                    headers = all_vals[0]
-                    return [dict(zip(headers, row + [''] * (len(headers) - len(row)))) for row in all_vals[1:]]
-                except: return []
+            """Read a sheet tab safely — always returns a list of dicts, never raises."""
+            try:
+                rows = SHEET.worksheet(tab).get_all_records()
+                return rows if rows else []
+            except Exception:
+                pass
+            try:
+                all_vals = SHEET.worksheet(tab).get_all_values()
+                if not all_vals or len(all_vals) < 2: return []
+                headers = all_vals[0]
+                # Strip empty trailing headers
+                while headers and not headers[-1]: headers.pop()
+                records = []
+                for row in all_vals[1:]:
+                    padded = list(row) + [''] * max(0, len(headers) - len(row))
+                    records.append(dict(zip(headers, padded[:len(headers)])))
+                return records
+            except Exception as e2:
+                print(f"Dashboard safe_records({tab}) fallback failed: {e2}")
+                return []
+
+        def sf(v):
+            try: return float(v) if v not in (None, '', 'None', 'N/A') else 0.0
+            except: return 0.0
+
+        def is_sold(o): return sf(o.get('selling_price', 0)) > 0
+
+        # ── FY calculation ──
+        from datetime import date
+        from collections import defaultdict
+        today  = date.today()
+        cur_fy = today.year if today.month >= 4 else today.year - 1
+        try:    fy = int(request.args.get('fy', cur_fy))
+        except: fy = cur_fy
+        fy_start = f"{fy}-04"
+        fy_end   = f"{fy+1}-03"
+
+        def in_fy(month_str):
+            if not month_str: return False
+            m = str(month_str)[:7]
+            return fy_start <= m <= fy_end
 
         # Accept optional fy param e.g. ?fy=2024 means Apr 2024 – Mar 2025
         # Default: current financial year
@@ -1422,7 +1455,12 @@ def api_dashboard_data():
         # Filter everything to current FY
         # Online orders use sale_month field
         def fy_online(orders):
-            return [o for o in orders if in_fy(o.get('sale_month',''))]
+            # Use sale_month if set, fall back to created_at for legacy data
+            result = []
+            for o in orders:
+                m = o.get('sale_month','') or str(o.get('created_at',''))[:7]
+                if in_fy(m): result.append(o)
+            return result
         def fy_offline(orders):
             return [o for o in orders if in_fy(o.get('sale_month',''))]
         def fy_voucher(vouchers):
@@ -1454,10 +1492,14 @@ def api_dashboard_data():
         v_red_profit = sum(sf(v.get('profit')) for v in redeemed)
         v_pend_profit= sum(sf(v.get('profit')) for v in pending_v)
         v_face       = sum(sf(v.get('amount')) for v in vouch_fy)
-        # Commission paid to Pinku this FY
-        all_commission = safe_records('voucher_commission')
-        fy_commission  = [c for c in all_commission if in_fy(c.get('month',''))]
-        total_commission = sum(sf(c.get('commission_amount')) for c in fy_commission)
+        # Commission paid to Pinku this FY — non-fatal if tab doesn't exist yet
+        try:
+            all_commission   = safe_records('voucher_commission')
+            fy_commission    = [c for c in all_commission if in_fy(c.get('month',''))]
+            total_commission = sum(sf(c.get('commission_amount')) for c in fy_commission)
+        except Exception:
+            fy_commission    = []
+            total_commission = 0.0
         net_voucher_profit = round(v_red_profit - total_commission, 2)
         # Monthly commission map for chart
         comm_by_month = {}
@@ -1541,20 +1583,22 @@ def api_dashboard_data():
             {'channel':'Exchange',         'count':len(exch_fy),  'sold':len(exch_fy),                              'profit':0},
         ]
 
-        # ── Available FYs ──
+        # ── Available FYs — also check old sale_batch/created_at as fallback ──
         all_months = set()
         for o in main_orders+sec_orders+jiomart_orders:
-            m = str(o.get('sale_month',''))[:7]
-            if m: all_months.add(m)
+            # Try sale_month first, fall back to created_at
+            m = str(o.get('sale_month','') or o.get('created_at',''))[:7]
+            if len(m)==7 and m[4]=='-': all_months.add(m)
         for o in offline_orders:
             m = str(o.get('sale_month',''))[:7]
-            if m: all_months.add(m)
+            if len(m)==7 and m[4]=='-': all_months.add(m)
         fy_set = set()
         for m in all_months:
             try:
                 yr,mo = int(m[:4]),int(m[5:7])
-                fy_set.add(yr if mo >= 4 else yr-1)
+                if 2020 <= yr <= 2035: fy_set.add(yr if mo >= 4 else yr-1)
             except: pass
+        if not fy_set: fy_set.add(cur_fy)
         available_fys = sorted(fy_set)
 
         return jsonify({
@@ -1580,7 +1624,23 @@ def api_dashboard_data():
         })
     except Exception as e:
         import traceback; traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        # Return a safe minimal response so the dashboard doesn't crash completely
+        return jsonify({
+            'error': str(e),
+            'fy': cur_fy if 'cur_fy' in dir() else 2025,
+            'fy_label': 'Error loading data',
+            'available_fys': [],
+            'summary': {
+                'grand_revenue':0,'grand_profit':0,'grand_costing':0,
+                'online_orders':0,'online_sold':0,'online_pending':0,
+                'offline_orders':0,'offline_sold':0,'exchange_count':0,
+                'exch_total_exch':0,'voucher_count':0,'voucher_redeemed_profit':0,
+                'voucher_pending_profit':0,'voucher_total_face':0,
+                'vouchers_redeemed':0,'vouchers_pending':0,
+                'total_commission':0,'net_voucher_profit':0,'commission_count':0,
+            },
+            'monthly':[],'platforms':[],'top_models':[],'months':[],'brands':[],'channels':[],
+        }), 200
 
 
 @app.route('/setup')
