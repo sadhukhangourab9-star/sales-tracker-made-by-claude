@@ -156,6 +156,57 @@
   </div>
 </div>
 
+<!-- ── Pinku Commission Panel ── -->
+<div class="card-panel" style="border-top:4px solid var(--purple,#9B59B6);">
+  <div class="card-panel-title" style="color:#9B59B6;"><i class="bi bi-person-check-fill"></i> Pinku's Monthly Commission</div>
+  <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+    Record the commission amount paid to Pinku each month. This is deducted from voucher profit on the dashboard.
+  </p>
+  <div class="row g-3 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label">Month</label>
+      <input type="month" id="c_month" class="form-control"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Commission Amount (₹)</label>
+      <input type="number" id="c_amount" class="form-control" placeholder="e.g. 500" step="0.01"/>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Notes (optional)</label>
+      <input type="text" id="c_notes" class="form-control" placeholder="e.g. March payout for Flipkart vouchers"/>
+    </div>
+    <div class="col-md-2">
+      <button class="btn-primary-custom w-100 justify-content-center"
+              style="background:linear-gradient(135deg,#9B59B6,#7D3C98);"
+              onclick="submitCommission()">
+        <i class="bi bi-plus-lg"></i> Add Commission
+      </button>
+    </div>
+  </div>
+
+  <div style="margin-top:20px;" id="commissionTableWrap">
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th>Commission (₹)</th>
+            <th>Notes</th>
+            <th>Date Added</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="commissionBody">
+          <tr><td colspan="5"><div class="empty-state"><i class="bi bi-person-check"></i><p>No commission records yet.</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;font-size:12px;color:var(--muted);">
+      <span>Total Commission Paid: <strong id="totalCommission" style="color:#9B59B6;">₹0</strong></span>
+    </div>
+  </div>
+</div>
+
 <!-- ── Edit Modal ── -->
 <div class="modal fade" id="editModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
@@ -578,6 +629,71 @@ function renderBreakdown() {
   document.getElementById('breakdownBody').innerHTML = html;
 }
 
+// ── Commission ───────────────────────────────────────────────────────────────
+let allCommission = [];
+
+async function loadCommission() {
+  allCommission = await api('/api/voucher-commission');
+  renderCommission();
+}
+
+function renderCommission() {
+  const body = document.getElementById('commissionBody');
+  if (!allCommission.length) {
+    body.innerHTML = '<tr><td colspan="5"><div class="empty-state"><i class="bi bi-person-check"></i><p>No commission records yet.</p></div></td></tr>';
+    document.getElementById('totalCommission').textContent = '₹0';
+    return;
+  }
+  const sorted = [...allCommission].sort((a,b) => (b.month||'').localeCompare(a.month||''));
+  const total  = sorted.reduce((s,c) => s+(parseFloat(c.commission_amount)||0), 0);
+  document.getElementById('totalCommission').textContent = formatCost(total);
+
+  body.innerHTML = sorted.map(c => {
+    const monthLabel = c.month
+      ? new Date(c.month+'-02').toLocaleString('en-IN',{month:'long',year:'numeric'})
+      : '—';
+    return `<tr>
+      <td style="font-weight:500;">${monthLabel}</td>
+      <td style="color:#9B59B6;font-weight:700;">${formatCost(c.commission_amount)}</td>
+      <td style="color:var(--muted);">${c.notes||'—'}</td>
+      <td style="color:var(--muted);font-size:12px;">${(c.created_at||'').split(' ')[0]}</td>
+      <td>
+        <button class="btn-danger-custom" style="padding:4px 9px;" onclick="deleteCommission(${c.id})">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function submitCommission() {
+  const month  = document.getElementById('c_month').value;
+  const amount = document.getElementById('c_amount').value;
+  const notes  = document.getElementById('c_notes').value.trim();
+
+  if (!amount || parseFloat(amount) <= 0) { showToast('Enter a commission amount', 'error'); return; }
+
+  const payload = { month, commission_amount: parseFloat(amount), notes };
+  const res = await api('/api/voucher-commission', 'POST', payload);
+  if (!res.success) { showToast('Failed to save', 'error'); return; }
+
+  allCommission.unshift(res);
+  renderCommission();
+  document.getElementById('c_amount').value = '';
+  document.getElementById('c_notes').value  = '';
+  showToast(`Commission of ${formatCost(amount)} saved for ${month||'—'}`);
+}
+
+async function deleteCommission(id) {
+  if (!confirm('Delete this commission record?')) return;
+  const res = await api(`/api/voucher-commission/${id}`, 'DELETE');
+  if (res.success !== false) {
+    allCommission = allCommission.filter(c => c.id !== id);
+    renderCommission(); showToast('Deleted.');
+  } else { showToast('Failed to delete', 'error'); }
+}
+
 init();
+loadCommission();
 </script>
 {% endblock %}
