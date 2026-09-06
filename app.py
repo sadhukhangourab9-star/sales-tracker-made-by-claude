@@ -717,6 +717,7 @@ SHEET_SCHEMA = {
     'jiomart_models':   ['id','model_name'],
     'jiomart_variants': ['id','model_id','variant_name','costing','selling_price'],
     'voucher_tracker':  ['id','platform','voucher_code','voucher_pin','amount','discount_pct','profit','month','is_redeemed','created_at'],
+    'voucher_commission': ['id','month','commission_amount','notes','created_at'],
     'exchange_orders':  ['id','platform','model','variant','costing',
                          'exchange_model','exchange_variant','exchange_value',
                          'service_fee','original_costing','last_digits','card_type',
@@ -1231,6 +1232,59 @@ def modify_voucher_tracker(id):
         print("Voucher Tracker PUT Error:", e); return jsonify({'success': False})
 
 
+# ── Voucher Commission API ───────────────────────────────────────────────────
+# id(1) month(2) commission_amount(3) notes(4) created_at(5)
+# Tracks monthly commission paid to Pinku from voucher profit
+
+@app.route('/api/voucher-commission', methods=['GET', 'POST'])
+def api_voucher_commission():
+    if not SHEET: return jsonify([])
+    ws = SHEET.worksheet('voucher_commission')
+    if request.method == 'GET':
+        cached = cache_get('voucher_commission')
+        if cached: return jsonify(cached)
+        try:
+            records = ws.get_all_records()
+        except Exception as e:
+            print(f"Voucher Commission GET error: {e}")
+            try:
+                all_vals = ws.get_all_values()
+                if not all_vals or len(all_vals) < 2: return jsonify([])
+                headers = all_vals[0]
+                records = [dict(zip(headers, row + [''] * (len(headers) - len(row)))) for row in all_vals[1:]]
+            except: records = []
+        cache_set('voucher_commission', records)
+        return jsonify(records)
+    try:
+        data   = request.json; next_id = get_next_id(ws)
+        amount = safe_float(data.get('commission_amount'))
+        now    = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ws.append_row([next_id, data.get('month',''), amount, data.get('notes',''), now])
+        cache_clear('voucher_commission')
+        return jsonify({'success':True,'id':next_id,'month':data.get('month',''),
+                        'commission_amount':amount,'notes':data.get('notes',''),'created_at':now})
+    except Exception as e:
+        print(f"Voucher Commission POST Error: {e}"); return jsonify({'success':False}), 500
+
+@app.route('/api/voucher-commission/<int:id>', methods=['DELETE','PUT'])
+def modify_voucher_commission(id):
+    if not SHEET: return jsonify({'success':False})
+    if request.method == 'DELETE':
+        cache_clear('voucher_commission')
+        return delete_master_table('voucher_commission', id)
+    data = request.json; ws = SHEET.worksheet('voucher_commission')
+    try:
+        cell   = ws.find(str(id), in_column=1)
+        amount = safe_float(data.get('commission_amount'))
+        ws.update(f'B{cell.row}:D{cell.row}',
+                  [[data.get('month',''), amount, data.get('notes','')]])
+        cache_clear('voucher_commission')
+        return jsonify({'success':True,'id':id,'month':data.get('month',''),
+                        'commission_amount':amount,'notes':data.get('notes','')})
+    except Exception as e:
+        print("Voucher Commission PUT Error:", e); return jsonify({'success':False})
+
+
 # ── Jiomart Migration API ────────────────────────────────────────────────────
 # Move selected main_orders rows into jiomart_orders, then delete from main_orders.
 # Field mapping:
@@ -1400,9 +1454,19 @@ def api_dashboard_data():
         v_red_profit = sum(sf(v.get('profit')) for v in redeemed)
         v_pend_profit= sum(sf(v.get('profit')) for v in pending_v)
         v_face       = sum(sf(v.get('amount')) for v in vouch_fy)
+        # Commission paid to Pinku this FY
+        all_commission = safe_records('voucher_commission')
+        fy_commission  = [c for c in all_commission if in_fy(c.get('month',''))]
+        total_commission = sum(sf(c.get('commission_amount')) for c in fy_commission)
+        net_voucher_profit = round(v_red_profit - total_commission, 2)
+        # Monthly commission map for chart
+        comm_by_month = {}
+        for c in fy_commission:
+            m = str(c.get('month',''))[:7]
+            if m: comm_by_month[m] = comm_by_month.get(m, 0) + sf(c.get('commission_amount'))
 
         grand_revenue = online_revenue + off_revenue
-        grand_profit  = online_profit  + off_profit  + v_red_profit
+        grand_profit  = online_profit  + off_profit  + net_voucher_profit
         grand_costing = online_costing + off_costing
 
         # ── FY months list Apr→Mar ──
@@ -1433,7 +1497,9 @@ def api_dashboard_data():
             'offline_revenue': round(monthly[m]['offline_revenue'],2),
             'offline_profit':  round(monthly[m]['offline_profit'],2),
             'voucher_profit':  round(monthly[m]['voucher_profit'],2),
-            'total_profit':    round(monthly[m]['online_profit']+monthly[m]['offline_profit']+monthly[m]['voucher_profit'],2),
+            'commission':      round(comm_by_month.get(m, 0), 2),
+            'net_voucher':     round(monthly[m]['voucher_profit'] - comm_by_month.get(m, 0), 2),
+            'total_profit':    round(monthly[m]['online_profit']+monthly[m]['offline_profit']+monthly[m]['voucher_profit']-comm_by_month.get(m,0),2),
         } for m in fy_months]
 
         # ── Platform breakdown ──
@@ -1504,6 +1570,9 @@ def api_dashboard_data():
                 'voucher_count':  len(vouch_fy),    'voucher_redeemed_profit': round(v_red_profit,2),
                 'voucher_pending_profit': round(v_pend_profit,2), 'voucher_total_face': round(v_face,2),
                 'vouchers_redeemed': len(redeemed), 'vouchers_pending': len(pending_v),
+                'total_commission': round(total_commission,2),
+                'net_voucher_profit': round(net_voucher_profit,2),
+                'commission_count': len(fy_commission),
             },
             'monthly': monthly_data, 'platforms': platform_data,
             'top_models': top_models, 'months': month_data,
