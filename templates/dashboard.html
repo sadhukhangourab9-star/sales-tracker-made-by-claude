@@ -162,7 +162,7 @@ function renderKPIs(s) {
     { label:'Online Orders',    value:s.online_orders,       sub:s.online_sold+' sold · '+s.online_pending+' pending', icon:'bi-bag-check-fill',         color:C.blue   },
     { label:'Offline Sales',    value:s.offline_sold,        sub:'of '+s.offline_orders+' entries',                   icon:'bi-shop-window',            color:C.amber  },
     { label:'Exchange Orders',  value:s.exchange_count,      sub:fmt(s.exch_total_exch)+' trade-in',                  icon:'bi-arrow-left-right',       color:C.purple },
-    { label:'Voucher Profit',   value:fmt(s.voucher_redeemed_profit), sub:fmt(s.voucher_pending_profit)+' pending',   icon:'bi-ticket-perforated-fill', color:C.green  },
+    { label:'Net Voucher Profit', value:fmt(s.net_voucher_profit), sub:'Gross: '+fmt(s.voucher_redeemed_profit)+' − Commission: '+fmt(s.total_commission), icon:'bi-ticket-perforated-fill', color:C.green  },
   ];
   document.getElementById('kpiRow').innerHTML = kpis.map(k=>`
     <div class="col-md-2 col-sm-4 col-6">
@@ -204,7 +204,8 @@ function renderMonthlyChart(monthly) {
         { label:'Online Profit',  data:monthly.map(m=>m.online_profit),  backgroundColor:C.blue+'CC',   borderRadius:3 },
         { label:'Offline Profit', data:monthly.map(m=>m.offline_profit), backgroundColor:C.amber+'CC',  borderRadius:3 },
         { label:'Voucher Profit', data:monthly.map(m=>m.voucher_profit), backgroundColor:C.green+'CC',  borderRadius:3 },
-        { label:'Total',          data:monthly.map(m=>m.total_profit),   type:'line',
+        { label:'Commission (Pinku)', data:monthly.map(m=>m.commission), backgroundColor:C.red+'99', borderRadius:3 },
+        { label:'Total Net Profit',  data:monthly.map(m=>m.total_profit),   type:'line',
           borderColor:C.text, backgroundColor:'transparent', borderWidth:2,
           pointBackgroundColor:C.text, pointRadius:3, tension:0.3 }
       ]
@@ -315,41 +316,29 @@ function renderBrands(brands) {
 
 function renderVouchers(s) {
   const redRate = s.voucher_count>0 ? ((s.vouchers_redeemed/s.voucher_count)*100).toFixed(0) : 0;
-  document.getElementById('voucherSummary').innerHTML=`
-    <div class="row g-3">
-      <div class="col-md-3 col-6">
-        <div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Total Vouchers</div>
-          <div style="font-size:28px;font-weight:800;color:var(--text);">${s.voucher_count}</div>
-          <div style="font-size:11px;color:var(--muted);">Face value: ${fmt(s.voucher_total_face)}</div>
-        </div>
-      </div>
-      <div class="col-md-3 col-6">
-        <div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Redeemed</div>
-          <div style="font-size:28px;font-weight:800;color:var(--green);">${s.vouchers_redeemed}</div>
-          <div style="font-size:11px;color:var(--green);">Profit: ${fmt(s.voucher_redeemed_profit)}</div>
-        </div>
-      </div>
-      <div class="col-md-3 col-6">
-        <div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Pending</div>
-          <div style="font-size:28px;font-weight:800;color:var(--amber);">${s.vouchers_pending}</div>
-          <div style="font-size:11px;color:var(--amber);">Potential: ${fmt(s.voucher_pending_profit)}</div>
-        </div>
-      </div>
-      <div class="col-md-3 col-6">
-        <div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Redemption Rate</div>
-          <div style="font-size:28px;font-weight:800;color:var(--text);">${redRate}%</div>
-          <div style="height:5px;background:var(--navy3);border-radius:3px;margin-top:8px;">
-            <div style="height:5px;background:linear-gradient(90deg,var(--green),var(--accent2));border-radius:3px;width:${redRate}%;"></div>
-          </div>
-        </div>
-      </div>
-    </div>`;
+  const html = '<div class="row g-3">'
+    + '<div class="col-md-2 col-6"><div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">'
+    + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Total Vouchers</div>'
+    + '<div style="font-size:24px;font-weight:800;color:var(--text);">' + s.voucher_count + '</div>'
+    + '<div style="font-size:11px;color:var(--muted);">Face: ' + fmt(s.voucher_total_face) + '</div></div></div>'
+    + '<div class="col-md-2 col-6"><div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">'
+    + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Redeemed</div>'
+    + '<div style="font-size:24px;font-weight:800;color:var(--green);">' + s.vouchers_redeemed + '</div>'
+    + '<div style="font-size:11px;color:var(--green);">Gross: ' + fmt(s.voucher_redeemed_profit) + '</div></div></div>'
+    + '<div class="col-md-2 col-6"><div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">'
+    + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Pending</div>'
+    + '<div style="font-size:24px;font-weight:800;color:var(--amber);">' + s.vouchers_pending + '</div>'
+    + '<div style="font-size:11px;color:var(--amber);">Potential: ' + fmt(s.voucher_pending_profit) + '</div></div></div>'
+    + '<div class="col-md-3 col-6"><div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;border:1px solid rgba(231,76,60,0.3);">'
+    + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Pinku's Commission</div>'
+    + '<div style="font-size:24px;font-weight:800;color:#E74C3C;">' + fmt(s.total_commission) + '</div>'
+    + '<div style="font-size:11px;color:var(--muted);">' + s.commission_count + ' payout(s) this FY</div></div></div>'
+    + '<div class="col-md-3 col-6"><div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;border:1px solid rgba(46,204,143,0.3);">'
+    + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Net Voucher Profit</div>'
+    + '<div style="font-size:24px;font-weight:800;color:var(--green);">' + fmt(s.net_voucher_profit) + '</div>'
+    + '<div style="font-size:11px;color:var(--muted);">After Pinku's cut</div>'
+    + '<div style="height:5px;background:var(--navy3);border-radius:3px;margin-top:8px;">'
+    + '<div style="height:5px;background:linear-gradient(90deg,var(--green),var(--accent2));border-radius:3px;width:' + redRate + '%;"></div></div>'
+    + '</div></div></div>';
+  document.getElementById('voucherSummary').innerHTML = html;
 }
-
-loadDashboard();
-</script>
-{% endblock %}
