@@ -1422,6 +1422,39 @@ def api_dashboard_data():
         fy_start = f"{fy}-04"
         fy_end   = f"{fy+1}-03"
 
+        # Month name → number map (handles "July", "july", "Jul" etc)
+        MONTH_NAMES = {
+            'january':1,'february':2,'march':3,'april':4,'may':5,'june':6,
+            'july':7,'august':8,'september':9,'october':10,'november':11,'december':12,
+            'jan':1,'feb':2,'mar':3,'apr':4,'jun':6,'jul':7,'aug':8,
+            'sep':9,'oct':10,'nov':11,'dec':12
+        }
+
+        def normalize_month(month_val, created_at=''):
+            """Convert any month format to YYYY-MM string.
+            Handles: '2026-07', 'July', 'july', '2026-07-15 ...', datetime objects.
+            Uses created_at to infer the year when only a month name is given.
+            """
+            if not month_val: return ''
+            s = str(month_val).strip()
+            # Already YYYY-MM or YYYY-MM-DD
+            if len(s) >= 7 and s[4] == '-':
+                return s[:7]
+            # Month name only e.g. 'July', 'April'
+            key = s.lower()[:9]
+            mo_num = MONTH_NAMES.get(key) or MONTH_NAMES.get(key[:3])
+            if mo_num:
+                # Infer year from created_at
+                yr = None
+                try:
+                    ca = str(created_at)
+                    if len(ca) >= 4 and ca[:4].isdigit():
+                        yr = int(ca[:4])
+                except: pass
+                if not yr: yr = today.year
+                return f"{yr}-{mo_num:02d}"
+            return ''
+
         def in_fy(month_str):
             if not month_str: return False
             m = str(month_str)[:7]
@@ -1455,14 +1488,21 @@ def api_dashboard_data():
         # Filter everything to current FY
         # Online orders use sale_month field
         def fy_online(orders):
-            # Use sale_month if set, fall back to created_at for legacy data
             result = []
             for o in orders:
-                m = o.get('sale_month','') or str(o.get('created_at',''))[:7]
+                raw = o.get('sale_month','') or ''
+                m   = normalize_month(raw, o.get('created_at',''))
+                # Fallback to created_at if sale_month is blank
+                if not m:
+                    m = str(o.get('created_at',''))[:7]
                 if in_fy(m): result.append(o)
             return result
         def fy_offline(orders):
-            return [o for o in orders if in_fy(o.get('sale_month',''))]
+            result = []
+            for o in orders:
+                m = normalize_month(o.get('sale_month',''), o.get('created_at',''))
+                if in_fy(m): result.append(o)
+            return result
         def fy_voucher(vouchers):
             return [v for v in vouchers if in_fy(v.get('month',''))]
         def fy_exchange(orders):
@@ -1517,13 +1557,14 @@ def api_dashboard_data():
         monthly = {m: {'online_revenue':0,'online_profit':0,'offline_revenue':0,'offline_profit':0,'voucher_profit':0} for m in fy_months}
 
         for o in online_sold:
-            m = str(o.get('sale_month',''))[:7]
+            m = normalize_month(o.get('sale_month',''), o.get('created_at',''))
+            if not m: m = str(o.get('created_at',''))[:7]
             if m in monthly:
                 monthly[m]['online_revenue'] += sf(o.get('selling_price'))
                 monthly[m]['online_profit']  += sf(o.get('profit'))
 
         for o in off_sold:
-            m = str(o.get('sale_month',''))[:7]
+            m = normalize_month(o.get('sale_month',''), o.get('created_at',''))
             if m in monthly:
                 monthly[m]['offline_revenue'] += sf(o.get('selling_price'))
                 monthly[m]['offline_profit']  += sf(o.get('profit'))
@@ -1561,7 +1602,8 @@ def api_dashboard_data():
         # ── Sale Month summary (online, grouped by month) ──
         month_map = defaultdict(lambda: {'count':0,'sold':0,'profit':0,'pending':0})
         for o in online_all:
-            m = str(o.get('sale_month',''))[:7] or 'Unknown'
+            m = normalize_month(o.get('sale_month',''), o.get('created_at',''))
+            if not m: m = str(o.get('created_at',''))[:7] or 'Unknown'
             month_map[m]['count']+=1
             if is_sold(o): month_map[m]['sold']+=1; month_map[m]['profit']+=sf(o.get('profit'))
             else: month_map[m]['pending']+=1
@@ -1586,11 +1628,11 @@ def api_dashboard_data():
         # ── Available FYs — also check old sale_batch/created_at as fallback ──
         all_months = set()
         for o in main_orders+sec_orders+jiomart_orders:
-            # Try sale_month first, fall back to created_at
-            m = str(o.get('sale_month','') or o.get('created_at',''))[:7]
+            m = normalize_month(o.get('sale_month',''), o.get('created_at',''))
+            if not m: m = str(o.get('created_at',''))[:7]
             if len(m)==7 and m[4]=='-': all_months.add(m)
         for o in offline_orders:
-            m = str(o.get('sale_month',''))[:7]
+            m = normalize_month(o.get('sale_month',''), o.get('created_at',''))
             if len(m)==7 and m[4]=='-': all_months.add(m)
         fy_set = set()
         for m in all_months:
