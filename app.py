@@ -1385,25 +1385,45 @@ def api_dashboard_data():
     if not SHEET: return jsonify({'error': 'No sheet connected'})
     try:
         def safe_records(tab):
-            """Read a sheet tab safely — always returns a list of dicts, never raises."""
+            """Read a sheet tab safely. Handles None headers, duplicate headers,
+            trailing empty columns. Never raises — always returns list of dicts."""
             try:
-                rows = SHEET.worksheet(tab).get_all_records()
-                return rows if rows else []
-            except Exception:
-                pass
+                ws_tab = SHEET.worksheet(tab)
+                all_vals = ws_tab.get_all_values()
+            except Exception as e:
+                print(f"safe_records({tab}) worksheet error: {e}")
+                return []
             try:
-                all_vals = SHEET.worksheet(tab).get_all_values()
-                if not all_vals or len(all_vals) < 2: return []
-                headers = all_vals[0]
-                # Strip empty trailing headers
-                while headers and not headers[-1]: headers.pop()
+                if not all_vals or len(all_vals) < 2:
+                    return []
+                raw_headers = all_vals[0]
+                # Build clean headers: strip trailing empty/None, deduplicate
+                headers = []
+                seen = {}
+                for h in raw_headers:
+                    h = str(h).strip() if h not in (None, '', 'None') else None
+                    if h is None:
+                        # Stop at first None — trailing empty columns
+                        break
+                    if h in seen:
+                        seen[h] += 1
+                        h = f"{h}_{seen[h]}"
+                    else:
+                        seen[h] = 0
+                    headers.append(h)
+                if not headers:
+                    return []
                 records = []
                 for row in all_vals[1:]:
                     padded = list(row) + [''] * max(0, len(headers) - len(row))
-                    records.append(dict(zip(headers, padded[:len(headers)])))
+                    rec = {}
+                    for i, h in enumerate(headers):
+                        v = padded[i]
+                        rec[h] = v if v not in (None,) else ''
+                    records.append(rec)
                 return records
             except Exception as e2:
-                print(f"Dashboard safe_records({tab}) fallback failed: {e2}")
+                print(f"safe_records({tab}) parse failed: {e2}")
                 return []
 
         def sf(v):
