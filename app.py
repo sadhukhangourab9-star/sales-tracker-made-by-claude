@@ -1627,7 +1627,7 @@ def api_dashboard_data():
             month_map[m]['count']+=1
             if is_sold(o): month_map[m]['sold']+=1; month_map[m]['profit']+=sf(o.get('profit'))
             else: month_map[m]['pending']+=1
-        month_data = sorted([{'month':k,'count':v['count'],'sold':v['sold'],'pending':v['pending'],'profit':round(v['profit'],2)} for k,v in month_map.items()],key=lambda x:-x.get('month',''))[:12]
+        month_data = sorted([{'month':k,'count':v['count'],'sold':v['sold'],'pending':v['pending'],'profit':round(v['profit'],2)} for k,v in month_map.items()],key=lambda x:x.get('month',''),reverse=True)[:12]
 
         # ── Offline brand breakdown ──
         brand_map = defaultdict(lambda: {'count':0,'profit':0,'revenue':0})
