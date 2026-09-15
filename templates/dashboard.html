@@ -6,7 +6,7 @@
 <div class="page-header">
   <div>
     <div class="page-title">Dashboard</div>
-    <div class="page-subtitle" id="fyLabel">Loading financial year data...</div>
+    <div class="page-subtitle" id="fyLabel">Loading...</div>
   </div>
   <div style="display:flex;gap:10px;align-items:center;">
     <select id="fySelect" class="form-select" style="width:160px;" onchange="loadDashboard()">
@@ -24,18 +24,12 @@
 </div>
 
 <div id="dashContent" style="display:none;">
-
-  <!-- ── KPI Row ── -->
   <div class="row g-3 mb-4" id="kpiRow"></div>
-
-  <!-- ── Channel Cards ── -->
   <div class="row g-3 mb-4" id="channelRow"></div>
-
-  <!-- ── Monthly chart + Channel donut ── -->
   <div class="row g-3 mb-4">
     <div class="col-lg-8">
       <div class="card-panel" style="height:100%;">
-        <div class="card-panel-title"><i class="bi bi-bar-chart-fill"></i> Monthly Profit — Full Financial Year (Apr → Mar)</div>
+        <div class="card-panel-title"><i class="bi bi-bar-chart-fill"></i> Monthly Profit — Full Financial Year (Apr to Mar)</div>
         <canvas id="monthlyChart" height="120"></canvas>
       </div>
     </div>
@@ -47,8 +41,6 @@
       </div>
     </div>
   </div>
-
-  <!-- ── Top Models + Platform ── -->
   <div class="row g-3 mb-4">
     <div class="col-lg-6">
       <div class="card-panel">
@@ -63,8 +55,6 @@
       </div>
     </div>
   </div>
-
-  <!-- ── Sale Month + Offline Brands ── -->
   <div class="row g-3 mb-4">
     <div class="col-lg-7">
       <div class="card-panel">
@@ -79,8 +69,6 @@
       </div>
     </div>
   </div>
-
-  <!-- ── Voucher Summary ── -->
   <div class="row g-3 mb-4">
     <div class="col-12">
       <div class="card-panel" style="border-top:3px solid var(--green);">
@@ -89,52 +77,48 @@
       </div>
     </div>
   </div>
-
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
-let monthlyChartInst = null, channelChartInst = null;
-const C = { green:'#2ECC8F', blue:'#3B9DDD', amber:'#F5A623', red:'#E74C3C', purple:'#9B59B6', teal:'#1ABC9C', muted:'#6B7A99', text:'#E8EDF5' };
-const CH_COLORS = [C.blue, C.amber, C.purple, C.green, C.teal];
+var monthlyChartInst = null, channelChartInst = null;
+var C = { green:'#2ECC8F', blue:'#3B9DDD', amber:'#F5A623', red:'#E74C3C', purple:'#9B59B6', teal:'#1ABC9C', muted:'#6B7A99', text:'#E8EDF5' };
+var CH = [C.blue, C.amber, C.purple, C.green, C.teal];
 
 function fmt(n) {
   n = parseFloat(n)||0;
-  if (Math.abs(n)>=100000) return '₹'+(n/100000).toFixed(1)+'L';
-  if (Math.abs(n)>=1000)   return '₹'+(n/1000).toFixed(1)+'K';
-  return '₹'+n.toLocaleString('en-IN');
+  if (Math.abs(n)>=100000) return '\u20b9'+(n/100000).toFixed(1)+'L';
+  if (Math.abs(n)>=1000)   return '\u20b9'+(n/1000).toFixed(1)+'K';
+  return '\u20b9'+n.toLocaleString('en-IN');
 }
-function fmtFull(n) { return '₹'+(parseFloat(n)||0).toLocaleString('en-IN'); }
+function fmtFull(n) { return '\u20b9'+(parseFloat(n)||0).toLocaleString('en-IN'); }
 function mLabel(m) {
-  if (!m || m==='Unknown') return m||'—';
+  if (!m || m==='Unknown') return m||'';
   try { return new Date(m+'-02').toLocaleString('en-IN',{month:'short',year:'2-digit'}); }
-  catch { return m; }
+  catch(e) { return m; }
 }
 
 async function loadDashboard() {
   document.getElementById('loadingState').style.display = 'block';
   document.getElementById('dashContent').style.display  = 'none';
   document.getElementById('refreshBtn').innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-
-  const fy = document.getElementById('fySelect').value;
+  var fy = document.getElementById('fySelect').value;
   try {
-    const d = await api('/api/dashboard-data' + (fy ? `?fy=${fy}` : ''));
-    if (d.error) throw new Error(d.error);
+    var d = await api('/api/dashboard-data' + (fy ? ('?fy='+fy) : ''));
+    if (d.error) { document.getElementById('loadingState').innerHTML = '<p style="color:var(--red);">Error: '+d.error+'</p>'; return; }
 
-    // Populate FY selector
-    const sel = document.getElementById('fySelect');
-    const cur  = sel.value || String(d.fy);
+    var sel = document.getElementById('fySelect');
+    var fys = d.available_fys && d.available_fys.length ? d.available_fys : [d.fy];
     sel.innerHTML = '';
-    (d.available_fys.length ? d.available_fys : [d.fy]).forEach(y => {
-      const opt = document.createElement('option');
-      opt.value = y; opt.textContent = `FY ${y}-${String(y+1).slice(2)}`;
-      if (String(y) === String(d.fy)) opt.selected = true;
+    fys.forEach(function(y) {
+      var opt = document.createElement('option');
+      opt.value = y; opt.textContent = 'FY '+y+'-'+String(y+1).slice(2);
+      if (String(y)===String(d.fy)) opt.selected = true;
       sel.appendChild(opt);
     });
-    document.getElementById('fyLabel').textContent =
-      `${d.fy_label} — Apr ${d.fy} to Mar ${d.fy+1}`;
+    document.getElementById('fyLabel').textContent = d.fy_label+' \u2014 Apr '+d.fy+' to Mar '+(d.fy+1);
 
     renderKPIs(d.summary);
     renderChannels(d.channels);
@@ -149,64 +133,62 @@ async function loadDashboard() {
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('dashContent').style.display  = 'block';
   } catch(e) {
-    document.getElementById('loadingState').innerHTML = `<p style="color:var(--red);">⚠️ ${e.message}</p>`;
+    document.getElementById('loadingState').innerHTML = '<p style="color:var(--red);">\u26a0\ufe0f '+e.message+'</p>';
   }
   document.getElementById('refreshBtn').innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh';
 }
 
 function renderKPIs(s) {
-  const margin = s.grand_revenue > 0 ? ((s.grand_profit/s.grand_revenue)*100).toFixed(1) : 0;
-  const kpis = [
-    { label:'Total Revenue',    value:fmt(s.grand_revenue),  sub:fmtFull(s.grand_revenue)+' overall',                 icon:'bi-currency-rupee',        color:C.blue   },
-    { label:'Total Profit',     value:fmt(s.grand_profit),   sub:margin+'% net margin',                               icon:'bi-graph-up-arrow',         color:C.green  },
-    { label:'Online Orders',    value:s.online_orders,       sub:s.online_sold+' sold · '+s.online_pending+' pending', icon:'bi-bag-check-fill',         color:C.blue   },
-    { label:'Offline Sales',    value:s.offline_sold,        sub:'of '+s.offline_orders+' entries',                   icon:'bi-shop-window',            color:C.amber  },
-    { label:'Exchange Orders',  value:s.exchange_count,      sub:fmt(s.exch_total_exch)+' trade-in',                  icon:'bi-arrow-left-right',       color:C.purple },
-    { label:'Net Voucher Profit', value:fmt(s.net_voucher_profit), sub:'Gross: '+fmt(s.voucher_redeemed_profit)+' − Commission: '+fmt(s.total_commission), icon:'bi-ticket-perforated-fill', color:C.green  },
+  var margin = s.grand_revenue > 0 ? ((s.grand_profit/s.grand_revenue)*100).toFixed(1) : 0;
+  var kpis = [
+    { label:'Total Revenue',      value:fmt(s.grand_revenue),         sub:fmtFull(s.grand_revenue)+' overall',                          icon:'bi-currency-rupee',        color:C.blue   },
+    { label:'Total Profit',       value:fmt(s.grand_profit),          sub:margin+'% net margin',                                         icon:'bi-graph-up-arrow',        color:C.green  },
+    { label:'Online Orders',      value:s.online_orders,              sub:s.online_sold+' sold \u00b7 '+s.online_pending+' pending',     icon:'bi-bag-check-fill',        color:C.blue   },
+    { label:'Offline Sales',      value:s.offline_sold,               sub:'of '+s.offline_orders+' entries',                             icon:'bi-shop-window',           color:C.amber  },
+    { label:'Exchange Orders',    value:s.exchange_count,             sub:fmt(s.exch_total_exch)+' trade-in',                            icon:'bi-arrow-left-right',      color:C.purple },
+    { label:'Net Voucher Profit', value:fmt(s.net_voucher_profit),    sub:'Gross '+fmt(s.voucher_redeemed_profit)+' \u2212 commission',  icon:'bi-ticket-perforated-fill',color:C.green  }
   ];
-  document.getElementById('kpiRow').innerHTML = kpis.map(k=>`
-    <div class="col-md-2 col-sm-4 col-6">
-      <div class="card-panel" style="padding:16px;border-top:3px solid ${k.color};">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">${k.label}</div>
-          <i class="bi ${k.icon}" style="color:${k.color};font-size:15px;opacity:0.7;"></i>
-        </div>
-        <div style="font-size:24px;font-weight:800;color:${k.color};margin:8px 0 4px;">${k.value}</div>
-        <div style="font-size:11px;color:var(--muted);">${k.sub}</div>
-      </div>
-    </div>`).join('');
+  document.getElementById('kpiRow').innerHTML = kpis.map(function(k) {
+    return '<div class="col-md-2 col-sm-4 col-6">'
+      +'<div class="card-panel" style="padding:16px;border-top:3px solid '+k.color+';">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+      +'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">'+k.label+'</div>'
+      +'<i class="bi '+k.icon+'" style="color:'+k.color+';font-size:15px;opacity:0.7;"></i></div>'
+      +'<div style="font-size:24px;font-weight:800;color:'+k.color+';margin:8px 0 4px;">'+k.value+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);">'+k.sub+'</div>'
+      +'</div></div>';
+  }).join('');
 }
 
 function renderChannels(channels) {
-  document.getElementById('channelRow').innerHTML = channels.map((c,i)=>{
-    const col = CH_COLORS[i%CH_COLORS.length];
-    const rate = c.count > 0 ? ((c.sold/c.count)*100).toFixed(0) : 0;
-    return `<div class="col">
-      <div class="card-panel" style="padding:14px;border-left:4px solid ${col};">
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">${c.channel}</div>
-        <div style="font-size:22px;font-weight:800;color:${col};margin:6px 0 2px;">${c.count}</div>
-        <div style="font-size:12px;color:var(--muted);">${c.sold} sold · ${rate}%</div>
-        <div style="font-size:13px;color:var(--green);font-weight:600;margin-top:4px;">${c.profit>0?fmt(c.profit)+' profit':'—'}</div>
-      </div>
-    </div>`;
+  document.getElementById('channelRow').innerHTML = channels.map(function(c,i) {
+    var col = CH[i%CH.length];
+    var rate = c.count>0 ? ((c.sold/c.count)*100).toFixed(0) : 0;
+    return '<div class="col">'
+      +'<div class="card-panel" style="padding:14px;border-left:4px solid '+col+';">'
+      +'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">'+c.channel+'</div>'
+      +'<div style="font-size:22px;font-weight:800;color:'+col+';margin:6px 0 2px;">'+c.count+'</div>'
+      +'<div style="font-size:12px;color:var(--muted);">'+c.sold+' sold \u00b7 '+rate+'%</div>'
+      +'<div style="font-size:13px;color:var(--green);font-weight:600;margin-top:4px;">'+(c.profit>0?fmt(c.profit)+' profit':'&mdash;')+'</div>'
+      +'</div></div>';
   }).join('');
 }
 
 function renderMonthlyChart(monthly) {
   if (monthlyChartInst) { monthlyChartInst.destroy(); monthlyChartInst=null; }
-  const ctx = document.getElementById('monthlyChart').getContext('2d');
-  const labels = monthly.map(m=>mLabel(m.month));
+  var ctx = document.getElementById('monthlyChart').getContext('2d');
+  var labels = monthly.map(function(m){ return mLabel(m.month); });
   monthlyChartInst = new Chart(ctx, {
     type:'bar',
     data:{
-      labels,
+      labels:labels,
       datasets:[
-        { label:'Online Profit',  data:monthly.map(m=>m.online_profit),  backgroundColor:C.blue+'CC',   borderRadius:3 },
-        { label:'Offline Profit', data:monthly.map(m=>m.offline_profit), backgroundColor:C.amber+'CC',  borderRadius:3 },
-        { label:'Voucher Profit', data:monthly.map(m=>m.voucher_profit), backgroundColor:C.green+'CC',  borderRadius:3 },
-        { label:'Commission (Pinku)', data:monthly.map(m=>m.commission), backgroundColor:C.red+'99', borderRadius:3 },
-        { label:'Total Net Profit',  data:monthly.map(m=>m.total_profit),   type:'line',
-          borderColor:C.text, backgroundColor:'transparent', borderWidth:2,
+        { label:'Online Profit',     data:monthly.map(function(m){return m.online_profit;}),  backgroundColor:C.blue+'CC',  borderRadius:3 },
+        { label:'Offline Profit',    data:monthly.map(function(m){return m.offline_profit;}), backgroundColor:C.amber+'CC', borderRadius:3 },
+        { label:'Voucher Profit',    data:monthly.map(function(m){return m.voucher_profit;}), backgroundColor:C.green+'CC', borderRadius:3 },
+        { label:'Commission Pinku',  data:monthly.map(function(m){return m.commission;}),     backgroundColor:C.red+'99',   borderRadius:3 },
+        { label:'Total Net Profit',  data:monthly.map(function(m){return m.total_profit;}),
+          type:'line', borderColor:C.text, backgroundColor:'transparent', borderWidth:2,
           pointBackgroundColor:C.text, pointRadius:3, tension:0.3 }
       ]
     },
@@ -214,11 +196,11 @@ function renderMonthlyChart(monthly) {
       responsive:true,
       plugins:{
         legend:{labels:{color:C.muted,font:{size:11}}},
-        tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ₹${(c.raw||0).toLocaleString('en-IN')}`}}
+        tooltip:{callbacks:{label:function(c){ return ' '+c.dataset.label+': \u20b9'+(c.raw||0).toLocaleString('en-IN'); }}}
       },
       scales:{
         x:{ticks:{color:C.muted},grid:{color:'rgba(255,255,255,0.03)'}},
-        y:{ticks:{color:C.muted,callback:v=>fmt(v)},grid:{color:'rgba(255,255,255,0.05)'}}
+        y:{ticks:{color:C.muted,callback:function(v){return fmt(v);}},grid:{color:'rgba(255,255,255,0.05)'}}
       }
     }
   });
@@ -226,119 +208,116 @@ function renderMonthlyChart(monthly) {
 
 function renderChannelChart(channels) {
   if (channelChartInst) { channelChartInst.destroy(); channelChartInst=null; }
-  const wp = channels.filter(c=>c.profit>0);
+  var wp = channels.filter(function(c){return c.profit>0;});
   if (!wp.length) return;
-  const ctx = document.getElementById('channelChart').getContext('2d');
+  var ctx = document.getElementById('channelChart').getContext('2d');
   channelChartInst = new Chart(ctx, {
     type:'doughnut',
-    data:{ labels:wp.map(c=>c.channel),
-      datasets:[{ data:wp.map(c=>c.profit), backgroundColor:CH_COLORS.slice(0,wp.length), borderWidth:2, borderColor:'#0F1E30' }]
+    data:{ labels:wp.map(function(c){return c.channel;}),
+      datasets:[{ data:wp.map(function(c){return c.profit;}), backgroundColor:CH.slice(0,wp.length), borderWidth:2, borderColor:'#0F1E30' }]
     },
     options:{ responsive:true, cutout:'65%',
-      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.label}: ₹${(c.raw||0).toLocaleString('en-IN')}`}} }
+      plugins:{ legend:{display:false},
+        tooltip:{callbacks:{label:function(c){ return ' '+c.label+': \u20b9'+(c.raw||0).toLocaleString('en-IN'); }}}
+      }
     }
   });
-  document.getElementById('channelLegend').innerHTML = wp.map((c,i)=>`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px;">
-      <span style="display:flex;align-items:center;gap:6px;">
-        <span style="width:9px;height:9px;border-radius:50%;background:${CH_COLORS[i]};display:inline-block;"></span>
-        <span style="color:var(--muted);">${c.channel}</span>
-      </span>
-      <span style="color:var(--text);font-weight:600;">${fmt(c.profit)}</span>
-    </div>`).join('');
+  document.getElementById('channelLegend').innerHTML = wp.map(function(c,i) {
+    return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px;">'
+      +'<span style="display:flex;align-items:center;gap:6px;">'
+      +'<span style="width:9px;height:9px;border-radius:50%;background:'+CH[i]+';display:inline-block;"></span>'
+      +'<span style="color:var(--muted);">'+c.channel+'</span></span>'
+      +'<span style="color:var(--text);font-weight:600;">'+fmt(c.profit)+'</span></div>';
+  }).join('');
+}
+
+function simpleTable(el, headers, rows) {
+  if (!rows || !rows.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
+  var th = headers.map(function(h){ return '<th>'+h+'</th>'; }).join('');
+  var tr = rows.map(function(cells) {
+    return '<tr>'+cells.map(function(c){ return '<td>'+c+'</td>'; }).join('')+'</tr>';
+  }).join('');
+  el.innerHTML='<div class="data-table-wrap"><table class="data-table"><thead><tr>'+th+'</tr></thead><tbody>'+tr+'</tbody></table></div>';
 }
 
 function renderTopModels(models) {
-  const el = document.getElementById('topModelsTable');
-  if (!models.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
-  const max = Math.max(...models.map(m=>m.count));
-  el.innerHTML=`<div class="data-table-wrap"><table class="data-table">
-    <thead><tr><th>Model</th><th>Units</th><th>Revenue</th><th>Profit</th></tr></thead>
-    <tbody>${models.map(m=>`<tr>
-      <td>
-        <div style="font-weight:500;font-size:13px;">${m.model}</div>
-        <div style="height:3px;background:var(--navy3);border-radius:2px;margin-top:4px;">
-          <div style="height:3px;background:var(--accent2);border-radius:2px;width:${(m.count/max*100).toFixed(0)}%;"></div>
-        </div>
-      </td>
-      <td style="color:var(--accent2);font-weight:700;">${m.count}</td>
-      <td style="color:var(--muted);">${fmt(m.revenue)}</td>
-      <td style="color:var(--green);font-weight:600;">${fmt(m.profit)}</td>
-    </tr>`).join('')}</tbody>
-  </table></div>`;
+  var el = document.getElementById('topModelsTable');
+  if (!models || !models.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
+  var max = Math.max.apply(null, models.map(function(m){return m.count;}));
+  var rows = models.map(function(m) {
+    var bar = '<div style="font-weight:500;font-size:13px;">'+m.model+'</div>'
+      +'<div style="height:3px;background:var(--navy3);border-radius:2px;margin-top:4px;">'
+      +'<div style="height:3px;background:var(--accent2);border-radius:2px;width:'+((m.count/max)*100).toFixed(0)+'%;"></div></div>';
+    return [bar,'<span style="color:var(--accent2);font-weight:700;">'+m.count+'</span>',
+      '<span style="color:var(--muted);">'+fmt(m.revenue)+'</span>',
+      '<span style="color:var(--green);font-weight:600;">'+fmt(m.profit)+'</span>'];
+  });
+  simpleTable(el, ['Model','Units','Revenue','Profit'], rows);
 }
 
 function renderPlatforms(platforms) {
-  const el = document.getElementById('platformTable');
-  if (!platforms.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
-  el.innerHTML=`<div class="data-table-wrap"><table class="data-table">
-    <thead><tr><th>Platform</th><th>Orders</th><th>Revenue</th><th>Profit</th></tr></thead>
-    <tbody>${platforms.map(p=>`<tr>
-      <td style="font-weight:500;">${p.platform}</td>
-      <td style="color:var(--muted);">${p.count}</td>
-      <td style="color:var(--muted);">${fmt(p.revenue)}</td>
-      <td style="color:var(--green);font-weight:600;">${fmt(p.profit)}</td>
-    </tr>`).join('')}</tbody>
-  </table></div>`;
+  var el = document.getElementById('platformTable');
+  if (!platforms || !platforms.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
+  var rows = platforms.map(function(p) {
+    return [p.platform, p.count,
+      '<span style="color:var(--muted);">'+fmt(p.revenue)+'</span>',
+      '<span style="color:var(--green);font-weight:600;">'+fmt(p.profit)+'</span>'];
+  });
+  simpleTable(el, ['Platform','Orders','Revenue','Profit'], rows);
 }
 
 function renderMonthTable(months) {
-  const el = document.getElementById('monthTable');
-  if (!months.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
-  el.innerHTML=`<div class="data-table-wrap"><table class="data-table">
-    <thead><tr><th>Sale Month</th><th>Total</th><th>Sold</th><th>Pending</th><th>Profit</th></tr></thead>
-    <tbody>${months.map(m=>{
-      const pendCol = m.pending>0 ? 'var(--amber)' : 'var(--muted)';
-      return `<tr>
-        <td style="font-weight:500;">${mLabel(m.month)}</td>
-        <td style="color:var(--muted);">${m.count}</td>
-        <td style="color:var(--green);">${m.sold}</td>
-        <td style="color:${pendCol};font-weight:${m.pending>0?'700':'400'};">${m.pending}</td>
-        <td style="color:var(--green);font-weight:600;">${m.profit>0?fmt(m.profit):'—'}</td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table></div>`;
+  var el = document.getElementById('monthTable');
+  if (!months || !months.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No data</p>'; return; }
+  var rows = months.map(function(m) {
+    var pc = m.pending>0 ? 'color:var(--amber);font-weight:700;' : 'color:var(--muted);';
+    return [mLabel(m.month), m.count,
+      '<span style="color:var(--green);">'+m.sold+'</span>',
+      '<span style="'+pc+'">'+m.pending+'</span>',
+      '<span style="color:var(--green);font-weight:600;">'+(m.profit>0?fmt(m.profit):'&mdash;')+'</span>'];
+  });
+  simpleTable(el, ['Sale Month','Total','Sold','Pending','Profit'], rows);
 }
 
 function renderBrands(brands) {
-  const el = document.getElementById('brandTable');
-  if (!brands.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No offline data</p>'; return; }
-  el.innerHTML=`<div class="data-table-wrap"><table class="data-table">
-    <thead><tr><th>Brand</th><th>Units</th><th>Revenue</th><th>Profit</th></tr></thead>
-    <tbody>${brands.map(b=>`<tr>
-      <td style="font-weight:500;color:var(--amber);">${b.brand}</td>
-      <td style="color:var(--muted);">${b.count}</td>
-      <td style="color:var(--muted);">${fmt(b.revenue)}</td>
-      <td style="color:var(--green);font-weight:600;">${fmt(b.profit)}</td>
-    </tr>`).join('')}</tbody>
-  </table></div>`;
+  var el = document.getElementById('brandTable');
+  if (!brands || !brands.length) { el.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px;">No offline data</p>'; return; }
+  var rows = brands.map(function(b) {
+    return ['<span style="color:var(--amber);font-weight:500;">'+b.brand+'</span>', b.count,
+      '<span style="color:var(--muted);">'+fmt(b.revenue)+'</span>',
+      '<span style="color:var(--green);font-weight:600;">'+fmt(b.profit)+'</span>'];
+  });
+  simpleTable(el, ['Brand','Units','Revenue','Profit'], rows);
 }
 
 function renderVouchers(s) {
-  const redRate = s.voucher_count>0 ? ((s.vouchers_redeemed/s.voucher_count)*100).toFixed(0) : 0;
-  const html = '<div class="row g-3">'
-    + '<div class="col-md-2 col-6"><div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">'
-    + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Total Vouchers</div>'
-    + '<div style="font-size:24px;font-weight:800;color:var(--text);">' + s.voucher_count + '</div>'
-    + '<div style="font-size:11px;color:var(--muted);">Face: ' + fmt(s.voucher_total_face) + '</div></div></div>'
-    + '<div class="col-md-2 col-6"><div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">'
-    + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Redeemed</div>'
-    + '<div style="font-size:24px;font-weight:800;color:var(--green);">' + s.vouchers_redeemed + '</div>'
-    + '<div style="font-size:11px;color:var(--green);">Gross: ' + fmt(s.voucher_redeemed_profit) + '</div></div></div>'
-    + '<div class="col-md-2 col-6"><div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;">'
-    + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Pending</div>'
-    + '<div style="font-size:24px;font-weight:800;color:var(--amber);">' + s.vouchers_pending + '</div>'
-    + '<div style="font-size:11px;color:var(--amber);">Potential: ' + fmt(s.voucher_pending_profit) + '</div></div></div>'
-    + '<div class="col-md-3 col-6"><div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;border:1px solid rgba(231,76,60,0.3);">'
-    + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Pinku's Commission</div>'
-    + '<div style="font-size:24px;font-weight:800;color:#E74C3C;">' + fmt(s.total_commission) + '</div>'
-    + '<div style="font-size:11px;color:var(--muted);">' + s.commission_count + ' payout(s) this FY</div></div></div>'
-    + '<div class="col-md-3 col-6"><div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;border:1px solid rgba(46,204,143,0.3);">'
-    + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Net Voucher Profit</div>'
-    + '<div style="font-size:24px;font-weight:800;color:var(--green);">' + fmt(s.net_voucher_profit) + '</div>'
-    + '<div style="font-size:11px;color:var(--muted);">After Pinku's cut</div>'
-    + '<div style="height:5px;background:var(--navy3);border-radius:3px;margin-top:8px;">'
-    + '<div style="height:5px;background:linear-gradient(90deg,var(--green),var(--accent2));border-radius:3px;width:' + redRate + '%;"></div></div>'
-    + '</div></div></div>';
+  var redRate = s.voucher_count>0 ? Math.round((s.vouchers_redeemed/s.voucher_count)*100) : 0;
+  var cards = [
+    { label:'Total Vouchers',     value:s.voucher_count,              sub:'Face: '+fmt(s.voucher_total_face),            color:'var(--text)',    border:'' },
+    { label:'Redeemed',           value:s.vouchers_redeemed,          sub:'Gross: '+fmt(s.voucher_redeemed_profit),      color:'var(--green)',   border:'' },
+    { label:'Pending',            value:s.vouchers_pending,           sub:'Potential: '+fmt(s.voucher_pending_profit),   color:'var(--amber)',   border:'' },
+    { label:'Pinku Commission',   value:fmt(s.total_commission),      sub:s.commission_count+' payout(s) this FY',      color:'#E74C3C',        border:'border:1px solid rgba(231,76,60,0.3);' },
+    { label:'Net Voucher Profit', value:fmt(s.net_voucher_profit),    sub:'After commission',                            color:'var(--green)',   border:'border:1px solid rgba(46,204,143,0.3);' }
+  ];
+  var html = '<div class="row g-3">';
+  cards.forEach(function(c) {
+    html += '<div class="col"><div style="background:var(--navy);border-radius:10px;padding:14px;text-align:center;'+c.border+'">'
+      +'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">'+c.label+'</div>'
+      +'<div style="font-size:22px;font-weight:800;color:'+c.color+';">'+c.value+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:4px;">'+c.sub+'</div>'
+      +'</div></div>';
+  });
+  // Progress bar
+  html += '<div class="col-12"><div style="display:flex;align-items:center;gap:12px;padding:4px 0;">'
+    +'<span style="font-size:11px;color:var(--muted);white-space:nowrap;">Redemption rate</span>'
+    +'<div style="flex:1;height:6px;background:var(--navy3);border-radius:3px;">'
+    +'<div style="height:6px;background:linear-gradient(90deg,var(--green),var(--accent2));border-radius:3px;width:'+redRate+'%;"></div></div>'
+    +'<span style="font-size:12px;font-weight:700;color:var(--text);">'+redRate+'%</span>'
+    +'</div></div>';
+  html += '</div>';
   document.getElementById('voucherSummary').innerHTML = html;
 }
+
+loadDashboard();
+</script>
+{% endblock %}
