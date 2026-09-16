@@ -52,6 +52,25 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
+def safe_get_records(ws):
+    """Read worksheet records safely - handles None/duplicate headers, never raises."""
+    try: all_vals = ws.get_all_values()
+    except Exception as e: print(f"safe_get_records: {e}"); return []
+    if not all_vals or len(all_vals) < 2: return []
+    headers = []; seen = {}
+    for h in all_vals[0]:
+        h = str(h).strip() if h not in (None, '', 'None') else None
+        if h is None: break
+        if h in seen: seen[h] += 1; h = f"{h}_{seen[h]}"
+        else: seen[h] = 0
+        headers.append(h)
+    if not headers: return []
+    out = []
+    for row in all_vals[1:]:
+        padded = list(row) + [''] * max(0, len(headers) - len(row))
+        out.append({h: (padded[i] if padded[i] is not None else '') for i, h in enumerate(headers)})
+    return out
+
 def _safe_int(val, default=-1):
     """Safely cast a value to int — handles strings, floats, and None from gspread."""
     try:
@@ -87,8 +106,7 @@ def manage_cards():
     if request.method == 'GET':
         cached = cache_get('cards')
         if cached: return jsonify(cached)
-        try: cards = ws.get_all_records()
-        except: cards = []
+        cards = safe_get_records(ws)
         for c in cards:
             if str(c.get('last_digits', '')).startswith("'"): c['last_digits'] = str(c['last_digits'])[1:]
         result = list(reversed(cards)); cache_set('cards', result); return jsonify(result)
@@ -113,8 +131,7 @@ def card_lookup():
     if digits.startswith("'"): digits = digits[1:]
     if not SHEET: return jsonify({'found': False})
     ws = SHEET.worksheet('cards')
-    try: records = ws.get_all_records()
-    except: records = []
+    records = safe_get_records(ws)
     for row in records:
         db = str(row.get('last_digits', ''))
         if db.startswith("'"): db = db[1:]
@@ -127,8 +144,7 @@ def handle_master_table(table_name, req, field_name='name'):
     if req.method == 'GET':
         cached = cache_get(f'master_{table_name}')
         if cached: return jsonify(cached)
-        try: result = ws.get_all_records()
-        except: result = []
+        result = safe_get_records(ws)
         cache_set(f'master_{table_name}', result); return jsonify(result)
     data = req.json; new_id = get_next_id(ws)
     ws.append_row([new_id, data.get(field_name, '')])
@@ -185,8 +201,7 @@ def api_vouchers():
     if request.method == 'GET':
         cached = cache_get('master_vouchers')
         if cached: return jsonify(cached)
-        try: result = ws.get_all_records()
-        except: result = []
+        result = safe_get_records(ws)
         cache_set('master_vouchers', result); return jsonify(result)
     data = request.json; new_id = get_next_id(ws)
     ws.append_row([new_id, data.get('name', ''), safe_float(data.get('value', 0))])
@@ -201,8 +216,7 @@ def platform_names():
     if not SHEET: return jsonify([])
     cached = cache_get('platform_names')
     if cached: return jsonify(cached)
-    try: records = SHEET.worksheet('platforms').get_all_records()
-    except: records = []
+    records = safe_get_records(SHEET.worksheet('platforms'))
     result = sorted(list(set([r['platform_name'] for r in records if r.get('platform_name')])))
     cache_set('platform_names', result); return jsonify(result)
 
@@ -215,11 +229,9 @@ def api_variants():
         cache_key = f'variants_{model_name}' if model_name else 'variants_all'
         cached = cache_get(cache_key)
         if cached: return jsonify(cached)
-        try: variants = ws.get_all_records()
-        except: variants = []
+        variants = safe_get_records(ws)
         if model_name:
-            try: models = SHEET.worksheet('models').get_all_records()
-            except: models = []
+            models = safe_get_records(SHEET.worksheet('models'))
             m_id = next((m['id'] for m in models if m['model_name'] == model_name), None)
             try: m_id_int = int(m_id) if m_id is not None else None
             except: m_id_int = None
@@ -300,8 +312,7 @@ def api_main_orders():
     if request.method == 'GET':
         cached = cache_get('main_orders')
         if cached: return jsonify(cached)
-        try: records = ws.get_all_records()
-        except: records = []
+        records = safe_get_records(ws)
         for o in records:
             if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
         result = list(reversed(records)); cache_set('main_orders', result); return jsonify(result)
@@ -331,8 +342,7 @@ def api_main_orders():
 def bulk_del_main():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', []); ws = SHEET.worksheet('main_orders')
-    try: records = ws.get_all_records()
-    except: records = []
+    records = safe_get_records(ws)
     rows_to_delete = [i+2 for i,r in enumerate(records) if r.get('id') in ids]
     for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_row(r_idx)
     cache_clear('main_orders'); return jsonify({'success': True, 'deleted': len(rows_to_delete)})
@@ -343,7 +353,7 @@ def bulk_sale_main():
     ids = request.json.get('ids',[]); new_month = request.json.get('sale_month','')
     ws = SHEET.worksheet('main_orders')
     try:
-        records = ws.get_all_records()
+        records = safe_get_records(ws)
         for i,r in enumerate(records):
             if r.get('id') in ids: ws.update_cell(i+2, 16, new_month)
         cache_clear('main_orders'); return jsonify({'success': True})
@@ -358,7 +368,7 @@ def bulk_sell_main():
     except: return jsonify({'success': False})
     ws = SHEET.worksheet('main_orders')
     try:
-        records = ws.get_all_records(); updated = 0
+        records = safe_get_records(ws); updated = 0
         for i,r in enumerate(records):
             if r.get('id') in ids:
                 cost = safe_float(r.get('costing'))
@@ -373,7 +383,7 @@ def bulk_delivery_main():
     if not ids or not new_date: return jsonify({'success': False})
     ws = SHEET.worksheet('main_orders')
     try:
-        records = ws.get_all_records(); updated = 0
+        records = safe_get_records(ws); updated = 0
         for i,r in enumerate(records):
             if r.get('id') in ids: ws.update_cell(i+2, 12, new_date); updated+=1
         cache_clear('main_orders'); return jsonify({'success': True, 'updated': updated})
@@ -383,8 +393,7 @@ def bulk_delivery_main():
 def export_main():
     if not SHEET: return "No sheet connected", 500
     fmt = request.args.get('format','csv'); sale_filter = request.args.get('sale','')
-    try: records = SHEET.worksheet('main_orders').get_all_records()
-    except: records = []
+    records = safe_get_records(SHEET.worksheet('main_orders'))
     for o in records:
         if str(o.get('last_digits','')).startswith("'"): o['last_digits']=str(o['last_digits'])[1:]
     if sale_filter and sale_filter!='ALL': records=[r for r in records if r.get('sale_month','')==sale_filter]
@@ -442,8 +451,7 @@ def api_secondary_orders():
     if request.method=='GET':
         cached=cache_get('secondary_orders')
         if cached: return jsonify(cached)
-        try: records=ws.get_all_records()
-        except: records=[]
+        records=safe_get_records(ws)
         for o in records:
             if str(o.get('last_digits','')).startswith("'"): o['last_digits']=str(o['last_digits'])[1:]
         result=list(reversed(records)); cache_set('secondary_orders',result); return jsonify(result)
@@ -473,8 +481,7 @@ def api_secondary_orders():
 def bulk_del_sec():
     if not SHEET: return jsonify({'success': False})
     ids=request.json.get('ids',[]); ws=SHEET.worksheet('secondary_orders')
-    try: records=ws.get_all_records()
-    except: records=[]
+    records=safe_get_records(ws)
     rows_to_delete=[i+2 for i,r in enumerate(records) if r.get('id') in ids]
     for r_idx in sorted(rows_to_delete,reverse=True): ws.delete_row(r_idx)
     cache_clear('secondary_orders'); return jsonify({'success':True,'deleted':len(rows_to_delete)})
@@ -485,7 +492,7 @@ def bulk_sale_sec():
     ids=request.json.get('ids',[]); new_month=request.json.get('sale_month','Current Sale')
     ws=SHEET.worksheet('secondary_orders')
     try:
-        records=ws.get_all_records()
+        records=safe_get_records(ws)
         for i,r in enumerate(records):
             if r.get('id') in ids: ws.update_cell(i+2,16,new_month)
         cache_clear('secondary_orders'); return jsonify({'success': True})
@@ -500,7 +507,7 @@ def bulk_sell_sec():
     except: return jsonify({'success': False})
     ws=SHEET.worksheet('secondary_orders')
     try:
-        records=ws.get_all_records(); updated=0
+        records=safe_get_records(ws); updated=0
         for i,r in enumerate(records):
             if r.get('id') in ids:
                 cost=safe_float(r.get('costing'))
@@ -515,7 +522,7 @@ def bulk_delivery_sec():
     if not ids or not new_date: return jsonify({'success': False})
     ws=SHEET.worksheet('secondary_orders')
     try:
-        records=ws.get_all_records(); updated=0
+        records=safe_get_records(ws); updated=0
         for i,r in enumerate(records):
             if r.get('id') in ids: ws.update_cell(i+2,12,new_date); updated+=1
         cache_clear('secondary_orders'); return jsonify({'success':True,'updated':updated})
@@ -525,8 +532,7 @@ def bulk_delivery_sec():
 def export_secondary():
     if not SHEET: return "No sheet connected", 500
     fmt=request.args.get('format','csv'); sale_filter=request.args.get('sale','')
-    try: records=SHEET.worksheet('secondary_orders').get_all_records()
-    except: records=[]
+    records=safe_get_records(SHEET.worksheet('secondary_orders'))
     for o in records:
         if str(o.get('last_digits','')).startswith("'"): o['last_digits']=str(o['last_digits'])[1:]
     if sale_filter and sale_filter!='ALL': records=[r for r in records if r.get('sale_month','')==sale_filter]
@@ -582,8 +588,7 @@ def api_offline_orders():
     if request.method=='GET':
         cached=cache_get('offline_orders')
         if cached: return jsonify(cached)
-        try: records=ws.get_all_records()
-        except: records=[]
+        records=safe_get_records(ws)
         for o in records:
             if str(o.get('last_digits','')).startswith("'"): o['last_digits']=str(o['last_digits'])[1:]
         result=list(reversed(records)); cache_set('offline_orders',result); return jsonify(result)
@@ -606,8 +611,7 @@ def api_offline_orders():
 def bulk_del_offline():
     if not SHEET: return jsonify({'success': False})
     ids=request.json.get('ids',[]); ws=SHEET.worksheet('offline_orders')
-    try: records=ws.get_all_records()
-    except: records=[]
+    records=safe_get_records(ws)
     rows_to_delete=[i+2 for i,r in enumerate(records) if r.get('id') in ids]
     for r_idx in sorted(rows_to_delete,reverse=True): ws.delete_row(r_idx)
     cache_clear('offline_orders'); return jsonify({'success':True,'deleted':len(rows_to_delete)})
@@ -621,7 +625,7 @@ def bulk_costing_offline():
     except: return jsonify({'success': False})
     ws=SHEET.worksheet('offline_orders')
     try:
-        records=ws.get_all_records(); updated=0
+        records=safe_get_records(ws); updated=0
         for i,r in enumerate(records):
             if r.get('id') in ids:
                 sell=safe_float(r.get('selling_price'))
@@ -638,7 +642,7 @@ def bulk_sell_offline():
     except: return jsonify({'success': False})
     ws=SHEET.worksheet('offline_orders')
     try:
-        records=ws.get_all_records(); updated=0
+        records=safe_get_records(ws); updated=0
         for i,r in enumerate(records):
             if r.get('id') in ids:
                 cost=safe_float(r.get('costing'))
@@ -650,8 +654,7 @@ def bulk_sell_offline():
 def export_offline():
     if not SHEET: return "No sheet connected", 500
     fmt=request.args.get('format','csv'); month_filter=request.args.get('month','')
-    try: records=SHEET.worksheet('offline_orders').get_all_records()
-    except: records=[]
+    records=safe_get_records(SHEET.worksheet('offline_orders'))
     for o in records:
         if str(o.get('last_digits','')).startswith("'"): o['last_digits']=str(o['last_digits'])[1:]
     if month_filter: records=[r for r in records if r.get('sale_month','')==month_filter]
@@ -750,11 +753,9 @@ def api_jiomart_variants():
         cache_key = f'jiomart_variants_{model_name}' if model_name else 'jiomart_variants_all'
         cached = cache_get(cache_key)
         if cached: return jsonify(cached)
-        try: variants = ws.get_all_records()
-        except: variants = []
+        variants = safe_get_records(ws)
         if model_name:
-            try: models = SHEET.worksheet('jiomart_models').get_all_records()
-            except: models = []
+            models = safe_get_records(SHEET.worksheet('jiomart_models'))
             m_id = next((m['id'] for m in models if m['model_name'] == model_name), None)
             # Cast both sides to int — gspread can return strings or ints inconsistently
             try: m_id_int = int(m_id) if m_id is not None else None
@@ -838,8 +839,7 @@ def api_jiomart_orders():
     if request.method == 'GET':
         cached = cache_get('jiomart_orders')
         if cached: return jsonify(cached)
-        try: records = ws.get_all_records()
-        except: records = []
+        records = safe_get_records(ws)
         for o in records:
             if str(o.get('last_digits','')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
         result = list(reversed(records)); cache_set('jiomart_orders', result); return jsonify(result)
@@ -874,8 +874,7 @@ def api_jiomart_orders():
 def bulk_del_jiomart():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', []); ws = SHEET.worksheet('jiomart_orders')
-    try: records = ws.get_all_records()
-    except: records = []
+    records = safe_get_records(ws)
     rows_to_delete = [i+2 for i,r in enumerate(records) if r.get('id') in ids]
     for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_row(r_idx)
     cache_clear('jiomart_orders'); return jsonify({'success': True, 'deleted': len(rows_to_delete)})
@@ -886,7 +885,7 @@ def bulk_sale_jiomart():
     ids = request.json.get('ids', []); new_month = request.json.get('sale_month', 'Current Sale')
     ws = SHEET.worksheet('jiomart_orders')
     try:
-        records = ws.get_all_records()
+        records = safe_get_records(ws)
         for i, r in enumerate(records):
             if r.get('id') in ids: ws.update_cell(i+2, 13, new_month)  # col 13 = sale_month
         cache_clear('jiomart_orders'); return jsonify({'success': True})
@@ -901,7 +900,7 @@ def bulk_sell_jiomart():
     except: return jsonify({'success': False})
     ws = SHEET.worksheet('jiomart_orders')
     try:
-        records = ws.get_all_records(); updated = 0
+        records = safe_get_records(ws); updated = 0
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 cost = safe_float(r.get('costing'))
@@ -918,7 +917,7 @@ def bulk_delivery_jiomart():
     if not ids or not new_date: return jsonify({'success': False})
     ws = SHEET.worksheet('jiomart_orders')
     try:
-        records = ws.get_all_records(); updated = 0
+        records = safe_get_records(ws); updated = 0
         for i, r in enumerate(records):
             if r.get('id') in ids:
                 ws.update_cell(i+2, 12, new_date)  # delivery_date col 12
@@ -930,8 +929,7 @@ def bulk_delivery_jiomart():
 def export_jiomart():
     if not SHEET: return "No sheet connected", 500
     fmt = request.args.get('format', 'csv'); sale_filter = request.args.get('sale', '')
-    try: records = SHEET.worksheet('jiomart_orders').get_all_records()
-    except: records = []
+    records = safe_get_records(SHEET.worksheet('jiomart_orders'))
     for o in records:
         if str(o.get('last_digits','')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
     if sale_filter and sale_filter != 'ALL':
@@ -1004,7 +1002,7 @@ def api_exchange_orders():
         cached = cache_get('exchange_orders')
         if cached: return jsonify(cached)
         try:
-            records = ws.get_all_records()
+            records = safe_get_records(ws)
         except Exception as e:
             print(f"Exchange Orders GET error: {e}")
             try:
@@ -1068,8 +1066,7 @@ def api_exchange_orders():
 def bulk_del_exchange():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', []); ws = SHEET.worksheet('exchange_orders')
-    try: records = ws.get_all_records()
-    except: records = []
+    records = safe_get_records(ws)
     rows_to_delete = [i+2 for i,r in enumerate(records) if r.get('id') in ids]
     for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_row(r_idx)
     cache_clear('exchange_orders')
@@ -1079,8 +1076,7 @@ def bulk_del_exchange():
 def export_exchange():
     if not SHEET: return "No sheet connected", 500
     fmt = request.args.get('format', 'csv')
-    try: records = SHEET.worksheet('exchange_orders').get_all_records()
-    except: records = []
+    records = safe_get_records(SHEET.worksheet('exchange_orders'))
     for o in records:
         if str(o.get('last_digits','')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
     headers = ['id','platform','model','variant','costing','exchange_model','exchange_variant',
@@ -1157,7 +1153,7 @@ def api_voucher_tracker():
         cached = cache_get('voucher_tracker')
         if cached: return jsonify(cached)
         try:
-            records = ws.get_all_records()
+            records = safe_get_records(ws)
         except Exception as e:
             print(f"Voucher Tracker GET error (get_all_records): {e}")
             # Fallback: read raw values and map manually using current schema headers
@@ -1244,7 +1240,7 @@ def api_voucher_commission():
         cached = cache_get('voucher_commission')
         if cached: return jsonify(cached)
         try:
-            records = ws.get_all_records()
+            records = safe_get_records(ws)
         except Exception as e:
             print(f"Voucher Commission GET error: {e}")
             try:
@@ -1307,7 +1303,7 @@ def migrate_to_jiomart():
         return jsonify({'success': False, 'error': str(e)})
 
     try:
-        main_records = main_ws.get_all_records()
+        main_records = main_safe_get_records(ws)
     except Exception as e:
         return jsonify({'success': False, 'error': f'Could not read main_orders: {e}'})
 
@@ -1358,7 +1354,7 @@ def migrate_to_jiomart():
     if delete_after and migrated > 0:
         try:
             # Re-read records to get fresh row numbers after potential appends
-            fresh_records = main_ws.get_all_records()
+            fresh_records = main_safe_get_records(ws)
             rows_to_delete = [
                 i + 2 for i, rec in enumerate(fresh_records)
                 if rec.get('id') in ids
