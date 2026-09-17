@@ -52,6 +52,10 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
+def normalize_ids(ids):
+    """Convert a list of ids (may be ints or strings) to a set of strings for safe comparison."""
+    return {str(x) for x in ids if x is not None}
+
 def safe_get_records(ws):
     """Read worksheet records safely - handles None/duplicate headers, never raises."""
     try: all_vals = ws.get_all_values()
@@ -342,8 +346,9 @@ def api_main_orders():
 def bulk_del_main():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', []); ws = SHEET.worksheet('main_orders')
+    ids_set = normalize_ids(ids)
     records = safe_get_records(ws)
-    rows_to_delete = [i+2 for i,r in enumerate(records) if r.get('id') in ids]
+    rows_to_delete = [i+2 for i,r in enumerate(records) if str(r.get('id','')) in ids_set]
     for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_row(r_idx)
     cache_clear('main_orders'); return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
@@ -351,11 +356,12 @@ def bulk_del_main():
 def bulk_sale_main():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids',[]); new_month = request.json.get('sale_month','')
+    ids_set = normalize_ids(ids)
     ws = SHEET.worksheet('main_orders')
     try:
         records = safe_get_records(ws)
         for i,r in enumerate(records):
-            if r.get('id') in ids: ws.update_cell(i+2, 16, new_month)
+            if str(r.get('id','')) in ids_set: ws.update_cell(i+2, 16, new_month)
         cache_clear('main_orders'); return jsonify({'success': True})
     except Exception as e: print("Bulk Sale Error:", e); return jsonify({'success': False})
 
@@ -363,6 +369,7 @@ def bulk_sale_main():
 def bulk_sell_main():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids',[]); new_sell = request.json.get('selling_price')
+    ids_set = normalize_ids(ids)
     if not ids or new_sell is None: return jsonify({'success': False})
     try: new_sell_f = float(new_sell)
     except: return jsonify({'success': False})
@@ -370,7 +377,7 @@ def bulk_sell_main():
     try:
         records = safe_get_records(ws); updated = 0
         for i,r in enumerate(records):
-            if r.get('id') in ids:
+            if str(r.get('id','')) in ids_set:
                 cost = safe_float(r.get('costing'))
                 ws.update_cell(i+2, 10, new_sell_f); ws.update_cell(i+2, 11, round(new_sell_f-cost,2)); updated+=1
         cache_clear('main_orders'); return jsonify({'success': True, 'updated': updated})
@@ -380,12 +387,13 @@ def bulk_sell_main():
 def bulk_delivery_main():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids',[]); new_date = request.json.get('delivery_date','')
+    ids_set = normalize_ids(ids)
     if not ids or not new_date: return jsonify({'success': False})
     ws = SHEET.worksheet('main_orders')
     try:
         records = safe_get_records(ws); updated = 0
         for i,r in enumerate(records):
-            if r.get('id') in ids: ws.update_cell(i+2, 12, new_date); updated+=1
+            if str(r.get('id','')) in ids_set: ws.update_cell(i+2, 12, new_date); updated+=1
         cache_clear('main_orders'); return jsonify({'success': True, 'updated': updated})
     except Exception as e: print("Bulk Delivery Error:", e); return jsonify({'success': False})
 
@@ -481,20 +489,22 @@ def api_secondary_orders():
 def bulk_del_sec():
     if not SHEET: return jsonify({'success': False})
     ids=request.json.get('ids',[]); ws=SHEET.worksheet('secondary_orders')
+    ids_set = normalize_ids(ids)
     records=safe_get_records(ws)
-    rows_to_delete=[i+2 for i,r in enumerate(records) if r.get('id') in ids]
+    rows_to_delete=[i+2 for i,r in enumerate(records) if str(r.get('id','')) in ids_set]
     for r_idx in sorted(rows_to_delete,reverse=True): ws.delete_row(r_idx)
     cache_clear('secondary_orders'); return jsonify({'success':True,'deleted':len(rows_to_delete)})
 
 @app.route('/api/secondary-orders/bulk-update-sale', methods=['POST'])
 def bulk_sale_sec():
     if not SHEET: return jsonify({'success': False})
-    ids=request.json.get('ids',[]); new_month=request.json.get('sale_month','Current Sale')
+    ids=request.json.get('ids',[]); new_month=request.json.get('sale_month','')
+    ids_set = normalize_ids(ids)
     ws=SHEET.worksheet('secondary_orders')
     try:
         records=safe_get_records(ws)
         for i,r in enumerate(records):
-            if r.get('id') in ids: ws.update_cell(i+2,16,new_month)
+            if str(r.get('id','')) in ids_set: ws.update_cell(i+2,16,new_month)
         cache_clear('secondary_orders'); return jsonify({'success': True})
     except Exception as e: print("Bulk Sale Error:",e); return jsonify({'success': False})
 
@@ -502,6 +512,7 @@ def bulk_sale_sec():
 def bulk_sell_sec():
     if not SHEET: return jsonify({'success': False})
     ids=request.json.get('ids',[]); new_sell=request.json.get('selling_price')
+    ids_set = normalize_ids(ids)
     if not ids or new_sell is None: return jsonify({'success': False})
     try: new_sell_f=float(new_sell)
     except: return jsonify({'success': False})
@@ -509,7 +520,7 @@ def bulk_sell_sec():
     try:
         records=safe_get_records(ws); updated=0
         for i,r in enumerate(records):
-            if r.get('id') in ids:
+            if str(r.get('id','')) in ids_set:
                 cost=safe_float(r.get('costing'))
                 ws.update_cell(i+2,10,new_sell_f); ws.update_cell(i+2,11,round(new_sell_f-cost,2)); updated+=1
         cache_clear('secondary_orders'); return jsonify({'success':True,'updated':updated})
@@ -519,12 +530,13 @@ def bulk_sell_sec():
 def bulk_delivery_sec():
     if not SHEET: return jsonify({'success': False})
     ids=request.json.get('ids',[]); new_date=request.json.get('delivery_date','')
+    ids_set = normalize_ids(ids)
     if not ids or not new_date: return jsonify({'success': False})
     ws=SHEET.worksheet('secondary_orders')
     try:
         records=safe_get_records(ws); updated=0
         for i,r in enumerate(records):
-            if r.get('id') in ids: ws.update_cell(i+2,12,new_date); updated+=1
+            if str(r.get('id','')) in ids_set: ws.update_cell(i+2,12,new_date); updated+=1
         cache_clear('secondary_orders'); return jsonify({'success':True,'updated':updated})
     except Exception as e: print("Bulk Delivery Sec Error:",e); return jsonify({'success': False})
 
@@ -611,8 +623,9 @@ def api_offline_orders():
 def bulk_del_offline():
     if not SHEET: return jsonify({'success': False})
     ids=request.json.get('ids',[]); ws=SHEET.worksheet('offline_orders')
+    ids_set = normalize_ids(ids)
     records=safe_get_records(ws)
-    rows_to_delete=[i+2 for i,r in enumerate(records) if r.get('id') in ids]
+    rows_to_delete=[i+2 for i,r in enumerate(records) if str(r.get('id','')) in ids_set]
     for r_idx in sorted(rows_to_delete,reverse=True): ws.delete_row(r_idx)
     cache_clear('offline_orders'); return jsonify({'success':True,'deleted':len(rows_to_delete)})
 
@@ -620,6 +633,7 @@ def bulk_del_offline():
 def bulk_costing_offline():
     if not SHEET: return jsonify({'success': False})
     ids=request.json.get('ids',[]); new_cost=request.json.get('costing')
+    ids_set = normalize_ids(ids)
     if not ids or new_cost is None: return jsonify({'success': False})
     try: new_cost_f=float(new_cost)
     except: return jsonify({'success': False})
@@ -627,7 +641,7 @@ def bulk_costing_offline():
     try:
         records=safe_get_records(ws); updated=0
         for i,r in enumerate(records):
-            if r.get('id') in ids:
+            if str(r.get('id','')) in ids_set:
                 sell=safe_float(r.get('selling_price'))
                 ws.update_cell(i+2,8,new_cost_f); ws.update_cell(i+2,10,round(sell-new_cost_f,2)); updated+=1
         cache_clear('offline_orders'); return jsonify({'success':True,'updated':updated})
@@ -637,6 +651,7 @@ def bulk_costing_offline():
 def bulk_sell_offline():
     if not SHEET: return jsonify({'success': False})
     ids=request.json.get('ids',[]); new_sell=request.json.get('selling_price')
+    ids_set = normalize_ids(ids)
     if not ids or new_sell is None: return jsonify({'success': False})
     try: new_sell_f=float(new_sell)
     except: return jsonify({'success': False})
@@ -644,7 +659,7 @@ def bulk_sell_offline():
     try:
         records=safe_get_records(ws); updated=0
         for i,r in enumerate(records):
-            if r.get('id') in ids:
+            if str(r.get('id','')) in ids_set:
                 cost=safe_float(r.get('costing'))
                 ws.update_cell(i+2,9,new_sell_f); ws.update_cell(i+2,10,round(new_sell_f-cost,2)); updated+=1
         cache_clear('offline_orders'); return jsonify({'success':True,'updated':updated})
@@ -874,20 +889,22 @@ def api_jiomart_orders():
 def bulk_del_jiomart():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', []); ws = SHEET.worksheet('jiomart_orders')
+    ids_set = normalize_ids(ids)
     records = safe_get_records(ws)
-    rows_to_delete = [i+2 for i,r in enumerate(records) if r.get('id') in ids]
+    rows_to_delete = [i+2 for i,r in enumerate(records) if str(r.get('id','')) in ids_set]
     for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_row(r_idx)
     cache_clear('jiomart_orders'); return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
 @app.route('/api/jiomart-orders/bulk-update-sale', methods=['POST'])
 def bulk_sale_jiomart():
     if not SHEET: return jsonify({'success': False})
-    ids = request.json.get('ids', []); new_month = request.json.get('sale_month', 'Current Sale')
+    ids = request.json.get('ids', []); new_month = request.json.get('sale_month', '')
+    ids_set = normalize_ids(ids)
     ws = SHEET.worksheet('jiomart_orders')
     try:
         records = safe_get_records(ws)
         for i, r in enumerate(records):
-            if r.get('id') in ids: ws.update_cell(i+2, 13, new_month)  # col 13 = sale_month
+            if str(r.get('id','')) in ids_set: ws.update_cell(i+2, 13, new_month)  # col 13 = sale_month
         cache_clear('jiomart_orders'); return jsonify({'success': True})
     except Exception as e: print("Jiomart Bulk Sale Error:", e); return jsonify({'success': False})
 
@@ -895,6 +912,7 @@ def bulk_sale_jiomart():
 def bulk_sell_jiomart():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', []); new_sell = request.json.get('selling_price')
+    ids_set = normalize_ids(ids)
     if not ids or new_sell is None: return jsonify({'success': False})
     try: new_sell_f = float(new_sell)
     except: return jsonify({'success': False})
@@ -902,7 +920,7 @@ def bulk_sell_jiomart():
     try:
         records = safe_get_records(ws); updated = 0
         for i, r in enumerate(records):
-            if r.get('id') in ids:
+            if str(r.get('id','')) in ids_set:
                 cost = safe_float(r.get('costing'))
                 ws.update_cell(i+2, 10, new_sell_f)               # selling_price col 10
                 ws.update_cell(i+2, 11, round(new_sell_f-cost,2)) # profit col 11
@@ -914,12 +932,13 @@ def bulk_sell_jiomart():
 def bulk_delivery_jiomart():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', []); new_date = request.json.get('delivery_date', '')
+    ids_set = normalize_ids(ids)
     if not ids or not new_date: return jsonify({'success': False})
     ws = SHEET.worksheet('jiomart_orders')
     try:
         records = safe_get_records(ws); updated = 0
         for i, r in enumerate(records):
-            if r.get('id') in ids:
+            if str(r.get('id','')) in ids_set:
                 ws.update_cell(i+2, 12, new_date)  # delivery_date col 12
                 updated += 1
         cache_clear('jiomart_orders'); return jsonify({'success': True, 'updated': updated})
@@ -1066,8 +1085,9 @@ def api_exchange_orders():
 def bulk_del_exchange():
     if not SHEET: return jsonify({'success': False})
     ids = request.json.get('ids', []); ws = SHEET.worksheet('exchange_orders')
+    ids_set = normalize_ids(ids)
     records = safe_get_records(ws)
-    rows_to_delete = [i+2 for i,r in enumerate(records) if r.get('id') in ids]
+    rows_to_delete = [i+2 for i,r in enumerate(records) if str(r.get('id','')) in ids_set]
     for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_row(r_idx)
     cache_clear('exchange_orders')
     return jsonify({'success': True, 'deleted': len(rows_to_delete)})
@@ -1293,6 +1313,7 @@ def modify_voucher_commission(id):
 def migrate_to_jiomart():
     if not SHEET: return jsonify({'success': False, 'error': 'Not connected'})
     ids          = request.json.get('ids', [])
+    ids_set = normalize_ids(ids)
     delete_after = request.json.get('delete_after', True)
     if not ids: return jsonify({'success': False, 'error': 'No orders selected'})
 
@@ -1308,7 +1329,7 @@ def migrate_to_jiomart():
         return jsonify({'success': False, 'error': f'Could not read main_orders: {e}'})
 
     # Filter selected rows
-    to_migrate = [r for r in main_records if r.get('id') in ids]
+    to_migrate = [r for r in main_records if str(r.get('id','')) in ids_set]
     if not to_migrate:
         return jsonify({'success': False, 'error': 'No matching orders found'})
 
@@ -1341,7 +1362,7 @@ def migrate_to_jiomart():
                 selling,
                 profit,
                 r.get('delivery_date', ''),
-                r.get('sale_month', 'Current Sale'),
+                r.get('sale_month', ''),
                 r.get('created_at', '')
             ])
             next_id += 1
