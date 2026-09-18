@@ -446,8 +446,8 @@ function updateStats() {
 }
 
 // ── Quick toggle redeemed ─────────────────────────────────────────────────────
-async function quickToggle(id, checked) {
-  const e = allEntries.find(x => x.id === id); if (!e) return;
+async function quickToggle(id, checked) { id=String(id); checked) {
+  const e = allEntries.find(x => String(x.id) === String(id)); if (!e) return;
   const payload = {
     platform:    e.platform,    voucher_code: e.voucher_code,
     voucher_pin: e.voucher_pin, month:        e.month,
@@ -456,7 +456,7 @@ async function quickToggle(id, checked) {
   };
   const res = await api(`/api/voucher-tracker/${id}`, 'PUT', payload);
   if (res.success) {
-    const idx = allEntries.findIndex(x => x.id === id);
+    const idx = allEntries.findIndex(x => String(x.id) === String(id));
     if (idx !== -1) allEntries[idx] = { ...allEntries[idx], ...res };
     filterTable();
     showToast(checked ? '✓ Voucher marked as Redeemed' : 'Voucher marked as Pending');
@@ -467,8 +467,8 @@ async function quickToggle(id, checked) {
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────────
-function openEdit(id) {
-  const e = allEntries.find(x => x.id === id); if (!e) return;
+function openEdit(id) { id=String(id);
+  const e = allEntries.find(x => String(x.id) === String(id)); if (!e) return;
   document.getElementById('e_id').value          = e.id;
   document.getElementById('e_platform').value    = e.platform || '';
   document.getElementById('e_code').value        = e.voucher_code || '';
@@ -482,7 +482,7 @@ function openEdit(id) {
 }
 
 async function saveEdit() {
-  const id = parseInt(document.getElementById('e_id').value);
+  const id = String(document.getElementById('e_id').value);
   const payload = {
     platform:     document.getElementById('e_platform').value,
     voucher_code: document.getElementById('e_code').value.trim(),
@@ -494,7 +494,7 @@ async function saveEdit() {
   };
   const res = await api(`/api/voucher-tracker/${id}`, 'PUT', payload);
   if (!res.success) { showToast('Update failed', 'error'); return; }
-  const idx = allEntries.findIndex(e => e.id === id);
+  const idx = findIndexById(allEntries, id);
   if (idx !== -1) allEntries[idx] = { ...allEntries[idx], ...res };
   filterTable(); editModal.hide(); showToast('Voucher updated!');
 }
@@ -504,7 +504,7 @@ async function deleteEntry(id) {
   if (!confirm('Delete this voucher?')) return;
   const res = await api(`/api/voucher-tracker/${id}`, 'DELETE');
   if (res.success !== false) {
-    allEntries = allEntries.filter(e => e.id !== id);
+    allEntries = allEntries.filter(e => String(e.id) !== String(id));
     filterTable(); showToast('Voucher deleted.');
   } else { showToast('Failed to delete', 'error'); }
 }
@@ -688,7 +688,7 @@ async function deleteCommission(id) {
   if (!confirm('Delete this commission record?')) return;
   const res = await api(`/api/voucher-commission/${id}`, 'DELETE');
   if (res.success !== false) {
-    allCommission = allCommission.filter(c => c.id !== id);
+    allCommission = allCommission.filter(c => String(c.id) !== String(id));
     renderCommission(); showToast('Deleted.');
   } else { showToast('Failed to delete', 'error'); }
 }
