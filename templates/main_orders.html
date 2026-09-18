@@ -576,8 +576,8 @@ async function submitOrder() {
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────────
-async function openEdit(id) {
-  const o = allOrders.find(x => x.id === id);
+async function openEdit(id) { id = String(id);
+  const o = findById(allOrders, id);
   if (!o) return;
   document.getElementById('e_id').value            = o.id;
   document.getElementById('e_digits').value         = o.last_digits || '';
@@ -619,7 +619,7 @@ async function openEdit(id) {
 }
 
 async function saveEdit() {
-  const id = parseInt(document.getElementById('e_id').value);
+  const id = String(document.getElementById('e_id').value);
   const payload = {
     last_digits:   document.getElementById('e_digits').value.trim(),
     card_type:     document.getElementById('e_bank').value.trim(),
@@ -637,7 +637,7 @@ async function saveEdit() {
   };
   const res = await api(`/api/main-orders/${id}`, 'PUT', payload);
   if (!res.success) { showToast('Update failed. Please try again.', 'error'); return; }
-  const idx = allOrders.findIndex(x => x.id === id);
+  const idx = findIndexById(allOrders, id);
   if (idx !== -1) allOrders[idx] = { ...allOrders[idx], ...res };
   populateSaleFilter(); filterTable(); editModal.hide();
   showToast('Order updated!');
@@ -645,7 +645,7 @@ async function saveEdit() {
 
 // ── Bulk Selection ────────────────────────────────────────────────────────────
 function getSelectedIds() {
-  return [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
+  return [...document.querySelectorAll('.row-check:checked')].map(c => String(c.value));
 }
 
 function onCheckChange() {
@@ -687,7 +687,7 @@ async function applyBulkSell() {
     if (res.success) {
       const sellF = parseFloat(sell);
       ids.forEach(id => {
-        const o = allOrders.find(x => x.id === id);
+        const o = findById(allOrders, id);
         if (o) { o.selling_price = sellF; o.profit = sellF - (parseFloat(o.costing) || 0); }
       });
       populateSaleFilter(); filterTable();
@@ -725,7 +725,7 @@ async function applyBulkDelivery() {
   try {
     const res = await api('/api/main-orders/bulk-set-delivery', 'POST', { ids, delivery_date: date });
     if (res.success) {
-      ids.forEach(id => { const o = allOrders.find(x => x.id === id); if (o) o.delivery_date = date; });
+      ids.forEach(id => { const o = findById(allOrders, id); if (o) o.delivery_date = date; });
       filterTable();
       bulkDelivModal.hide();
       document.getElementById('selectAll').checked = false; onCheckChange();
@@ -745,7 +745,7 @@ async function bulkDelete() {
   if (!ids.length || !confirm(`Delete ${ids.length} selected orders?`)) return;
   const res = await api('/api/main-orders/bulk-delete', 'POST', {ids});
   if (res.success) {
-    allOrders = allOrders.filter(o => !ids.includes(o.id));
+    allOrders = allOrders.filter(o => !ids.includes(String(o.id)));
     populateSaleFilter(); filterTable();
     document.getElementById('selectAll').checked = false; onCheckChange();
     showToast(`${res.deleted} orders deleted.`);
@@ -798,7 +798,7 @@ async function confirmMigrate() {
     if (res.success) {
       // Remove migrated orders from local array if they were deleted
       if (deleteAfter) {
-        allOrders = allOrders.filter(o => !ids.includes(o.id));
+        allOrders = allOrders.filter(o => !ids.includes(String(o.id)));
       }
       populateSaleFilter();
       filterTable();
