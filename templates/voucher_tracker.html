@@ -446,7 +446,7 @@ function updateStats() {
 }
 
 // ── Quick toggle redeemed ─────────────────────────────────────────────────────
-async function quickToggle(id, checked) { id=String(id); checked) {
+async function quickToggle(id, checked) { id = String(id);
   const e = allEntries.find(x => String(x.id) === String(id)); if (!e) return;
   const payload = {
     platform:    e.platform,    voucher_code: e.voucher_code,
