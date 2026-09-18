@@ -419,7 +419,20 @@
     }
   }
 
-  function formatCost(v) { return v != null && v !== '' ? '₹' + parseFloat(v).toLocaleString('en-IN') : '—'; }
+  function formatCost(v) { return v != null && v !== '' ? '\u20b9' + parseFloat(v).toLocaleString('en-IN') : '\u2014'; }
+
+  // ── Global ID helpers — ensures IDs are always compared as strings ──────────
+  // safe_get_records() on the server returns IDs as strings from get_all_values()
+  // These helpers prevent int/string mismatch when updating local arrays
+  function getSelectedIds() {
+    return [...document.querySelectorAll('.row-check:checked')].map(c => String(c.value));
+  }
+  function findById(arr, id) {
+    return arr.find(x => String(x.id) === String(id));
+  }
+  function findIndexById(arr, id) {
+    return arr.findIndex(x => String(x.id) === String(id));
+  }
 
   function cardBadge(type) {
     if (!type) return '<span class="badge-card badge-default">—</span>';
