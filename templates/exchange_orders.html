@@ -425,8 +425,8 @@ async function submitOrder() {
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────────
-async function openEdit(id) {
-  const o = allOrders.find(x=>x.id===id); if (!o) return;
+async function openEdit(id) { id=String(id);
+  const o = findById(allOrders, id); if (!o) return;
   document.getElementById('e_id').value               = o.id;
   document.getElementById('e_platform').value         = o.platform||'';
   document.getElementById('e_model').value            = o.model||'';
@@ -458,7 +458,7 @@ async function openEdit(id) {
 }
 
 async function saveEdit() {
-  const id = parseInt(document.getElementById('e_id').value);
+  const id = String(document.getElementById('e_id').value);
   const payload = {
     platform:         document.getElementById('e_platform').value,
     model:            document.getElementById('e_model').value.trim(),
@@ -474,13 +474,13 @@ async function saveEdit() {
   };
   const res = await api(`/api/exchange-orders/${id}`, 'PUT', payload);
   if (!res.success) { showToast('Update failed', 'error'); return; }
-  const idx = allOrders.findIndex(x=>x.id===id);
+  const idx = findIndexById(allOrders, id);
   if (idx!==-1) allOrders[idx] = {...allOrders[idx], ...res};
   filterTable(); editModal.hide(); showToast('Order updated!');
 }
 
 // ── Bulk ──────────────────────────────────────────────────────────────────────
-function getSelectedIds() { return [...document.querySelectorAll('.row-check:checked')].map(c=>parseInt(c.value)); }
+function getSelectedIds() { return [...document.querySelectorAll('.row-check:checked')].map(c=>String(c.value)); }
 function onCheckChange() {
   const count = getSelectedIds().length;
   document.getElementById('selCount').textContent = count;
@@ -493,7 +493,7 @@ async function bulkDelete() {
   if (!ids.length || !confirm(`Delete ${ids.length} selected orders?`)) return;
   const res = await api('/api/exchange-orders/bulk-delete', 'POST', {ids});
   if (res.success) {
-    allOrders = allOrders.filter(o=>!ids.includes(o.id));
+    allOrders = allOrders.filter(o=>!ids.includes(String(o.id)));
     filterTable();
     document.getElementById('selectAll').checked=false; onCheckChange();
     showToast(`${res.deleted} orders deleted.`);
