@@ -5,11 +5,11 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <div class="page-title">Offline Sales Tracker</div>
-    <div class="page-subtitle">Track physical swiping, machines, and EMI conversions</div>
+    <div class="page-title">Offline Sales</div>
+    <div class="page-subtitle">Track offline device sales by machine, vendor and brand</div>
   </div>
   <div style="display:flex;gap:10px;align-items:center;">
-    <div class="stat-pill"><strong id="totalCount">0</strong> Sales</div>
+    <div class="stat-pill"><strong id="totalCount">0</strong> Orders</div>
     <div class="stat-pill" id="totalProfit" style="color:var(--green);font-weight:600;">Profit: ₹0</div>
   </div>
 </div>
@@ -18,109 +18,121 @@
   <i class="bi bi-plus-circle"></i> <span id="formToggleText">Add New Offline Sale</span>
 </button>
 
-<div class="card-panel" id="addFormPanel" style="display:none; border-left: 4px solid var(--accent2);">
-  <div class="row g-3">
+<div class="card-panel" id="addFormPanel" style="display:none;">
+  <div class="card-panel-title" style="color:var(--amber);"><i class="bi bi-shop-window"></i> New Offline Sale</div>
+  <div class="row g-3 align-items-end">
     <div class="col-md-2">
-      <label class="form-label">Card Number *</label>
-      <input type="text" id="f_digits" class="form-control" placeholder="Last 4-5 digits" maxlength="5" oninput="onDigitsInput(this.value)"/>
+      <label class="form-label">Sale Month</label>
+      <input type="month" id="f_sale_month" class="form-control"/>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Card Number</label>
+      <input type="text" id="f_digits" class="form-control" placeholder="Last 4-5 digits" maxlength="5"
+             oninput="onDigitsInput(this.value,'f_card_type')"/>
     </div>
     <div class="col-md-2">
       <label class="form-label">Bank</label>
-      <input type="text" id="f_bank" class="form-control" readonly placeholder="Auto-filled"/>
+      <input type="text" id="f_card_type" class="form-control" readonly placeholder="Auto-filled"/>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Machine *</label>
-      <select id="f_machine" class="form-select"><option value="">Select</option></select>
+      <label class="form-label">Machine</label>
+      <select id="f_machine" class="form-select"><option value="">Select Machine</option></select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Vendor *</label>
-      <select id="f_vendor" class="form-select"><option value="">Select</option></select>
+      <label class="form-label">Vendor</label>
+      <select id="f_vendor" class="form-select"><option value="">Select Vendor</option></select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Brand / Model *</label>
-      <select id="f_brand" class="form-select"><option value="">Select</option></select>
+      <label class="form-label">Brand</label>
+      <select id="f_brand" class="form-select"><option value="">Select Brand</option></select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Sale Type *</label>
-      <select id="f_type" class="form-select">
-        <option value="INSTANT">INSTANT</option>
-        <option value="EMI">EMI</option>
+      <label class="form-label">Sale Type</label>
+      <select id="f_sale_type" class="form-select">
+        <option value="">Select Type</option>
+        <option value="Card Swipe">Card Swipe</option>
+        <option value="Cash">Cash</option>
+        <option value="UPI">UPI</option>
+        <option value="Bank Transfer">Bank Transfer</option>
       </select>
     </div>
     <div class="col-md-2">
-      <label class="form-label">Sale Month *</label>
-      <input type="month" id="f_month" class="form-control"/>
-    </div>
-    <div class="col-md-2">
       <label class="form-label">Costing (₹)</label>
-      <input type="number" id="f_costing" class="form-control" placeholder="0.00"/>
+      <input type="number" id="f_costing" class="form-control" placeholder="0" step="0.01"/>
     </div>
     <div class="col-md-2">
       <label class="form-label">Selling Price (₹)</label>
-      <input type="number" id="f_selling" class="form-control" placeholder="Optional"/>
+      <input type="number" id="f_selling_price" class="form-control" placeholder="0" step="0.01"/>
     </div>
-    <div class="col-12 mt-3">
-      <button id="saveSaleBtn" class="btn-primary-custom" onclick="submitOrder()">
-        <i class="bi bi-check-lg"></i> Save Sale
+    <div class="col-md-2 d-flex align-items-end">
+      <button class="btn-primary-custom w-100 justify-content-center" onclick="submitOrder()">
+        <i class="bi bi-check-lg"></i> Add Sale
       </button>
     </div>
   </div>
 </div>
 
-<div class="toolbar" style="display:flex; justify-content:space-between; align-items:center;">
-  <div style="display:flex; gap:10px;">
+<!-- ── Toolbar ── -->
+<div class="toolbar" style="display:flex;justify-content:space-between;align-items:center;">
+  <div style="display:flex;gap:10px;align-items:center;">
     <div class="search-wrap">
       <i class="bi bi-search"></i>
-      <input type="text" class="search-input" id="searchInput" placeholder="Search..." oninput="filterTable()"/>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search orders…" oninput="filterTable()"/>
     </div>
-    <input type="month" id="filterMonth" class="form-select" style="width:160px;" onchange="filterTable()"/>
+    <input type="month" id="filterMonth" class="form-control" style="width:170px;" onchange="filterTable()"/>
+    <select id="filterBrand" class="form-select" style="width:140px;" onchange="filterTable()">
+      <option value="ALL">All Brands</option>
+    </select>
+    <select id="filterMachine" class="form-select" style="width:150px;" onchange="filterTable()">
+      <option value="ALL">All Machines</option>
+    </select>
   </div>
   <div class="toolbar-right">
-    <!-- Bulk action buttons — shown only when rows are selected -->
-    <button class="btn-outline-custom" id="bulkCostingBtn" onclick="openBulkCosting()" style="display:none;">
-      <i class="bi bi-tag"></i> Set Costing
-    </button>
     <button class="btn-success-custom" id="bulkSellBtn" onclick="openBulkSell()" style="display:none;">
       <i class="bi bi-currency-rupee"></i> Set Sell Price
+    </button>
+    <button class="btn-outline-custom" id="bulkCostBtn" onclick="openBulkCost()" style="display:none;">
+      <i class="bi bi-box-seam"></i> Set Costing
+    </button>
+    <button class="btn-success-custom" id="bulkMonthBtn" onclick="promptBulkMonth()" style="display:none;">
+      <i class="bi bi-calendar3"></i> Set Month
     </button>
     <button class="btn-danger-custom" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none;">
       <i class="bi bi-trash3"></i> Delete (<span id="selCount">0</span>)
     </button>
-    <button class="btn-outline-custom" onclick="exportOrders('csv')">
-      <i class="bi bi-filetype-csv"></i> CSV
-    </button>
-    <button class="btn-outline-custom" onclick="exportOrders('excel')">
-      <i class="bi bi-file-earmark-excel"></i> Excel
-    </button>
+    <button class="btn-outline-custom" onclick="exportOrders('csv')"><i class="bi bi-filetype-csv"></i> CSV</button>
+    <button class="btn-outline-custom" onclick="exportOrders('excel')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
   </div>
 </div>
 
+<!-- ── Table ── -->
 <div class="card-panel" style="padding:0;overflow:hidden;">
   <div class="data-table-wrap">
     <table class="data-table">
       <thead>
         <tr>
           <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"/></th>
-          <th>Sale Month</th>
-          <th>Date Entered</th>
+          <th>Month</th>
           <th>Card #</th>
           <th>Bank</th>
           <th>Machine</th>
           <th>Vendor</th>
           <th>Brand</th>
-          <th>Type</th>
+          <th>Sale Type</th>
           <th>Costing</th>
           <th>Sell Price</th>
           <th>Profit</th>
           <th>Actions</th>
         </tr>
       </thead>
-      <tbody id="tableBody"></tbody>
+      <tbody id="tableBody">
+        <tr><td colspan="12"><div class="empty-state"><i class="bi bi-shop-window"></i><p>Loading orders...</p></div></td></tr>
+      </tbody>
     </table>
   </div>
-  <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px; border-top:1px solid var(--border);">
-    <span id="pageInfo" style="color:var(--muted); font-size:12px; font-weight:600;">0 - 0 of 0</span>
-    <div style="display:flex; gap:8px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-top:1px solid var(--border);">
+    <span id="pageInfo" style="color:var(--muted);font-size:12px;font-weight:600;">0 - 0 of 0</span>
+    <div style="display:flex;gap:8px;">
       <button id="btnPrev" onclick="changePage(-1)" class="btn-outline-custom" disabled>Previous</button>
       <button id="btnNext" onclick="changePage(1)" class="btn-outline-custom" disabled>Next</button>
     </div>
@@ -139,35 +151,39 @@
         <input type="hidden" id="e_id"/>
         <div class="row g-3">
           <div class="col-md-3">
+            <label class="form-label">Sale Month</label>
+            <input type="month" id="e_sale_month" class="form-control"/>
+          </div>
+          <div class="col-md-3">
             <label class="form-label">Card Number</label>
-            <input type="text" id="e_digits" class="form-control" maxlength="5" oninput="onEditDigitsInput(this.value)"/>
+            <input type="text" id="e_digits" class="form-control" maxlength="5"
+                   oninput="onDigitsInput(this.value,'e_card_type')"/>
           </div>
           <div class="col-md-3">
             <label class="form-label">Bank</label>
-            <input type="text" id="e_bank" class="form-control" readonly/>
+            <input type="text" id="e_card_type" class="form-control" readonly/>
           </div>
           <div class="col-md-3">
             <label class="form-label">Machine</label>
-            <select id="e_machine" class="form-select"><option value="">Select</option></select>
+            <select id="e_machine" class="form-select"><option value="">Select Machine</option></select>
           </div>
           <div class="col-md-3">
             <label class="form-label">Vendor</label>
-            <select id="e_vendor" class="form-select"><option value="">Select</option></select>
+            <select id="e_vendor" class="form-select"><option value="">Select Vendor</option></select>
           </div>
           <div class="col-md-3">
             <label class="form-label">Brand</label>
-            <select id="e_brand" class="form-select"><option value="">Select</option></select>
+            <select id="e_brand" class="form-select"><option value="">Select Brand</option></select>
           </div>
           <div class="col-md-3">
             <label class="form-label">Sale Type</label>
-            <select id="e_type" class="form-select">
-              <option value="INSTANT">INSTANT</option>
-              <option value="EMI">EMI</option>
+            <select id="e_sale_type" class="form-select">
+              <option value="">Select Type</option>
+              <option value="Card Swipe">Card Swipe</option>
+              <option value="Cash">Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="Bank Transfer">Bank Transfer</option>
             </select>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Sale Month</label>
-            <input type="month" id="e_month" class="form-control"/>
           </div>
           <div class="col-md-3">
             <label class="form-label">Costing (₹)</label>
@@ -175,44 +191,19 @@
           </div>
           <div class="col-md-3">
             <label class="form-label">Selling Price (₹)</label>
-            <input type="number" id="e_selling" class="form-control" step="0.01"/>
+            <input type="number" id="e_selling_price" class="form-control" step="0.01"/>
           </div>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn-primary-custom" onclick="saveEdit()">
-          <i class="bi bi-check-lg"></i> Save Changes
-        </button>
+        <button class="btn-primary-custom" onclick="saveEdit()"><i class="bi bi-check-lg"></i> Save</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ── Bulk Set Costing Modal ── -->
-<div class="modal fade" id="bulkCostingModal" tabindex="-1">
-  <div class="modal-dialog modal-sm">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="bi bi-tag me-2"></i>Set Costing</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
-          Apply one costing to <strong id="bulkCostingCount" style="color:var(--text);">0</strong> selected sales. Profit will be recalculated automatically.
-        </p>
-        <label class="form-label">Costing (₹)</label>
-        <input type="number" id="bulk_costing_val" class="form-control" placeholder="e.g. 18500" step="0.01"/>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn-primary-custom" onclick="applyBulkCosting()"><i class="bi bi-check-lg"></i> Apply to Selected</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ── Bulk Set Sell Price Modal ── -->
+<!-- ── Bulk Sell Modal ── -->
 <div class="modal fade" id="bulkSellModal" tabindex="-1">
   <div class="modal-dialog modal-sm">
     <div class="modal-content">
@@ -222,14 +213,37 @@
       </div>
       <div class="modal-body">
         <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
-          Apply one selling price to <strong id="bulkSellCount" style="color:var(--text);">0</strong> selected sales. Profit will be recalculated automatically.
+          Apply to <strong id="bulkSellCount" style="color:var(--text);">0</strong> selected orders.
         </p>
         <label class="form-label">Selling Price (₹)</label>
-        <input type="number" id="bulk_sell_price" class="form-control" placeholder="e.g. 21450" step="0.01"/>
+        <input type="number" id="bulk_sell_price" class="form-control" step="0.01" placeholder="0"/>
       </div>
       <div class="modal-footer">
         <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn-success-custom" onclick="applyBulkSell()"><i class="bi bi-check-lg"></i> Apply to Selected</button>
+        <button class="btn-success-custom" onclick="applyBulkSell()"><i class="bi bi-check-lg"></i> Apply</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Bulk Cost Modal ── -->
+<div class="modal fade" id="bulkCostModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-box-seam me-2"></i>Set Costing</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
+          Apply to <strong id="bulkCostCount" style="color:var(--text);">0</strong> selected orders.
+        </p>
+        <label class="form-label">Costing (₹)</label>
+        <input type="number" id="bulk_cost_price" class="form-control" step="0.01" placeholder="0"/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline-custom" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-primary-custom" onclick="applyBulkCost()"><i class="bi bi-check-lg"></i> Apply</button>
       </div>
     </div>
   </div>
@@ -239,30 +253,128 @@
 
 {% block scripts %}
 <script>
-let allOrders = [];
-let filteredOrders = [];
-let currentPage = 1;
+var allOrders = [], filteredOrders = [];
+var currentPage = 1;
 const PAGE_SIZE = 50;
-const editModal        = new bootstrap.Modal(document.getElementById('editModal'));
-const bulkCostingModal = new bootstrap.Modal(document.getElementById('bulkCostingModal'));
-const bulkSellModal    = new bootstrap.Modal(document.getElementById('bulkSellModal'));
+const editModal     = new bootstrap.Modal(document.getElementById('editModal'));
+const bulkSellModal = new bootstrap.Modal(document.getElementById('bulkSellModal'));
+const bulkCostModal = new bootstrap.Modal(document.getElementById('bulkCostModal'));
 
-// ── Init ──────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-  document.getElementById('f_month').value = new Date().toISOString().slice(0, 7);
+  document.getElementById('f_sale_month').value = new Date().toISOString().slice(0,7);
 
   const [machines, vendors, brands] = await Promise.all([
     api('/api/machines'), api('/api/vendors'), api('/api/brands')
   ]);
 
-  machines.forEach(m => document.getElementById('f_machine').innerHTML += `<option value="${m.name}">${m.name}</option>`);
-  vendors.forEach(v  => document.getElementById('f_vendor').innerHTML  += `<option value="${v.name}">${v.name}</option>`);
-  brands.forEach(b   => document.getElementById('f_brand').innerHTML   += `<option value="${b.name}">${b.name}</option>`);
+  ['f_machine','e_machine'].forEach(id => {
+    const sel = document.getElementById(id);
+    machines.forEach(m => { const o=document.createElement('option'); o.value=o.textContent=m.name||m; sel.appendChild(o); });
+  });
+  ['f_vendor','e_vendor'].forEach(id => {
+    const sel = document.getElementById(id);
+    vendors.forEach(v => { const o=document.createElement('option'); o.value=o.textContent=v.name||v; sel.appendChild(o); });
+  });
+  ['f_brand','e_brand'].forEach(id => {
+    const sel = document.getElementById(id);
+    brands.forEach(b => { const o=document.createElement('option'); o.value=o.textContent=b.name||b; sel.appendChild(o); });
+  });
 
+  // Populate filter dropdowns
+  const fb = document.getElementById('filterBrand');
+  brands.forEach(b => { const o=document.createElement('option'); o.value=b.name||b; o.textContent=b.name||b; fb.appendChild(o); });
+  const fm2 = document.getElementById('filterMachine');
+  machines.forEach(m => { const o=document.createElement('option'); o.value=m.name||m; o.textContent=m.name||m; fm2.appendChild(o); });
+
+  await loadOrders();
+}
+
+async function loadOrders() {
   allOrders = await api('/api/offline-orders');
   filterTable();
 }
 
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderTable() {
+  const body = document.getElementById('tableBody');
+  if (!filteredOrders.length) {
+    body.innerHTML = '<tr><td colspan="12"><div class="empty-state"><i class="bi bi-shop-window"></i><p>No orders found.</p></div></td></tr>';
+    document.getElementById('pageInfo').textContent = '0 - 0 of 0';
+    document.getElementById('btnPrev').disabled = true;
+    document.getElementById('btnNext').disabled = true;
+    return;
+  }
+  const start = (currentPage-1)*PAGE_SIZE;
+  const end   = Math.min(start+PAGE_SIZE, filteredOrders.length);
+  const page  = filteredOrders.slice(start, end);
+
+  document.getElementById('pageInfo').textContent = `${start+1} - ${end} of ${filteredOrders.length}`;
+  document.getElementById('btnPrev').disabled = currentPage === 1;
+  document.getElementById('btnNext').disabled = end >= filteredOrders.length;
+
+  body.innerHTML = page.map(o => {
+    const hasSell  = o.selling_price && parseFloat(o.selling_price) > 0;
+    const profit   = parseFloat(o.profit)||0;
+    const pColor   = profit >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<tr data-id="${o.id}">
+      <td><input type="checkbox" class="row-check" value="${o.id}" onchange="onCheckChange()"/></td>
+      <td style="color:var(--muted);font-size:12px;">${o.sale_month||'—'}</td>
+      <td><code style="color:var(--accent2);font-size:12px;">${o.last_digits ? '•••• '+o.last_digits : '—'}</code></td>
+      <td>${cardBadge(o.card_type)}</td>
+      <td style="color:var(--muted);">${o.machine||'—'}</td>
+      <td style="color:var(--muted);">${o.vendor||'—'}</td>
+      <td style="font-weight:500;color:var(--amber);">${o.brand||'—'}</td>
+      <td style="color:var(--muted);">${o.sale_type||'—'}</td>
+      <td style="color:var(--muted);">${formatCost(o.costing)}</td>
+      <td style="color:${hasSell?'var(--text)':'var(--amber)'};font-weight:600;">
+        ${hasSell ? formatCost(o.selling_price) : '<span style="font-size:11px;font-style:italic;">pending</span>'}
+      </td>
+      <td style="color:${pColor};font-weight:600;">${hasSell ? formatCost(profit) : '—'}</td>
+      <td>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit('${o.id}')">
+            <i class="bi bi-pencil"></i>
+          </button>
+          <button class="btn-danger-custom" style="padding:4px 9px;" onclick="deleteOrder('${o.id}')">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function changePage(dir) { currentPage += dir; renderTable(); }
+
+function updateStats() {
+  document.getElementById('totalCount').textContent = filteredOrders.length;
+  const totalProfit = filteredOrders
+    .filter(o => parseFloat(o.selling_price) > 0)
+    .reduce((s,o) => s+(parseFloat(o.profit)||0), 0);
+  document.getElementById('totalProfit').textContent = 'Profit: ' + formatCost(Math.round(totalProfit));
+}
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+function filterTable() {
+  const q  = document.getElementById('searchInput').value.toLowerCase();
+  const fm = document.getElementById('filterMonth').value;
+  const fb = document.getElementById('filterBrand').value;
+  const fmach = document.getElementById('filterMachine').value;
+
+  filteredOrders = allOrders.filter(o => {
+    const mq = !q || Object.values(o).some(v => String(v||'').toLowerCase().includes(q));
+    const mm = !fm || o.sale_month === fm;
+    const mb = fb === 'ALL' || !fb || o.brand === fb;
+    const mc = fmach === 'ALL' || !fmach || o.machine === fmach;
+    return mq && mm && mb && mc;
+  });
+  currentPage = 1;
+  renderTable();
+  updateStats();
+}
+
+// ── Form toggle ───────────────────────────────────────────────────────────────
 function toggleForm() {
   const panel = document.getElementById('addFormPanel');
   const btn   = document.getElementById('formToggleText');
@@ -271,337 +383,201 @@ function toggleForm() {
   btn.textContent = visible ? 'Add New Offline Sale' : 'Hide Form';
 }
 
-// ── Digit Lookup ──────────────────────────────────────────────────
 let digitTimer = null;
-function onDigitsInput(val) {
+function onDigitsInput(val, targetId) {
   clearTimeout(digitTimer);
-  if (val.length >= 4) digitTimer = setTimeout(() => lookupCard(val, document.getElementById('f_bank')), 500);
-  else document.getElementById('f_bank').value = '';
+  if (val.length >= 4) digitTimer = setTimeout(() => lookupCard(val, document.getElementById(targetId)), 500);
+  else document.getElementById(targetId).value = '';
 }
 
-let editDigitTimer = null;
-function onEditDigitsInput(val) {
-  clearTimeout(editDigitTimer);
-  if (val.length >= 4) editDigitTimer = setTimeout(() => lookupCard(val, document.getElementById('e_bank')), 500);
-  else document.getElementById('e_bank').value = '';
-}
-
-// ── Add New Sale ──────────────────────────────────────────────────
+// ── Submit ────────────────────────────────────────────────────────────────────
 async function submitOrder() {
   const payload = {
-    last_digits:   document.getElementById('f_digits').value.trim(),
-    card_type:     document.getElementById('f_bank').value.trim(),
-    machine:       document.getElementById('f_machine').value,
-    vendor:        document.getElementById('f_vendor').value,
-    brand:         document.getElementById('f_brand').value,
-    sale_type:     document.getElementById('f_type').value,
-    sale_month:    document.getElementById('f_month').value,
-    costing:       document.getElementById('f_costing').value,
-    selling_price: document.getElementById('f_selling').value
+    card_type:      document.getElementById('f_card_type').value.trim(),
+    last_digits:    document.getElementById('f_digits').value.trim(),
+    machine:        document.getElementById('f_machine').value,
+    vendor:         document.getElementById('f_vendor').value,
+    brand:          document.getElementById('f_brand').value,
+    sale_type:      document.getElementById('f_sale_type').value,
+    costing:        document.getElementById('f_costing').value || 0,
+    selling_price:  document.getElementById('f_selling_price').value || 0,
+    sale_month:     document.getElementById('f_sale_month').value,
   };
-
-  if (!payload.last_digits || !payload.machine || !payload.vendor || !payload.brand || !payload.sale_month) {
-    showToast('Please fill: Card Number, Machine, Vendor, Brand and Sale Month', 'error');
-    return;
-  }
-
-  const btn = document.getElementById('saveSaleBtn');
-  const originalText = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="margin-right:6px;" role="status" aria-hidden="true"></span>Saving...';
-
-  try {
-    const res = await api('/api/offline-orders', 'POST', payload);
-    if (res.success !== false) {
-      allOrders.unshift(res);
-      filterTable();
-      showToast('Offline Sale Saved!');
-      ['f_digits','f_bank','f_costing','f_selling'].forEach(id => document.getElementById(id).value = '');
-    }
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalText;
-  }
+  const res = await api('/api/offline-orders', 'POST', payload);
+  if (!res.success) { showToast('Failed to save', 'error'); return; }
+  allOrders.unshift(res);
+  filterTable();
+  // Clear amount fields, keep month/machine/vendor/brand
+  ['f_digits','f_card_type','f_costing','f_selling_price'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('f_sale_type').value = '';
+  showToast('Sale added!');
 }
 
-// ── Filter & Render ───────────────────────────────────────────────
-function filterTable() {
-  const q = document.getElementById('searchInput').value.toLowerCase();
-  const m = document.getElementById('filterMonth').value;
-
-  filteredOrders = allOrders.filter(o => {
-    const matchSearch = Object.values(o).join(' ').toLowerCase().includes(q);
-    const matchMonth  = m ? o.sale_month === m : true;
-    return matchSearch && matchMonth;
-  });
-
-  currentPage = 1;
-  renderTable();
-  updateStats();
-}
-
-function renderTable() {
-  const body = document.getElementById('tableBody');
-
-  if (!filteredOrders.length) {
-    body.innerHTML = '<tr><td colspan="13"><div class="empty-state"><i class="bi bi-inbox"></i><p>No sales found.</p></div></td></tr>';
-    document.getElementById('pageInfo').textContent = '0 - 0 of 0';
-    document.getElementById('btnPrev').disabled = true;
-    document.getElementById('btnNext').disabled = true;
-    return;
-  }
-
-  const start    = (currentPage - 1) * PAGE_SIZE;
-  const end      = Math.min(start + PAGE_SIZE, filteredOrders.length);
-  const pageData = filteredOrders.slice(start, end);
-
-  document.getElementById('pageInfo').textContent = `${start + 1} - ${end} of ${filteredOrders.length}`;
-  document.getElementById('btnPrev').disabled = currentPage === 1;
-  document.getElementById('btnNext').disabled = end >= filteredOrders.length;
-
-  body.innerHTML = pageData.map(o => {
-    const hasSell  = o.selling_price && parseFloat(o.selling_price) > 0;
-    const pColor   = parseFloat(o.profit) >= 0 ? 'var(--green)' : 'var(--red)';
-
-    // Sell price cell — amber "pending" italic when no sell price, like main orders
-    const sellCell = hasSell
-      ? `<span style="font-weight:600;">${formatCost(o.selling_price)}</span>`
-      : `<span style="color:var(--amber);font-size:11px;font-style:italic;">pending</span>`;
-
-    // Profit cell — blank dash until sell price is entered, like main orders
-    const profitCell = hasSell
-      ? `<span style="color:${pColor};font-weight:bold;">${formatCost(o.profit)}</span>`
-      : `<span style="color:var(--muted);">—</span>`;
-
-    return `<tr>
-      <td><input type="checkbox" class="row-check" value="${o.id}" onchange="checkBulk()"></td>
-      <td><span class="badge-card" style="background:var(--navy3);">${o.sale_month || '—'}</span></td>
-      <td style="color:var(--muted);">${(o.created_at || '').split(' ')[0]}</td>
-      <td><code style="color:var(--accent2);">•••• ${o.last_digits || '—'}</code></td>
-      <td>${cardBadge(o.card_type)}</td>
-      <td>${o.machine || '—'}</td>
-      <td>${o.vendor || '—'}</td>
-      <td style="font-weight:bold;">${o.brand || '—'}</td>
-      <td>${o.sale_type || '—'}</td>
-      <td style="color:var(--muted)">${formatCost(o.costing)}</td>
-      <td>${sellCell}</td>
-      <td>${profitCell}</td>
-      <td>
-        <div style="display:flex;gap:6px;">
-          <button class="btn-outline-custom" style="padding:4px 9px;" onclick="openEdit(${o.id})"><i class="bi bi-pencil"></i></button>
-          <button class="btn-danger-custom"  style="padding:4px 9px;" onclick="del(${o.id})"><i class="bi bi-trash"></i></button>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
-}
-
-function changePage(dir) {
-  currentPage += dir;
-  renderTable();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function updateStats() {
-  // Only count profit from rows that have a sell price set
-  const totalProfit = filteredOrders
-    .filter(o => o.selling_price && parseFloat(o.selling_price) > 0)
-    .reduce((s, o) => s + (parseFloat(o.profit) || 0), 0);
-  document.getElementById('totalCount').textContent  = filteredOrders.length;
-  document.getElementById('totalProfit').textContent = `Profit: ${formatCost(totalProfit)}`;
-}
-
-// ── Export ────────────────────────────────────────────────────────
-function exportOrders(fmt) {
-  const month = document.getElementById('filterMonth').value;
-  window.location.href = `/api/offline-orders/export?format=${fmt}&month=${encodeURIComponent(month)}`;
-}
-
-// ── Edit ──────────────────────────────────────────────────────────
-async function openEdit(id) {
-  const o = allOrders.find(x => x.id === id);
-  if (!o) return;
-
-  document.getElementById('e_id').value      = o.id;
-  document.getElementById('e_digits').value  = o.last_digits || '';
-  document.getElementById('e_bank').value    = o.card_type || '';
-  document.getElementById('e_type').value    = o.sale_type || 'INSTANT';
-  document.getElementById('e_month').value   = o.sale_month || '';
-  document.getElementById('e_costing').value = o.costing || '';
-  document.getElementById('e_selling').value = o.selling_price || '';
-
-  const [machines, vendors, brands] = await Promise.all([
-    api('/api/machines'), api('/api/vendors'), api('/api/brands')
-  ]);
-
-  const eMachine = document.getElementById('e_machine');
-  const eVendor  = document.getElementById('e_vendor');
-  const eBrand   = document.getElementById('e_brand');
-
-  eMachine.innerHTML = '<option value="">Select</option>';
-  eVendor.innerHTML  = '<option value="">Select</option>';
-  eBrand.innerHTML   = '<option value="">Select</option>';
-
-  machines.forEach(m => eMachine.innerHTML += `<option value="${m.name}" ${m.name === o.machine ? 'selected' : ''}>${m.name}</option>`);
-  vendors.forEach(v  => eVendor.innerHTML  += `<option value="${v.name}" ${v.name === o.vendor  ? 'selected' : ''}>${v.name}</option>`);
-  brands.forEach(b   => eBrand.innerHTML   += `<option value="${b.name}" ${b.name === o.brand   ? 'selected' : ''}>${b.name}</option>`);
-
+// ── Edit ──────────────────────────────────────────────────────────────────────
+function openEdit(id) {
+  id = String(id);
+  const o = findById(allOrders, id); if (!o) return;
+  document.getElementById('e_id').value           = o.id;
+  document.getElementById('e_sale_month').value   = o.sale_month || '';
+  document.getElementById('e_digits').value       = o.last_digits || '';
+  document.getElementById('e_card_type').value    = o.card_type || '';
+  document.getElementById('e_machine').value      = o.machine || '';
+  document.getElementById('e_vendor').value       = o.vendor || '';
+  document.getElementById('e_brand').value        = o.brand || '';
+  document.getElementById('e_sale_type').value    = o.sale_type || '';
+  document.getElementById('e_costing').value      = o.costing || '';
+  document.getElementById('e_selling_price').value= o.selling_price || '';
   editModal.show();
 }
 
 async function saveEdit() {
-  const id = parseInt(document.getElementById('e_id').value);
+  const id = String(document.getElementById('e_id').value);
   const payload = {
+    card_type:     document.getElementById('e_card_type').value.trim(),
     last_digits:   document.getElementById('e_digits').value.trim(),
-    card_type:     document.getElementById('e_bank').value.trim(),
     machine:       document.getElementById('e_machine').value,
     vendor:        document.getElementById('e_vendor').value,
     brand:         document.getElementById('e_brand').value,
-    sale_type:     document.getElementById('e_type').value,
-    sale_month:    document.getElementById('e_month').value,
+    sale_type:     document.getElementById('e_sale_type').value,
     costing:       document.getElementById('e_costing').value || 0,
-    selling_price: document.getElementById('e_selling').value || 0
+    selling_price: document.getElementById('e_selling_price').value || 0,
+    sale_month:    document.getElementById('e_sale_month').value,
   };
-
   const res = await api(`/api/offline-orders/${id}`, 'PUT', payload);
-  if (!res.success) { showToast('Update failed.', 'error'); return; }
-
-  const idx = allOrders.findIndex(x => x.id === id);
+  if (!res.success) { showToast('Update failed', 'error'); return; }
+  const idx = findIndexById(allOrders, id);
   if (idx !== -1) allOrders[idx] = { ...allOrders[idx], ...res };
-
   filterTable();
   editModal.hide();
   showToast('Sale updated!');
 }
 
-// ── Delete ────────────────────────────────────────────────────────
-async function del(id) {
+async function deleteOrder(id) {
+  id = String(id);
   if (!confirm('Delete this sale?')) return;
-  await api(`/api/offline-orders/${id}`, 'DELETE');
-  allOrders = allOrders.filter(o => o.id !== id);
-  filterTable();
+  const res = await api(`/api/offline-orders/${id}`, 'DELETE');
+  if (res.success !== false) {
+    allOrders = allOrders.filter(o => String(o.id) !== id);
+    filterTable();
+    showToast('Sale deleted.');
+  } else { showToast('Delete failed', 'error'); }
 }
 
-// ── Bulk Selection ────────────────────────────────────────────────
-function getSelectedIds() {
-  return [...document.querySelectorAll('.row-check:checked')].map(c => parseInt(c.value));
-}
-
-function toggleSelectAll(cb) {
-  document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked);
-  checkBulk();
-}
-
-function checkBulk() {
+// ── Bulk actions ──────────────────────────────────────────────────────────────
+function onCheckChange() {
   const count = getSelectedIds().length;
   document.getElementById('selCount').textContent = count;
   const show = count > 0;
-  ['bulkCostingBtn', 'bulkSellBtn', 'bulkDeleteBtn'].forEach(id => {
+  ['bulkSellBtn','bulkCostBtn','bulkMonthBtn','bulkDeleteBtn'].forEach(id => {
     document.getElementById(id).style.display = show ? 'inline-flex' : 'none';
   });
 }
-
-// ── Bulk Set Costing ──────────────────────────────────────────────
-function openBulkCosting() {
-  const count = getSelectedIds().length;
-  if (!count) return;
-  document.getElementById('bulkCostingCount').textContent = count;
-  document.getElementById('bulk_costing_val').value = '';
-  bulkCostingModal.show();
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.row-check').forEach(c => { c.checked = cb.checked; });
+  onCheckChange();
 }
 
-async function applyBulkCosting() {
-  const ids  = getSelectedIds();
-  const cost = document.getElementById('bulk_costing_val').value.trim();
-  if (!cost) { showToast('Enter a costing value', 'error'); return; }
-
-  const btn = document.querySelector('#bulkCostingModal .btn-primary-custom');
-  const orig = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-
-  try {
-    const res = await api('/api/offline-orders/bulk-set-costing', 'POST', { ids, costing: parseFloat(cost) });
-    if (res.success) {
-      const costF = parseFloat(cost);
-      ids.forEach(id => {
-        const o = allOrders.find(x => x.id === id);
-        if (o) {
-          o.costing = costF;
-          const sell = parseFloat(o.selling_price) || 0;
-          o.profit = sell > 0 ? sell - costF : 0;
-        }
-      });
-      filterTable();
-      bulkCostingModal.hide();
-      document.getElementById('selectAll').checked = false;
-      checkBulk();
-      showToast(`Costing set for ${res.updated} sale(s)`);
-    } else {
-      showToast('Failed to update costing', 'error');
-    }
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = orig;
-  }
-}
-
-// ── Bulk Set Sell Price ───────────────────────────────────────────
+// Bulk Sell
 function openBulkSell() {
-  const count = getSelectedIds().length;
-  if (!count) return;
+  const count = getSelectedIds().length; if (!count) return;
   document.getElementById('bulkSellCount').textContent = count;
   document.getElementById('bulk_sell_price').value = '';
   bulkSellModal.show();
 }
-
 async function applyBulkSell() {
   const ids  = getSelectedIds();
   const sell = document.getElementById('bulk_sell_price').value.trim();
   if (!sell) { showToast('Enter a selling price', 'error'); return; }
-
-  const btn = document.querySelector('#bulkSellModal .btn-success-custom');
-  const orig = btn.innerHTML;
-  btn.disabled = true;
+  const btn  = document.querySelector('#bulkSellModal .btn-success-custom');
+  const orig = btn.innerHTML; btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-
   try {
     const res = await api('/api/offline-orders/bulk-set-sell', 'POST', { ids, selling_price: parseFloat(sell) });
     if (res.success) {
       const sellF = parseFloat(sell);
+      // Update local array immediately — uses findById from base.html (String comparison)
       ids.forEach(id => {
-        const o = allOrders.find(x => x.id === id);
+        const o = findById(allOrders, id);
         if (o) {
           o.selling_price = sellF;
-          o.profit = sellF - (parseFloat(o.costing) || 0);
+          o.profit        = sellF - (parseFloat(o.costing) || 0);
         }
       });
       filterTable();
       bulkSellModal.hide();
       document.getElementById('selectAll').checked = false;
-      checkBulk();
-      showToast(`Sell price set for ${res.updated} sale(s)`);
-    } else {
-      showToast('Failed to update sell price', 'error');
-    }
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = orig;
+      onCheckChange();
+      showToast(`Sell price set for ${res.updated} order(s)`);
+    } else { showToast('Failed', 'error'); }
+  } finally { btn.disabled = false; btn.innerHTML = orig; }
+}
+
+// Bulk Cost
+function openBulkCost() {
+  const count = getSelectedIds().length; if (!count) return;
+  document.getElementById('bulkCostCount').textContent = count;
+  document.getElementById('bulk_cost_price').value = '';
+  bulkCostModal.show();
+}
+async function applyBulkCost() {
+  const ids  = getSelectedIds();
+  const cost = document.getElementById('bulk_cost_price').value.trim();
+  if (!cost) { showToast('Enter a costing', 'error'); return; }
+  const btn  = document.querySelector('#bulkCostModal .btn-primary-custom');
+  const orig = btn.innerHTML; btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+  try {
+    const res = await api('/api/offline-orders/bulk-set-costing', 'POST', { ids, costing: parseFloat(cost) });
+    if (res.success) {
+      const costF = parseFloat(cost);
+      ids.forEach(id => {
+        const o = findById(allOrders, id);
+        if (o) {
+          o.costing = costF;
+          o.profit  = (parseFloat(o.selling_price) || 0) - costF;
+        }
+      });
+      filterTable();
+      bulkCostModal.hide();
+      document.getElementById('selectAll').checked = false;
+      onCheckChange();
+      showToast(`Costing updated for ${res.updated} order(s)`);
+    } else { showToast('Failed', 'error'); }
+  } finally { btn.disabled = false; btn.innerHTML = orig; }
+}
+
+// Bulk Month
+async function promptBulkMonth() {
+  const ids = getSelectedIds(); if (!ids.length) return;
+  const val = prompt(`Set sale month for ${ids.length} orders (YYYY-MM):`);
+  if (!val || !val.match(/^\d{4}-\d{2}$/)) { if(val) showToast('Use format YYYY-MM', 'error'); return; }
+  const res = await api('/api/offline-orders/bulk-update-sale', 'POST', { ids, sale_month: val });
+  if (res.success) {
+    ids.forEach(id => { const o = findById(allOrders, id); if (o) o.sale_month = val; });
+    filterTable();
+    document.getElementById('selectAll').checked = false;
+    onCheckChange();
+    showToast(`Month set to ${val} for ${ids.length} order(s)`);
   }
 }
 
-// ── Bulk Delete ───────────────────────────────────────────────────
+// Bulk Delete
 async function bulkDelete() {
   const ids = getSelectedIds();
-  if (!ids.length || !confirm(`Delete ${ids.length} sales?`)) return;
+  if (!ids.length || !confirm(`Delete ${ids.length} selected orders?`)) return;
   const res = await api('/api/offline-orders/bulk-delete', 'POST', { ids });
-  if (res.success !== false) {
-    allOrders = allOrders.filter(o => !ids.includes(o.id));
+  if (res.success) {
+    allOrders = allOrders.filter(o => !ids.includes(String(o.id)));
     filterTable();
     document.getElementById('selectAll').checked = false;
-    checkBulk();
-    showToast(`${ids.length} sales deleted.`);
+    onCheckChange();
+    showToast(`${res.deleted} order(s) deleted.`);
   }
+}
+
+function exportOrders(fmt) {
+  const month = document.getElementById('filterMonth').value;
+  window.location.href = `/api/offline-orders/export?format=${fmt}&month=${encodeURIComponent(month)}`;
 }
 
 init();
