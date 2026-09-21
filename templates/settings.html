@@ -273,10 +273,14 @@ function drawList(items, elementId, endpoint, formatTextFn, searchable=false) {
     <li class="list-group-item d-flex justify-content-between align-items-center px-1 py-2"
         style="background:transparent;color:var(--text);border-color:var(--border);">
       <span>${formatTextFn(i)}</span>
-      <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delItem('${endpoint}',${i.id})">
+      <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delItem('${endpoint}','${i.id}')">
         <i class="bi bi-trash"></i>
       </button>
     </li>`).join('');
+  // Re-apply active search filter if search box has text
+  const searchId = elementId.replace('list_', 'search_');
+  const searchEl = document.getElementById(searchId);
+  if (searchEl && searchEl.value) filterList(elementId, searchId);
 }
 
 // ── Variant list renderer (shared by main and jiomart) ────────────────────────
@@ -396,7 +400,7 @@ async function loadSettings() {
   ]);
 
   // ── Main master data lists ──
-  drawList(cards,    'list_cards',    'cards',    c => `<code style="color:var(--accent2)">•••• ${c.last_digits}</code> <span class="ms-2">${c.card_type}</span>`);
+  drawList(cards,    'list_cards',    'cards',    c => `<code style="color:var(--accent2)">•••• ${String(c.last_digits||'').replace(/^'/,'')}</code> <span class="ms-2">${c.card_type||'Unknown'}</span>`);
   drawList(plats,    'list_platforms','platforms', p => `<b>${p.platform_name}</b> <span style="color:var(--muted)">(${p.account_name})</span>`);
   drawList(machs,    'list_machines', 'machines', m => m.name);
   drawList(vends,    'list_vendors',  'vendors',  v => v.name);
@@ -501,8 +505,11 @@ async function addJmVariant() {
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 async function delItem(endpoint, id) {
-  if (!confirm('Delete this item?')) return;
-  await api(`/api/${endpoint}/${id}`,'DELETE'); loadSettings();
+  if (!confirm('Delete this item? This cannot be undone.')) return;
+  const res = await api(`/api/${endpoint}/${id}`, 'DELETE');
+  if (res && res.success === false) { showToast('Delete failed', 'error'); return; }
+  showToast('Deleted');
+  loadSettings();
 }
 
 // ── Live search filter for any list ─────────────────────────────────────────
