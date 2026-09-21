@@ -1216,6 +1216,37 @@ def api_voucher_tracker():
     except Exception as e:
         print(f"Voucher Tracker POST Error: {e}"); return jsonify({'success': False}), 500
 
+@app.route('/api/voucher-tracker/export')
+def export_voucher_tracker():
+    if not SHEET: return "Not connected", 500
+    fmt      = request.args.get('format', 'csv')
+    month    = request.args.get('month', '')
+    platform = request.args.get('platform', '')
+    status   = request.args.get('status', '')
+    records  = safe_get_records(SHEET.worksheet('voucher_tracker'))
+    if month:    records = [r for r in records if str(r.get('month','')).strip() == month]
+    if platform: records = [r for r in records if r.get('platform','') == platform]
+    if status == 'redeemed': records = [r for r in records if str(r.get('is_redeemed','0')) == '1']
+    if status == 'pending':  records = [r for r in records if str(r.get('is_redeemed','0')) != '1']
+    records = sorted(records, key=lambda r: str(r.get('month','')), reverse=True)
+    headers = ['id','platform','voucher_code','voucher_pin','amount','discount_pct','profit','month','is_redeemed','created_at']
+    if fmt == 'csv':
+        out = io.StringIO(); w = csv.DictWriter(out, fieldnames=headers, extrasaction='ignore')
+        w.writeheader(); w.writerows(records); out.seek(0)
+        return send_file(io.BytesIO(out.getvalue().encode('utf-8')), mimetype='text/csv',
+            as_attachment=True, download_name=f'vouchers_{datetime.now().strftime("%Y%m%d_%H%M")}.csv')
+    wb = openpyxl.Workbook(); ws_xl = wb.active; ws_xl.title = "Vouchers"
+    hf = PatternFill("solid", fgColor="1A2D45"); hfont = Font(bold=True, color="2ECC8F")
+    ws_xl.append(headers)
+    for c in ws_xl[1]: c.fill = hf; c.font = hfont
+    for r in records: ws_xl.append([r.get(h,'') for h in headers])
+    for col in ws_xl.columns:
+        ws_xl.column_dimensions[col[0].column_letter].width = min(max((len(str(c.value or '')) for c in col),default=10)+4,40)
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True, download_name=f'vouchers_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx')
+
+
 @app.route('/api/voucher-tracker/<int:id>', methods=['DELETE', 'PUT'])
 def modify_voucher_tracker(id):
     if request.method == 'DELETE':
