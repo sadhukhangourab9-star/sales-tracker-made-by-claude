@@ -26,7 +26,15 @@
           <button class="btn-primary-custom w-100 justify-content-center" onclick="addCard()"><i class="bi bi-plus"></i> Add Card</button>
         </div>
       </div>
-      <ul class="list-group list-group-flush" id="list_cards" style="max-height:200px;overflow-y:auto;font-size:13px;"></ul>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div class="search-wrap" style="flex:1;">
+          <i class="bi bi-search"></i>
+          <input type="text" class="search-input" id="search_cards" placeholder="Search cards…"
+                 oninput="filterList('list_cards','search_cards')"/>
+        </div>
+        <span id="list_cards_count" style="color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap;">0 cards</span>
+      </div>
+      <ul class="list-group list-group-flush" id="list_cards" style="max-height:220px;overflow-y:auto;font-size:13px;"></ul>
     </div>
 
     <div class="card-panel m-0">
@@ -44,7 +52,15 @@
           <button class="btn-primary-custom w-100 justify-content-center" onclick="addPlatform()"><i class="bi bi-plus"></i> Add Platform</button>
         </div>
       </div>
-      <ul class="list-group list-group-flush" id="list_platforms" style="max-height:200px;overflow-y:auto;font-size:13px;"></ul>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div class="search-wrap" style="flex:1;">
+          <i class="bi bi-search"></i>
+          <input type="text" class="search-input" id="search_platforms" placeholder="Search platforms…"
+                 oninput="filterList('list_platforms','search_platforms')"/>
+        </div>
+        <span id="list_platforms_count" style="color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap;">0 accounts</span>
+      </div>
+      <ul class="list-group list-group-flush" id="list_platforms" style="max-height:220px;overflow-y:auto;font-size:13px;"></ul>
     </div>
 
     <div class="card-panel m-0" style="border-top:4px solid var(--amber);">
@@ -63,6 +79,9 @@
           <button class="btn-primary-custom w-100 justify-content-center" onclick="addVoucher()"><i class="bi bi-plus"></i> Add Voucher</button>
         </div>
       </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+        <span id="list_vouchers_count" style="color:var(--muted);font-size:11px;font-weight:600;">0 vouchers</span>
+      </div>
       <ul class="list-group list-group-flush" id="list_vouchers" style="max-height:200px;overflow-y:auto;font-size:13px;"></ul>
     </div>
 
@@ -77,6 +96,9 @@
         <div class="col-4 d-flex align-items-end">
           <button class="btn-primary-custom w-100 justify-content-center" onclick="addSimple('sec-order-names','sec_name','name')"><i class="bi bi-plus"></i> Add</button>
         </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+        <span id="list_sec_count" style="color:var(--muted);font-size:11px;font-weight:600;">0 names</span>
       </div>
       <ul class="list-group list-group-flush" id="list_sec" style="max-height:200px;overflow-y:auto;font-size:13px;"></ul>
     </div>
@@ -131,7 +153,10 @@
             <input type="text" id="off_mach" class="form-control" placeholder="Add Machine...">
             <button class="btn-primary-custom" onclick="addSimple('machines','off_mach','name')">Add</button>
           </div>
-          <ul class="list-group list-group-flush" id="list_machines" style="font-size:13px;"></ul>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+        <span id="list_machines_count" style="color:var(--muted);font-size:11px;font-weight:600;">0 machines</span>
+      </div>
+      <ul class="list-group list-group-flush" id="list_machines" style="font-size:13px;"></ul>
         </div>
         <div class="col-md-4">
           <label class="form-label" style="font-size:10px;">VENDORS</label>
@@ -139,7 +164,10 @@
             <input type="text" id="off_vend" class="form-control" placeholder="Add Vendor...">
             <button class="btn-primary-custom" onclick="addSimple('vendors','off_vend','name')">Add</button>
           </div>
-          <ul class="list-group list-group-flush" id="list_vendors" style="font-size:13px;"></ul>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+        <span id="list_vendors_count" style="color:var(--muted);font-size:11px;font-weight:600;">0 vendors</span>
+      </div>
+      <ul class="list-group list-group-flush" id="list_vendors" style="font-size:13px;"></ul>
         </div>
         <div class="col-md-4">
           <label class="form-label" style="font-size:10px;">BRANDS (MODELS)</label>
@@ -147,7 +175,10 @@
             <input type="text" id="off_brand" class="form-control" placeholder="Add Brand...">
             <button class="btn-primary-custom" onclick="addSimple('brands','off_brand','name')">Add</button>
           </div>
-          <ul class="list-group list-group-flush" id="list_brands" style="font-size:13px;"></ul>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+        <span id="list_brands_count" style="color:var(--muted);font-size:11px;font-weight:600;">0 brands</span>
+      </div>
+      <ul class="list-group list-group-flush" id="list_brands" style="font-size:13px;"></ul>
         </div>
       </div>
     </div>
@@ -167,7 +198,10 @@
             <input type="text" id="jm_acc" class="form-control" placeholder="e.g. JioMart Account 1">
             <button class="btn-primary-custom" style="white-space:nowrap;" onclick="addJmAccount()"><i class="bi bi-plus"></i> Add</button>
           </div>
-          <ul class="list-group list-group-flush" id="list_jm_accounts" style="max-height:160px;overflow-y:auto;font-size:13px;"></ul>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+        <span id="list_jm_accounts_count" style="color:var(--muted);font-size:11px;font-weight:600;">0 accounts</span>
+      </div>
+      <ul class="list-group list-group-flush" id="list_jm_accounts" style="max-height:160px;overflow-y:auto;font-size:13px;"></ul>
         </div>
       </div>
 
@@ -216,9 +250,26 @@
 {% block scripts %}
 <script>
 // ── Generic list renderer ─────────────────────────────────────────────────────
-function drawList(items, elementId, endpoint, formatTextFn) {
+function drawList(items, elementId, endpoint, formatTextFn, searchable=false) {
   const el = document.getElementById(elementId); if (!el) return;
-  el.innerHTML = items.map(i => `
+  // Update count badge if exists
+  const badge = document.getElementById(elementId + '_count');
+  if (badge) {
+    const label = badge.textContent.replace(/^\d+ /, '').replace(/^\d+ of \d+ /, '') || '';
+    const baseLabel = label || elementId.replace('list_','').replace('_',' ');
+    badge.textContent = `${items.length} ${baseLabel}`;
+  }
+  // Sort items by name/label for consistency
+  const sorted = [...items].sort((a,b) => {
+    const na = String(a.name||a.model_name||a.platform_name||a.last_digits||a.id||'');
+    const nb = String(b.name||b.model_name||b.platform_name||b.last_digits||b.id||'');
+    return na.localeCompare(nb);
+  });
+  if (!sorted.length) {
+    el.innerHTML = '<li class="list-group-item" style="background:transparent;color:var(--muted);text-align:center;font-size:12px;">No items yet</li>';
+    return;
+  }
+  el.innerHTML = sorted.map(i => `
     <li class="list-group-item d-flex justify-content-between align-items-center px-1 py-2"
         style="background:transparent;color:var(--text);border-color:var(--border);">
       <span>${formatTextFn(i)}</span>
@@ -452,6 +503,24 @@ async function addJmVariant() {
 async function delItem(endpoint, id) {
   if (!confirm('Delete this item?')) return;
   await api(`/api/${endpoint}/${id}`,'DELETE'); loadSettings();
+}
+
+// ── Live search filter for any list ─────────────────────────────────────────
+function filterList(listId, searchId) {
+  const q   = document.getElementById(searchId).value.toLowerCase();
+  const lis = document.querySelectorAll(`#${listId} li`);
+  let shown = 0;
+  lis.forEach(li => {
+    const match = !q || li.textContent.toLowerCase().includes(q);
+    li.style.display = match ? '' : 'none';
+    if (match) shown++;
+  });
+  // Update count badge
+  const badge = document.getElementById(listId + '_count');
+  if (badge) {
+    const total = lis.length;
+    badge.textContent = q ? `${shown} of ${total}` : `${total} ${listId.replace('list_','').replace('_',' ')}`;
+  }
 }
 
 loadSettings();
