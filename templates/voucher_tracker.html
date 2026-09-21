@@ -80,7 +80,7 @@
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
     <div class="search-wrap">
       <i class="bi bi-search"></i>
-      <input type="text" class="search-input" id="searchInput" placeholder="Search PIN…" oninput="filterTable()"/>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search PIN, code…" oninput="filterTable()"/>
     </div>
     <select id="filterPlatform" class="form-select" style="width:150px;" onchange="filterTable()">
       <option value="ALL">All Platforms</option>
@@ -93,8 +93,20 @@
       <option value="pending">Pending Only</option>
       <option value="redeemed">Redeemed Only</option>
     </select>
+    <select id="sortOrder" class="form-select" style="width:170px;" onchange="filterTable()">
+      <option value="month_desc">Newest Month First</option>
+      <option value="month_asc">Oldest Month First</option>
+      <option value="profit_desc">Highest Profit First</option>
+      <option value="amount_desc">Highest Amount First</option>
+    </select>
     <button class="btn-outline-custom" onclick="clearFilters()">
       <i class="bi bi-x-circle"></i> Clear
+    </button>
+    <button class="btn-outline-custom" onclick="exportVouchers('csv')">
+      <i class="bi bi-filetype-csv"></i> CSV
+    </button>
+    <button class="btn-outline-custom" onclick="exportVouchers('excel')">
+      <i class="bi bi-file-earmark-excel"></i> Excel
     </button>
   </div>
 </div>
@@ -328,6 +340,7 @@ function clearFilters() {
   document.getElementById('filterMonth').value     = '';
   document.getElementById('filterRedeemed').value  = 'ALL';
   document.getElementById('searchInput').value     = '';
+  if (document.getElementById('sortOrder')) document.getElementById('sortOrder').value = 'month_desc';
   filterTable();
 }
 
@@ -346,6 +359,16 @@ function filterTable() {
       || (fr === 'pending'  && !redeemed);
     const mq = !q || Object.values(e).some(v => String(v||'').toLowerCase().includes(q));
     return mp && mm && mr && mq;
+  });
+
+  // Apply sort
+  const sort = document.getElementById('sortOrder') ? document.getElementById('sortOrder').value : 'month_desc';
+  filteredEntries.sort((a, b) => {
+    if (sort === 'month_asc')    return (a.month||'').localeCompare(b.month||'');
+    if (sort === 'month_desc')   return (b.month||'').localeCompare(a.month||'');
+    if (sort === 'profit_desc')  return (parseFloat(b.profit)||0) - (parseFloat(a.profit)||0);
+    if (sort === 'amount_desc')  return (parseFloat(b.amount)||0) - (parseFloat(a.amount)||0);
+    return 0;
   });
 
   currentPage = 1;
@@ -691,6 +714,18 @@ async function deleteCommission(id) {
     allCommission = allCommission.filter(c => String(c.id) !== String(id));
     renderCommission(); showToast('Deleted.');
   } else { showToast('Failed to delete', 'error'); }
+}
+
+// ── Export ───────────────────────────────────────────────────────────────────
+function exportVouchers(fmt) {
+  const fm = document.getElementById('filterMonth').value;
+  const fp = document.getElementById('filterPlatform').value;
+  const fr = document.getElementById('filterRedeemed').value;
+  let url = `/api/voucher-tracker/export?format=${fmt}`;
+  if (fm) url += `&month=${encodeURIComponent(fm)}`;
+  if (fp && fp !== 'ALL') url += `&platform=${encodeURIComponent(fp)}`;
+  if (fr && fr !== 'ALL') url += `&status=${encodeURIComponent(fr)}`;
+  window.location.href = url;
 }
 
 init();
