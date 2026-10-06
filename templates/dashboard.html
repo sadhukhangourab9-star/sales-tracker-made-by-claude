@@ -145,11 +145,10 @@ function renderKPIs(s) {
     { label:'Total Profit',       value:fmt(s.grand_profit),          sub:margin+'% net margin',                                         icon:'bi-graph-up-arrow',        color:C.green  },
     { label:'Online Orders',      value:s.online_orders,              sub:s.online_sold+' sold \u00b7 '+s.online_pending+' pending',     icon:'bi-bag-check-fill',        color:C.blue   },
     { label:'Offline Sales',      value:s.offline_sold,               sub:'of '+s.offline_orders+' entries',                             icon:'bi-shop-window',           color:C.amber  },
-    { label:'Exchange Orders',    value:s.exchange_count,             sub:fmt(s.exch_total_exch)+' trade-in',                            icon:'bi-arrow-left-right',      color:C.purple },
     { label:'Net Voucher Profit', value:fmt(s.net_voucher_profit),    sub:'Gross '+fmt(s.voucher_redeemed_profit)+' \u2212 commission',  icon:'bi-ticket-perforated-fill',color:C.green  }
   ];
   document.getElementById('kpiRow').innerHTML = kpis.map(function(k) {
-    return '<div class="col-md-2 col-sm-4 col-6">'
+    return '<div class="col-md col-sm-4 col-6">'
       +'<div class="card-panel" style="padding:16px;border-top:3px solid '+k.color+';">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
       +'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">'+k.label+'</div>'
