@@ -1,5 +1,5 @@
-from flask import Flask, render_template, request, jsonify, send_file
-import os, io, json, csv, time
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect
+import os, io, json, csv, time, hmac, hashlib
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, PatternFill
@@ -7,6 +7,65 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
+
+# ── Login protection ──────────────────────────────────────────────────────────
+# Set APP_PASSWORD in the Render dashboard to turn login on.
+# If APP_PASSWORD is not set, the app stays open (and prints a warning).
+APP_PASSWORD = os.environ.get('APP_PASSWORD', '')
+app.secret_key = os.environ.get('SECRET_KEY') or (
+    hashlib.sha256(('ordertrack-' + APP_PASSWORD).encode()).hexdigest() if APP_PASSWORD else os.urandom(32).hex())
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=bool(os.environ.get('RENDER')),   # HTTPS-only cookie on Render
+    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,           # stay logged in 30 days
+)
+if not APP_PASSWORD:
+    print("WARNING: APP_PASSWORD is not set - the app has NO login protection.")
+
+_PUBLIC_PATHS = ('/login', '/manifest.json', '/sw.js')
+_login_fails = {}   # ip -> (count, locked_until)
+
+@app.context_processor
+def inject_auth_flag():
+    return {'auth_enabled': bool(APP_PASSWORD)}
+
+@app.before_request
+def require_login():
+    if not APP_PASSWORD or session.get('auth'): return None
+    p = request.path
+    if p in _PUBLIC_PATHS or p.startswith('/static/'): return None
+    if p.startswith('/api/'): return jsonify({'success': False, 'error': 'Login required'}), 401
+    nxt = request.full_path.rstrip('?') if p != '/' else ''
+    return redirect('/login' + (f'?next={nxt}' if nxt else ''))
+
+def _safe_next(n):
+    return n if n and n.startswith('/') and not n.startswith('//') else '/'
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if not APP_PASSWORD: return redirect('/')
+    nxt = _safe_next(request.values.get('next', ''))
+    if request.method == 'POST':
+        ip = (request.headers.get('X-Forwarded-For', request.remote_addr) or '').split(',')[0].strip()
+        count, locked_until = _login_fails.get(ip, (0, 0))
+        if time.time() < locked_until:
+            return render_template('login.html', error='Too many attempts. Try again in a minute.', next=nxt), 429
+        given = request.form.get('password', '')
+        if hmac.compare_digest(given.encode(), APP_PASSWORD.encode()):
+            _login_fails.pop(ip, None)
+            session.clear(); session['auth'] = True; session.permanent = True
+            return redirect(nxt)
+        count += 1
+        _login_fails[ip] = (count, time.time() + 60 if count >= 5 else 0)
+        if count >= 5: _login_fails[ip] = (0, time.time() + 60)
+        return render_template('login.html', error='Wrong password.', next=nxt), 401
+    return render_template('login.html', error='', next=nxt)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/login')
 
 # ── Google Sheets Setup ───────────────────────────────────────────────────────
 SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'OrderTrack_DB')
@@ -123,7 +182,7 @@ def delete_card(card_id):
     ws = SHEET.worksheet('cards')
     try:
         cell = ws.find(str(card_id), in_column=1); ws.delete_rows(cell.row)
-    except: pass
+    except Exception as e: print(f"delete_card error: {e}")
     cache_clear('cards'); cache_clear('card_lookup')
     return jsonify({'success': True})
 
@@ -161,7 +220,7 @@ def delete_master_table(table_name, item_id):
     ws = SHEET.worksheet(table_name)
     try:
         cell = ws.find(str(item_id), in_column=1); ws.delete_rows(cell.row)
-    except: pass
+    except Exception as e: print(f"delete_master_table({table_name}) error: {e}")
     cache_clear(f'master_{table_name}')
     return jsonify({'success': True})
 
@@ -236,14 +295,14 @@ def api_variants():
             models = safe_get_records(SHEET.worksheet('models'))
             m_id = next((m['id'] for m in models if m['model_name'] == model_name), None)
             try: m_id_int = int(m_id) if m_id is not None else None
-            except: m_id_int = None
+            except Exception: m_id_int = None
             result = [v for v in variants if m_id_int is not None and _safe_int(v.get('model_id')) == m_id_int] if m_id_int else []
         else:
             result = variants
         cache_set(cache_key, result); return jsonify(result)
     data = request.json; new_id = get_next_id(ws)
     try: v_model_id_int = int(data.get('model_id', 0))
-    except: v_model_id_int = 0
+    except Exception: v_model_id_int = 0
     ws.append_row([new_id, v_model_id_int, data.get('variant_name', ''), data.get('costing', ''), data.get('selling_price', '')])
     for k in list(_cache.keys()):
         if k.startswith('variants'): cache_clear(k)
@@ -276,9 +335,9 @@ def sync_variant_sell_price(var_id):
     match_costing = data.get('costing', '')
     if not variant_name or new_sell == '': return jsonify({'success': False, 'error': 'missing fields'})
     try: new_sell_f = float(new_sell)
-    except: return jsonify({'success': False, 'error': 'invalid selling_price'})
+    except Exception: return jsonify({'success': False, 'error': 'invalid selling_price'})
     try: match_cost_f = float(match_costing) if match_costing != '' else None
-    except: match_cost_f = None
+    except Exception: match_cost_f = None
     updated = 0; errors = []
     # secondary_orders now has same column positions as main_orders for variant/costing/sell/profit
     for sheet_name, variant_col, sell_col, profit_col, cost_col in [
@@ -292,7 +351,7 @@ def sync_variant_sell_price(var_id):
                 cell_variant = row[variant_col - 1] if len(row) >= variant_col else ''
                 if cell_variant.strip() != variant_name.strip(): continue
                 try: row_cost_f = float(row[cost_col - 1]) if len(row) >= cost_col and row[cost_col - 1] else 0.0
-                except: row_cost_f = 0.0
+                except Exception: row_cost_f = 0.0
                 if match_cost_f is not None and round(row_cost_f, 2) != round(match_cost_f, 2): continue
                 ws.update_cell(row_idx, sell_col, new_sell_f)
                 ws.update_cell(row_idx, profit_col, round(new_sell_f - row_cost_f, 2))
@@ -350,6 +409,7 @@ def bulk_del_main():
     for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_row(r_idx)
     cache_clear('main_orders'); return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
+@app.route('/api/main-orders/bulk-update-month', methods=['POST'])
 @app.route('/api/main-orders/bulk-update-sale', methods=['POST'])
 def bulk_sale_main():
     if not SHEET: return jsonify({'success': False})
@@ -370,7 +430,7 @@ def bulk_sell_main():
     ids_set = normalize_ids(ids)
     if not ids or new_sell is None: return jsonify({'success': False})
     try: new_sell_f = float(new_sell)
-    except: return jsonify({'success': False})
+    except Exception: return jsonify({'success': False})
     ws = SHEET.worksheet('main_orders')
     try:
         records = safe_get_records(ws); updated = 0
@@ -493,6 +553,7 @@ def bulk_del_sec():
     for r_idx in sorted(rows_to_delete,reverse=True): ws.delete_row(r_idx)
     cache_clear('secondary_orders'); return jsonify({'success':True,'deleted':len(rows_to_delete)})
 
+@app.route('/api/secondary-orders/bulk-update-month', methods=['POST'])
 @app.route('/api/secondary-orders/bulk-update-sale', methods=['POST'])
 def bulk_sale_sec():
     if not SHEET: return jsonify({'success': False})
@@ -513,7 +574,7 @@ def bulk_sell_sec():
     ids_set = normalize_ids(ids)
     if not ids or new_sell is None: return jsonify({'success': False})
     try: new_sell_f=float(new_sell)
-    except: return jsonify({'success': False})
+    except Exception: return jsonify({'success': False})
     ws=SHEET.worksheet('secondary_orders')
     try:
         records=safe_get_records(ws); updated=0
@@ -627,6 +688,20 @@ def bulk_del_offline():
     for r_idx in sorted(rows_to_delete,reverse=True): ws.delete_row(r_idx)
     cache_clear('offline_orders'); return jsonify({'success':True,'deleted':len(rows_to_delete)})
 
+@app.route('/api/offline-orders/bulk-update-month', methods=['POST'])
+@app.route('/api/offline-orders/bulk-update-sale', methods=['POST'])
+def bulk_sale_offline():
+    if not SHEET: return jsonify({'success': False})
+    ids=request.json.get('ids',[]); new_month=request.json.get('sale_month','')
+    ids_set = normalize_ids(ids)
+    ws=SHEET.worksheet('offline_orders')
+    try:
+        records=safe_get_records(ws)
+        for i,r in enumerate(records):
+            if str(r.get('id','')) in ids_set: ws.update_cell(i+2,11,new_month)  # col 11 = sale_month
+        cache_clear('offline_orders'); return jsonify({'success': True})
+    except Exception as e: print("Bulk Sale Offline Error:",e); return jsonify({'success': False})
+
 @app.route('/api/offline-orders/bulk-set-costing', methods=['POST'])
 def bulk_costing_offline():
     if not SHEET: return jsonify({'success': False})
@@ -634,7 +709,7 @@ def bulk_costing_offline():
     ids_set = normalize_ids(ids)
     if not ids or new_cost is None: return jsonify({'success': False})
     try: new_cost_f=float(new_cost)
-    except: return jsonify({'success': False})
+    except Exception: return jsonify({'success': False})
     ws=SHEET.worksheet('offline_orders')
     try:
         records=safe_get_records(ws); updated=0
@@ -652,7 +727,7 @@ def bulk_sell_offline():
     ids_set = normalize_ids(ids)
     if not ids or new_sell is None: return jsonify({'success': False})
     try: new_sell_f=float(new_sell)
-    except: return jsonify({'success': False})
+    except Exception: return jsonify({'success': False})
     ws=SHEET.worksheet('offline_orders')
     try:
         records=safe_get_records(ws); updated=0
@@ -768,7 +843,7 @@ def api_jiomart_variants():
             m_id = next((m['id'] for m in models if m['model_name'] == model_name), None)
             # Cast both sides to int — gspread can return strings or ints inconsistently
             try: m_id_int = int(m_id) if m_id is not None else None
-            except: m_id_int = None
+            except Exception: m_id_int = None
             result = [v for v in variants if m_id_int is not None and _safe_int(v.get('model_id')) == m_id_int] if m_id_int else []
         else:
             result = variants
@@ -777,7 +852,7 @@ def api_jiomart_variants():
     # POST — always store model_id as integer to avoid string/int mismatch on read
     data = request.json; new_id = get_next_id(ws)
     try: model_id_int = int(data.get('model_id', 0))
-    except: model_id_int = 0
+    except Exception: model_id_int = 0
     ws.append_row([new_id, model_id_int, data.get('variant_name',''),
                    data.get('costing',''), data.get('selling_price','')])
     for k in list(_cache.keys()):
@@ -813,9 +888,9 @@ def sync_jiomart_variant_sell_price(var_id):
     if not variant_name or new_sell == '':
         return jsonify({'success': False, 'error': 'variant_name and selling_price required'})
     try: new_sell_f = float(new_sell)
-    except: return jsonify({'success': False, 'error': 'invalid selling_price'})
+    except Exception: return jsonify({'success': False, 'error': 'invalid selling_price'})
     try: match_cost_f = float(match_costing) if match_costing != '' else None
-    except: match_cost_f = None
+    except Exception: match_cost_f = None
     updated = 0; errors = []
     # jiomart_orders: variant=H(8), costing=I(9), sell=J(10), profit=K(11)
     try:
@@ -825,7 +900,7 @@ def sync_jiomart_variant_sell_price(var_id):
                 cell_variant = row[7] if len(row) >= 8 else ''
                 if cell_variant.strip() != variant_name.strip(): continue
                 try: row_cost_f = float(row[8]) if len(row) >= 9 and row[8] else 0.0
-                except: row_cost_f = 0.0
+                except Exception: row_cost_f = 0.0
                 if match_cost_f is not None and round(row_cost_f,2) != round(match_cost_f,2): continue
                 ws.update_cell(row_idx, 10, new_sell_f)
                 ws.update_cell(row_idx, 11, round(new_sell_f - row_cost_f, 2))
@@ -889,6 +964,7 @@ def bulk_del_jiomart():
     for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_row(r_idx)
     cache_clear('jiomart_orders'); return jsonify({'success': True, 'deleted': len(rows_to_delete)})
 
+@app.route('/api/jiomart-orders/bulk-update-month', methods=['POST'])
 @app.route('/api/jiomart-orders/bulk-update-sale', methods=['POST'])
 def bulk_sale_jiomart():
     if not SHEET: return jsonify({'success': False})
@@ -909,7 +985,7 @@ def bulk_sell_jiomart():
     ids_set = normalize_ids(ids)
     if not ids or new_sell is None: return jsonify({'success': False})
     try: new_sell_f = float(new_sell)
-    except: return jsonify({'success': False})
+    except Exception: return jsonify({'success': False})
     ws = SHEET.worksheet('jiomart_orders')
     try:
         records = safe_get_records(ws); updated = 0
@@ -1135,7 +1211,7 @@ def api_voucher_commission():
                 if not all_vals or len(all_vals) < 2: return jsonify([])
                 headers = all_vals[0]
                 records = [dict(zip(headers, row + [''] * (len(headers) - len(row)))) for row in all_vals[1:]]
-            except: records = []
+            except Exception: records = []
         cache_set('voucher_commission', records)
         return jsonify(records)
     try:
@@ -1216,7 +1292,7 @@ def api_dashboard_data():
 
         def sf(v):
             try: return float(v) if v not in (None, '', 'None', 'N/A') else 0.0
-            except: return 0.0
+            except Exception: return 0.0
 
         def is_sold(o): return sf(o.get('selling_price', 0)) > 0
 
@@ -1226,7 +1302,7 @@ def api_dashboard_data():
         today  = date.today()
         cur_fy = today.year if today.month >= 4 else today.year - 1
         try:    fy = int(request.args.get('fy', cur_fy))
-        except: fy = cur_fy
+        except Exception: fy = cur_fy
         fy_start = f"{fy}-04"
         fy_end   = f"{fy+1}-03"
 
@@ -1258,25 +1334,10 @@ def api_dashboard_data():
                     ca = str(created_at)
                     if len(ca) >= 4 and ca[:4].isdigit():
                         yr = int(ca[:4])
-                except: pass
+                except Exception: pass
                 if not yr: yr = today.year
                 return f"{yr}-{mo_num:02d}"
             return ''
-
-        def in_fy(month_str):
-            if not month_str: return False
-            m = str(month_str)[:7]
-            return fy_start <= m <= fy_end
-
-        # Accept optional fy param e.g. ?fy=2024 means Apr 2024 – Mar 2025
-        # Default: current financial year
-        from datetime import date
-        today   = date.today()
-        cur_fy  = today.year if today.month >= 4 else today.year - 1
-        try:    fy = int(request.args.get('fy', cur_fy))
-        except: fy = cur_fy
-        fy_start = f"{fy}-04"       # April of fy year
-        fy_end   = f"{fy+1}-03"     # March of fy+1
 
         def in_fy(month_str):
             if not month_str: return False
@@ -1288,9 +1349,6 @@ def api_dashboard_data():
         offline_orders  = safe_records('offline_orders')
         jiomart_orders  = safe_records('jiomart_orders')
         voucher_tracker = safe_records('voucher_tracker')
-
-        def sf(v): return safe_float(v)
-        def is_sold(o): return sf(o.get('selling_price')) > 0
 
         # Filter everything to current FY
         # Online orders use sale_month field
@@ -1441,7 +1499,7 @@ def api_dashboard_data():
             try:
                 yr,mo = int(m[:4]),int(m[5:7])
                 if 2020 <= yr <= 2035: fy_set.add(yr if mo >= 4 else yr-1)
-            except: pass
+            except Exception: pass
         if not fy_set: fy_set.add(cur_fy)
         available_fys = sorted(fy_set)
 
@@ -1514,4 +1572,4 @@ def serve_manifest(): return send_file('static/manifest.json',mimetype='applicat
 def serve_sw(): return send_file('static/sw.js',mimetype='application/javascript')
 
 if __name__=='__main__':
-    app.run(host='0.0.0.0',port=5000,debug=True)
+    app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)),debug=os.environ.get('FLASK_DEBUG')=='1')
