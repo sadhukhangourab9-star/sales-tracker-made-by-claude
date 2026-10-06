@@ -319,6 +319,7 @@
   </div>
   <div class="sidebar-footer">
     <div>OrderTrack v1.0</div>
+    {% if auth_enabled %}<a href="/logout" style="color:var(--muted);font-size:12px;text-decoration:none;display:inline-block;margin-top:6px;"><i class="bi bi-box-arrow-right"></i> Logout</a>{% endif %}
   </div>
 </nav>
 
@@ -343,6 +344,7 @@
     const opts = { method, headers: {'Content-Type':'application/json'} };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(url, opts);
+    if (res.status === 401) { window.location = '/login'; return {success:false, error:'Login required'}; }
     return res.json();
   }
 
@@ -351,16 +353,6 @@
     const data = await api(`/api/card-lookup?digits=${encodeURIComponent(digits)}`);
     targetInput.value = data.found ? data.card_type : '';
     if (!data.found && digits.length >= 4) showToast('Card digits not found in settings', 'error');
-  }
-
-  async function lookupPlatformAccounts(platform, accountSelect) {
-    const accounts = await api(`/api/platform-lookup?platform=${encodeURIComponent(platform)}`);
-    accountSelect.innerHTML = '<option value="">Select Account</option>';
-    accounts.forEach(a => {
-      const opt = document.createElement('option');
-      opt.value = opt.textContent = a;
-      accountSelect.appendChild(opt);
-    });
   }
 
   // ── Client-side variant cache ─────────────────────────────────────────────
