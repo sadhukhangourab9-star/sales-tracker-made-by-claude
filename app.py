@@ -93,8 +93,6 @@ def offline_orders(): return render_template('offline_orders.html')
 def jiomart_orders(): return render_template('jiomart_orders.html')
 @app.route('/voucher-tracker')
 def voucher_tracker(): return render_template('voucher_tracker.html')
-@app.route('/exchange')
-def exchange_orders(): return render_template('exchange_orders.html')
 @app.route('/inventory')
 def inventory(): return render_template('inventory.html')
 @app.route('/dashboard')
@@ -736,10 +734,6 @@ SHEET_SCHEMA = {
     'jiomart_variants': ['id','model_id','variant_name','costing','selling_price'],
     'voucher_tracker':  ['id','platform','voucher_code','voucher_pin','amount','discount_pct','profit','month','is_redeemed','created_at'],
     'voucher_commission': ['id','month','commission_amount','notes','created_at'],
-    'exchange_orders':  ['id','platform','model','variant','costing',
-                         'exchange_model','exchange_variant','exchange_value',
-                         'service_fee','original_costing','last_digits','card_type',
-                         'voucher_amount','created_at'],
 }
 
 
@@ -1004,164 +998,6 @@ def modify_jiomart(id):
     except Exception as e: print("Jiomart Edit Error:", e); return jsonify({'success': False})
 
 
-# ── Exchange Orders API ──────────────────────────────────────────────────────
-# id(1) platform(2) model(3) variant(4) costing(5) exchange_model(6)
-# exchange_variant(7) exchange_value(8) service_fee(9) original_costing(10)
-# last_digits(11) card_type(12) voucher_amount(13) created_at(14)
-#
-# Key calculation:
-# original_costing = (costing - exchange_value) + service_fee
-
-@app.route('/api/exchange-orders', methods=['GET', 'POST'])
-def api_exchange_orders():
-    if not SHEET: return jsonify([])
-    ws = SHEET.worksheet('exchange_orders')
-
-    if request.method == 'GET':
-        cached = cache_get('exchange_orders')
-        if cached: return jsonify(cached)
-        try:
-            records = safe_get_records(ws)
-        except Exception as e:
-            print(f"Exchange Orders GET error: {e}")
-            try:
-                all_vals = ws.get_all_values()
-                if not all_vals or len(all_vals) < 2: return jsonify([])
-                headers = all_vals[0]
-                records = [dict(zip(headers, row + [''] * (len(headers) - len(row)))) for row in all_vals[1:]]
-            except Exception as e2:
-                print(f"Exchange GET fallback error: {e2}"); records = []
-        for o in records:
-            if str(o.get('last_digits', '')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
-        result = list(reversed(records))
-        cache_set('exchange_orders', result)
-        return jsonify(result)
-
-    try:
-        data            = request.json; next_id = get_next_id(ws)
-        costing         = safe_float(data.get('costing'))
-        exchange_value  = safe_float(data.get('exchange_value'))
-        service_fee     = safe_float(data.get('service_fee'))
-        # original_costing = (costing - exchange_value) + service_fee
-        original_costing = round((costing - exchange_value) + service_fee, 2)
-        voucher_amount  = safe_float(data.get('voucher_amount'))
-        now             = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        ld = str(data.get('last_digits', '')); sd = f"'{ld}" if ld else ""
-        ws.append_row([
-            next_id,
-            data.get('platform', ''),
-            data.get('model', ''),
-            data.get('variant', ''),
-            costing if costing else '',
-            data.get('exchange_model', ''),
-            data.get('exchange_variant', ''),
-            exchange_value if exchange_value else '',
-            service_fee if service_fee else '',
-            original_costing if (costing or exchange_value or service_fee) else '',
-            sd,
-            data.get('card_type', ''),
-            voucher_amount if voucher_amount else '',
-            now
-        ])
-        cache_clear('exchange_orders')
-        return jsonify({
-            'success': True, 'id': next_id,
-            'platform': data.get('platform', ''),
-            'model': data.get('model', ''), 'variant': data.get('variant', ''),
-            'costing': costing if costing else '',
-            'exchange_model': data.get('exchange_model', ''),
-            'exchange_variant': data.get('exchange_variant', ''),
-            'exchange_value': exchange_value if exchange_value else '',
-            'service_fee': service_fee if service_fee else '',
-            'original_costing': original_costing if (costing or exchange_value or service_fee) else '',
-            'last_digits': ld, 'card_type': data.get('card_type', ''),
-            'voucher_amount': voucher_amount if voucher_amount else '',
-            'created_at': now
-        })
-    except Exception as e:
-        print(f"Exchange POST Error: {e}"); return jsonify({'success': False}), 500
-
-@app.route('/api/exchange-orders/bulk-delete', methods=['POST'])
-def bulk_del_exchange():
-    if not SHEET: return jsonify({'success': False})
-    ids = request.json.get('ids', []); ws = SHEET.worksheet('exchange_orders')
-    ids_set = normalize_ids(ids)
-    records = safe_get_records(ws)
-    rows_to_delete = [i+2 for i,r in enumerate(records) if str(r.get('id','')) in ids_set]
-    for r_idx in sorted(rows_to_delete, reverse=True): ws.delete_row(r_idx)
-    cache_clear('exchange_orders')
-    return jsonify({'success': True, 'deleted': len(rows_to_delete)})
-
-@app.route('/api/exchange-orders/export')
-def export_exchange():
-    if not SHEET: return "No sheet connected", 500
-    fmt = request.args.get('format', 'csv')
-    records = safe_get_records(SHEET.worksheet('exchange_orders'))
-    for o in records:
-        if str(o.get('last_digits','')).startswith("'"): o['last_digits'] = str(o['last_digits'])[1:]
-    headers = ['id','platform','model','variant','costing','exchange_model','exchange_variant',
-               'exchange_value','service_fee','original_costing','last_digits','card_type',
-               'voucher_amount','created_at']
-    if fmt == 'csv':
-        out = io.StringIO(); w = csv.DictWriter(out, fieldnames=headers, extrasaction='ignore')
-        w.writeheader(); w.writerows(records); out.seek(0)
-        return send_file(io.BytesIO(out.getvalue().encode('utf-8')), mimetype='text/csv',
-            as_attachment=True, download_name=f'exchange_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.csv')
-    wb = openpyxl.Workbook(); ws_xl = wb.active; ws_xl.title = "Exchange Orders"
-    hf = PatternFill("solid", fgColor="1A2D45"); hfont = Font(bold=True, color="2ECC8F")
-    ws_xl.append(headers)
-    for c in ws_xl[1]: c.fill = hf; c.font = hfont
-    for r in records: ws_xl.append([r.get(h,'') for h in headers])
-    for col in ws_xl.columns:
-        ws_xl.column_dimensions[col[0].column_letter].width = min(max((len(str(c.value or '')) for c in col),default=10)+4,40)
-    out = io.BytesIO(); wb.save(out); out.seek(0)
-    return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True, download_name=f'exchange_orders_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx')
-
-@app.route('/api/exchange-orders/<int:id>', methods=['DELETE', 'PUT'])
-def modify_exchange(id):
-    if request.method == 'DELETE':
-        cache_clear('exchange_orders'); return delete_master_table('exchange_orders', id)
-    if not SHEET: return jsonify({'success': False})
-    data = request.json; ws = SHEET.worksheet('exchange_orders')
-    try:
-        cell            = ws.find(str(id), in_column=1)
-        costing         = safe_float(data.get('costing'))
-        exchange_value  = safe_float(data.get('exchange_value'))
-        service_fee     = safe_float(data.get('service_fee'))
-        original_costing = round((costing - exchange_value) + service_fee, 2)
-        voucher_amount  = safe_float(data.get('voucher_amount'))
-        ld = str(data.get('last_digits', '')); sd = f"'{ld}" if ld else ""
-        # B(2) through M(13) = 12 values
-        ws.update(f'B{cell.row}:M{cell.row}', [[
-            data.get('platform', ''),
-            data.get('model', ''), data.get('variant', ''),
-            costing if costing else '',
-            data.get('exchange_model', ''), data.get('exchange_variant', ''),
-            exchange_value if exchange_value else '',
-            service_fee if service_fee else '',
-            original_costing if (costing or exchange_value or service_fee) else '',
-            sd, data.get('card_type', ''),
-            voucher_amount if voucher_amount else ''
-        ]])
-        cache_clear('exchange_orders')
-        return jsonify({
-            'success': True, 'id': id,
-            'platform': data.get('platform', ''),
-            'model': data.get('model', ''), 'variant': data.get('variant', ''),
-            'costing': costing if costing else '',
-            'exchange_model': data.get('exchange_model', ''),
-            'exchange_variant': data.get('exchange_variant', ''),
-            'exchange_value': exchange_value if exchange_value else '',
-            'service_fee': service_fee if service_fee else '',
-            'original_costing': original_costing if (costing or exchange_value or service_fee) else '',
-            'last_digits': ld, 'card_type': data.get('card_type', ''),
-            'voucher_amount': voucher_amount if voucher_amount else ''
-        })
-    except Exception as e:
-        print("Exchange Edit Error:", e); return jsonify({'success': False})
-
-
 # ── Voucher Tracker API ──────────────────────────────────────────────────────
 # id(1) platform(2) amount(3) discount_pct(4) profit(5) month(6) created_at(7)
 
@@ -1332,102 +1168,6 @@ def modify_voucher_commission(id):
         print("Voucher Commission PUT Error:", e); return jsonify({'success':False})
 
 
-# ── Jiomart Migration API ────────────────────────────────────────────────────
-# Move selected main_orders rows into jiomart_orders, then delete from main_orders.
-# Field mapping:
-#   main: card_type last_digits account order_name model variant costing
-#         selling_price profit delivery_date sale_month created_at
-#   jiomart: card_type last_digits account order_name order_id(blank) model
-#            variant costing selling_price profit delivery_date sale_month created_at
-
-@app.route('/api/main-orders/migrate-to-jiomart', methods=['POST'])
-def migrate_to_jiomart():
-    if not SHEET: return jsonify({'success': False, 'error': 'Not connected'})
-    ids          = request.json.get('ids', [])
-    ids_set = normalize_ids(ids)
-    delete_after = request.json.get('delete_after', True)
-    if not ids: return jsonify({'success': False, 'error': 'No orders selected'})
-
-    try:
-        main_ws   = SHEET.worksheet('main_orders')
-        jiomart_ws = SHEET.worksheet('jiomart_orders')
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-    try:
-        main_records = main_safe_get_records(ws)
-    except Exception as e:
-        return jsonify({'success': False, 'error': f'Could not read main_orders: {e}'})
-
-    # Filter selected rows
-    to_migrate = [r for r in main_records if str(r.get('id','')) in ids_set]
-    if not to_migrate:
-        return jsonify({'success': False, 'error': 'No matching orders found'})
-
-    # Get next jiomart id
-    next_id = get_next_id(jiomart_ws)
-    migrated = 0
-    errors   = []
-
-    for r in to_migrate:
-        try:
-            # Strip the apostrophe prefix gspread adds to last_digits
-            ld = str(r.get('last_digits', ''))
-            if ld.startswith("'"): ld = ld[1:]
-            safe_ld = f"'{ld}" if ld else ""
-
-            costing = safe_float(r.get('costing'))
-            selling = safe_float(r.get('selling_price'))
-            profit  = safe_float(r.get('profit'))
-
-            jiomart_ws.append_row([
-                next_id,
-                r.get('card_type', ''),
-                safe_ld,
-                r.get('account', ''),        # account from main order
-                r.get('order_name', ''),      # order_name maps to jiomart order_name
-                '',                           # order_id — blank (not in main orders)
-                r.get('model', ''),
-                r.get('variant', ''),
-                costing,
-                selling,
-                profit,
-                r.get('delivery_date', ''),
-                r.get('sale_month', ''),
-                r.get('created_at', '')
-            ])
-            next_id += 1
-            migrated += 1
-        except Exception as e:
-            errors.append(f"Order {r.get('id')}: {e}")
-
-    # Delete from main_orders if requested
-    deleted = 0
-    if delete_after and migrated > 0:
-        try:
-            # Re-read records to get fresh row numbers after potential appends
-            fresh_records = main_safe_get_records(ws)
-            rows_to_delete = [
-                i + 2 for i, rec in enumerate(fresh_records)
-                if rec.get('id') in ids
-            ]
-            for row_idx in sorted(rows_to_delete, reverse=True):
-                main_ws.delete_row(row_idx)
-                deleted += 1
-        except Exception as e:
-            errors.append(f"Delete step: {e}")
-
-    cache_clear('main_orders')
-    cache_clear('jiomart_orders')
-
-    return jsonify({
-        'success': migrated > 0,
-        'migrated': migrated,
-        'deleted': deleted,
-        'errors': errors
-    })
-
-
 @app.route('/api/dashboard-data')
 def api_dashboard_data():
     if not SHEET: return jsonify({'error': 'No sheet connected'})
@@ -1547,7 +1287,6 @@ def api_dashboard_data():
         sec_orders      = safe_records('secondary_orders')
         offline_orders  = safe_records('offline_orders')
         jiomart_orders  = safe_records('jiomart_orders')
-        exchange_orders = safe_records('exchange_orders')
         voucher_tracker = safe_records('voucher_tracker')
 
         def sf(v): return safe_float(v)
@@ -1573,15 +1312,11 @@ def api_dashboard_data():
             return result
         def fy_voucher(vouchers):
             return [v for v in vouchers if in_fy(v.get('month',''))]
-        def fy_exchange(orders):
-            # exchange uses created_at
-            return [o for o in orders if in_fy(str(o.get('created_at',''))[:7])]
 
         main_fy   = fy_online(main_orders)
         sec_fy    = fy_online(sec_orders)
         jio_fy    = fy_online(jiomart_orders)
         off_fy    = fy_offline(offline_orders)
-        exch_fy   = fy_exchange(exchange_orders)
         vouch_fy  = fy_voucher(voucher_tracker)
 
         online_all  = main_fy + sec_fy + jio_fy
@@ -1690,7 +1425,6 @@ def api_dashboard_data():
             {'channel':'Secondary Orders', 'count':len(sec_fy),   'sold':len([o for o in sec_fy   if is_sold(o)]), 'profit':round(sum(sf(o.get('profit')) for o in sec_fy   if is_sold(o)),2)},
             {'channel':'Jiomart',          'count':len(jio_fy),   'sold':len([o for o in jio_fy   if is_sold(o)]), 'profit':round(sum(sf(o.get('profit')) for o in jio_fy   if is_sold(o)),2)},
             {'channel':'Offline',          'count':len(off_fy),   'sold':len(off_sold),                             'profit':round(off_profit,2)},
-            {'channel':'Exchange',         'count':len(exch_fy),  'sold':len(exch_fy),                              'profit':0},
         ]
 
         # ── Available FYs — also check old sale_batch/created_at as fallback ──
@@ -1720,7 +1454,6 @@ def api_dashboard_data():
                 'online_orders': len(online_all),   'online_sold': len(online_sold),
                 'online_pending': len(online_all)-len(online_sold),
                 'offline_orders': len(off_fy),      'offline_sold': len(off_sold),
-                'exchange_count': len(exch_fy),     'exch_total_exch': round(sum(sf(o.get('exchange_value')) for o in exch_fy),2),
                 'voucher_count':  len(vouch_fy),    'voucher_redeemed_profit': round(v_red_profit,2),
                 'voucher_pending_profit': round(v_pend_profit,2), 'voucher_total_face': round(v_face,2),
                 'vouchers_redeemed': len(redeemed), 'vouchers_pending': len(pending_v),
@@ -1743,8 +1476,8 @@ def api_dashboard_data():
             'summary': {
                 'grand_revenue':0,'grand_profit':0,'grand_costing':0,
                 'online_orders':0,'online_sold':0,'online_pending':0,
-                'offline_orders':0,'offline_sold':0,'exchange_count':0,
-                'exch_total_exch':0,'voucher_count':0,'voucher_redeemed_profit':0,
+                'offline_orders':0,'offline_sold':0,
+                'voucher_count':0,'voucher_redeemed_profit':0,
                 'voucher_pending_profit':0,'voucher_total_face':0,
                 'vouchers_redeemed':0,'vouchers_pending':0,
                 'total_commission':0,'net_voucher_profit':0,'commission_count':0,
