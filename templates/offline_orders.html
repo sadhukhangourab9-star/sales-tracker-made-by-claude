@@ -551,7 +551,7 @@ async function promptBulkMonth() {
   const ids = getSelectedIds(); if (!ids.length) return;
   const val = prompt(`Set sale month for ${ids.length} orders (YYYY-MM):`);
   if (!val || !val.match(/^\d{4}-\d{2}$/)) { if(val) showToast('Use format YYYY-MM', 'error'); return; }
-  const res = await api('/api/offline-orders/bulk-update-sale', 'POST', { ids, sale_month: val });
+  const res = await api('/api/offline-orders/bulk-update-month', 'POST', { ids, sale_month: val });
   if (res.success) {
     ids.forEach(id => { const o = findById(allOrders, id); if (o) o.sale_month = val; });
     filterTable();
